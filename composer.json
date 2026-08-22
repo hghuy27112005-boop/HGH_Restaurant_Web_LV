@@ -1,0 +1,6 @@
+{
+    "require": {
+        "jeroennoten/laravel-adminlte": "^3.16",
+        "laravel/socialite": "^5.28"
+    }
+}
