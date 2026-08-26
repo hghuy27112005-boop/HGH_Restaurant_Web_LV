@@ -32,6 +32,9 @@ const BookingsPage = () => {
     const [pointsNeeded, setPointsNeeded] = useState(0);
     const [currentPoints, setCurrentPoints] = useState(0);
     const [stockErrorItems, setStockErrorItems] = useState(null); // null = ẩn, [...] = danh sách món vượt kho
+    const [searchBillId, setSearchBillId] = useState('');
+    const [cancelModalOpen, setCancelModalOpen] = useState(false);
+    const [cancelingBill, setCancelingBill] = useState(null);
 
     // Sale-off event states
     const [saleOffEvent, setSaleOffEvent] = useState(null); // null = không có sự kiện đang diễn ra
@@ -621,6 +624,45 @@ const BookingsPage = () => {
         }
     };
 
+    const canCancelBooking = (bill) => {
+        const booking = bill.booking_table;
+        if (!booking || booking.booking_status !== 'completed') return false;
+
+        const bookingDateObj = new Date(booking.booking_date);
+        const year = bookingDateObj.getFullYear();
+        const month = String(bookingDateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(bookingDateObj.getDate()).padStart(2, '0');
+        const bookingDateStr = `${year}-${month}-${day}`;
+
+        const startTimeStr = formatTime(booking.start_time);
+
+        const bookingDateTime = new Date(`${bookingDateStr}T${startTimeStr}:00`);
+        const deadline = new Date(bookingDateTime.getTime() - 60 * 60000);
+
+        return getServerNow() < deadline;
+    };
+        
+    const confirmCancelOrder = async () => {
+        if (!cancelingBill) return;
+        try {
+            if (cancelingBill.payment_method === 'Points') {
+                const res = await bookingService.cancelWithPoints(cancelingBill.order_id);
+                const refunded = res.data.points_refunded;
+                window.location.href = `/refund-result?method=Points&amount=${refunded}&order_id=${cancelingBill.order_id}`;
+            } else if (cancelingBill.payment_method === 'vnpay') {
+                const res = await vnpayService.createRefundUrl({ order_id: cancelingBill.order_id });
+                window.location.href = res.data.payment_url;
+            } else {
+                alert('Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.');
+            }
+        } catch (err) {
+            alert('Lỗi hủy đơn: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setCancelModalOpen(false);
+            setCancelingBill(null);
+        }
+    };
+
     const checkMembershipDowngrade = () => {
         if (!currentPoints) return false;
 
@@ -674,7 +716,9 @@ const BookingsPage = () => {
         return t.substring(0, 5);
     };
 
-    const formatted = bookings;
+    const formatted = bookings.filter(bill =>
+    !searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())
+);
 
     return (
         <div className="min-h-screen bg-gray-50 py-8">
@@ -1165,20 +1209,75 @@ const BookingsPage = () => {
                     </div>
                 )}
 
-                <h2 className="text-3xl font-bold mb-6 text-gray-800">Các đơn đã đặt</h2>
+                {/* Cancel Order Modal */}
+                {cancelModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                        <div className="bg-white rounded-lg w-full max-w-md overflow-hidden">
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
+                                Hủy đơn hàng
+                            </div>
+                            <div className="p-6">
+                                <p className="text-gray-700 text-center mb-6">
+                                    Bạn có chắc muốn hủy đơn hàng {cancelingBill?.order_stt || cancelingBill?.order_id} không
+                                </p>
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => {
+                                            setCancelModalOpen(false);
+                                            setCancelingBill(null);
+                                        }}
+                                        className="flex-1 bg-white border border-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-100"
+                                    >
+                                        Đóng
+                                    </button>
+                                    <button
+                                        onClick={confirmCancelOrder}
+                                        className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
+                                    >
+                                        Xác nhận
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+                    <h2 className="text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
+                        <input
+                            type="text"
+                            value={searchBillId}
+                            onChange={e => setSearchBillId(e.target.value)}
+                            placeholder="Nhập mã hóa đơn..."
+                            className="border rounded px-3 py-2 text-sm w-48 focus:outline-none focus:border-red-600"
+                        />
+                    </div>
+                </div>
 
                 {formatted.length === 0 ? (
                     <EmptyState
-                        icon="📅"
-                        title="Không có đơn đặt bàn"
-                        description="Bạn chưa có đơn đặt bàn nào."
+                        icon={bookings.length === 0 ? "📅" : "🧾"}
+                        title={bookings.length === 0 ? "Không có đơn đặt bàn" : "Không có đơn hàng"}
+                        description={bookings.length === 0
+                            ? "Bạn chưa có đơn đặt bàn nào."
+                            : "Không tìm thấy đơn hàng phù hợp với bộ lọc."}
                     />
                 ) : (
                     <div className="space-y-4">
                         {formatted.map((bill, idx) => {
                             const booking = bill.booking_table;
                             return (
-                                <Card key={bill.bill_id || idx} title={`Đơn hàng ${bill.order_stt || bill.order_id || bill.bill_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}>
+                                <Card
+                                    key={bill.bill_id || idx}
+                                    title={
+                                        <div className="flex items-baseline flex-wrap">
+                                            <span>{`Đơn hàng ${bill.order_stt || bill.order_id || bill.bill_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}</span>
+                                            <span className="ml-[2.5cm] text-sm font-normal text-gray-500">Mã hóa đơn: {bill.bill_id || '—'}</span>
+                                        </div>
+                                    }
+                                >
                                     <div className="grid md:grid-cols-4 gap-4 mb-4">
                                         <div>
                                             <p className="text-sm text-gray-600">Bàn</p>
@@ -1248,10 +1347,32 @@ const BookingsPage = () => {
                                         </div>
                                     )}
 
-                                    <div className="mt-4">
-                                        <Badge variant={bill.status === 'paid' ? 'success' : 'warning'}>
-                                            {bill.status === 'paid' ? '✓ Đã thanh toán' : '⏳ Chờ thanh toán'}
+                                    <div className="mt-4 flex justify-between items-center">
+                                        <Badge variant={
+                                            booking?.booking_status === 'cancelled'
+                                                ? 'danger'
+                                                : bill.status === 'paid'
+                                                    ? 'success'
+                                                    : 'warning'
+                                        }>
+                                            {booking?.booking_status === 'cancelled'
+                                                ? '✕ Đã hủy'
+                                                : bill.status === 'paid'
+                                                    ? '✓ Đã thanh toán'
+                                                    : '⏳ Chờ thanh toán'}
                                         </Badge>
+
+                                        {canCancelBooking(bill) && (
+                                            <button
+                                                onClick={() => {
+                                                    setCancelingBill(bill);
+                                                    setCancelModalOpen(true);
+                                                }}
+                                                className="px-4 py-2 bg-red-600 text-white rounded font-bold text-sm hover:bg-red-700 transition"
+                                            >
+                                                Hủy đơn hàng
+                                            </button>
+                                        )}
                                     </div>
                                 </Card>
                             );

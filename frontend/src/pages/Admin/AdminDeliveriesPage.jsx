@@ -121,17 +121,39 @@ const AdminDeliveriesPage = () => {
         setCurrentPage(page);
     };
 
+    const canApproveDelivery = (delivery) => {
+        const now = new Date();
+        const todayOpen = new Date(now);
+        todayOpen.setHours(7, 30, 0, 0);
+        const todayClose = new Date(now);
+        todayClose.setHours(22, 0, 0, 0);
+
+        if (now < todayOpen) return false;
+
+        const durationMinutes = (delivery.estimated_duration_minutes ?? 30) + 15;
+        const estimatedFinish = new Date(now.getTime() + durationMinutes * 60000);
+
+        return estimatedFinish <= todayClose;
+    };
+
     const getActionButtons = (delivery) => {
         switch (delivery.delivery_status) {
-            case 'waiting_approval':
+            case 'waiting_approval': {
+                const canApprove = canApproveDelivery(delivery);
                 return (
                     <button
-                        onClick={() => handleStartDelivery(delivery)}
-                        className="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700"
+                        onClick={() => canApprove && handleStartDelivery(delivery)}
+                        disabled={!canApprove}
+                        title={!canApprove ? 'Đơn dự kiến không hoàn tất trước 22:00, hoặc chưa tới giờ duyệt (07:30)' : ''}
+                        className={`px-3 py-1 rounded text-xs ${canApprove
+                            ? 'bg-green-600 text-white hover:bg-green-700'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
                     >
                         Bắt đầu giao
                     </button>
                 );
+            }
             default:
                 return null;
         }
@@ -342,9 +364,17 @@ const AdminDeliveriesPage = () => {
                                         <p className="text-xs text-gray-500">ID Đơn hàng</p>
                                         <p className="font-mono font-bold text-sm">{selectedDelivery.order?.order_stt || selectedDelivery.order_id}</p>
                                     </div>
-                                    <div className="col-span-2">
+                                    <div>
                                         <p className="text-xs text-gray-500">Địa chỉ giao</p>
                                         <p className="text-sm">{selectedDelivery.address}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-500">Thời gian giao hàng dự kiến</p>
+                                        <p className="text-sm font-semibold">
+                                            {selectedDelivery.estimated_duration_minutes != null
+                                                ? `${selectedDelivery.estimated_duration_minutes + 15} phút (Đã gồm 15 phút lấy hàng để giao)`
+                                                : '—'}
+                                        </p>
                                     </div>
                                 </div>
                             </div>

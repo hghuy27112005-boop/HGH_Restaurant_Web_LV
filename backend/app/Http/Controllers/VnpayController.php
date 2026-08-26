@@ -341,38 +341,42 @@ class VnpayController extends Controller
 
         if ($isRefund) {
             Log::info('VNPay IPN refund', ['order_id' => $orderId]);
+
+            $bill = \App\Models\Bill::where('order_id', $orderId)->first();
+            $user = $order->user;
+            $pointsToRevoke = 0;
+
+            if ($bill && $user) {
+                $pointsRecord = \App\Models\Points::where('bill_id', $bill->bill_id)
+                    ->orderBy('created_at')
+                    ->first();
+                $pointsToRevoke = $pointsRecord ? (int) $pointsRecord->points_earned : 0;
+            }
+
             if ($order->order_type === 'delivery' && $order->delivery) {
                 $order->delivery->update([
                     'delivery_status' => 'cancelled',
                     'D_payment_status' => 'refunded'
                 ]);
-
-                // Thu hồi điểm — lấy đúng số điểm đã thực sự ghi nhận vào bảng points
-                // tại thời điểm thanh toán, KHÔNG tính lại từ đầu. Tính lại dễ bị lệch
-                // vì: (1) nếu đơn có áp dụng sự kiện giảm giá, công thức basePoints lúc
-                // cộng điểm dùng giá gốc còn total_price hiện tại là giá đã giảm; (2)
-                // bonusPoints phụ thuộc membership tại thời điểm thanh toán, có thể đã
-                // đổi khác so với membership hiện tại lúc hủy đơn.
-                $bill = \App\Models\Bill::where('order_id', $orderId)->first();
-                $user = $order->user;
-                if ($bill && $user) {
-                    $pointsRecord = \App\Models\Points::where('bill_id', $bill->bill_id)
-                        ->orderBy('created_at')
-                        ->first();
-
-                    $pointsToRevoke = $pointsRecord ? (int) $pointsRecord->points_earned : 0;
-
-                    if ($pointsToRevoke > 0) {
-                        $user->points -= $pointsToRevoke;
-                        if ($user->points < 0) $user->points = 0;
-                        // Điểm giảm có thể khiến user không còn đủ điều kiện giữ bậc
-                        // thành viên hiện tại -> phải tính lại bậc sau khi trừ điểm,
-                        // giống hệt luồng thanh toán bằng điểm (payWithPoints).
-                        $user->updateMembership();
-                        $user->save();
-                    }
-                }
+            } elseif ($order->order_type === 'booking_table') {
+                \App\Models\BookingTable::where('order_id', $orderId)->update([
+                    'booking_status' => 'cancelled',
+                ]);
             }
+
+            // Thu hồi điểm — lấy đúng số điểm đã thực sự ghi nhận vào bảng points
+            // tại thời điểm thanh toán, KHÔNG tính lại từ đầu. Tính lại dễ bị lệch
+            // vì: (1) nếu đơn có áp dụng sự kiện giảm giá, công thức basePoints lúc
+            // cộng điểm dùng giá gốc còn total_price hiện tại là giá đã giảm; (2)
+            // bonusPoints phụ thuộc membership tại thời điểm thanh toán, có thể đã
+            // đổi khác so với membership hiện tại lúc hủy đơn.
+            if ($pointsToRevoke > 0 && $user) {
+                $user->points -= $pointsToRevoke;
+                if ($user->points < 0) $user->points = 0;
+                $user->updateMembership();
+                $user->save();
+            }
+
             return response()->json(['RspCode' => '00', 'Message' => 'Confirm Success']);
         }
 

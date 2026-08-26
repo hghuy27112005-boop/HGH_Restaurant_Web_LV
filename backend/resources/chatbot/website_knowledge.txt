@@ -1,0 +1,34 @@
+=== THÔNG TIN CHUNG ===
+- Trang web hoạt động 24/24.
+- Có 2 hình thức đặt: Đặt bàn ăn tại quán, Đặt ship giao tận nơi.
+- Mỗi hóa đơn có 1 mã hóa đơn riêng, dùng để tra cứu. Có thể tra cứu ở cả trang Đặt bàn và trang Đặt ship, nhưng tra cứu chi tiết đầy đủ nhất là ở trang Lịch sử giao dịch.
+
+=== ĐẶT BÀN ===
+- Chỉ nhận đặt bàn trong khung giờ nhà hàng mở cửa: 07:00 đến 22:00 mỗi ngày.
+- Đặt bàn tối đa 90 phút mỗi lượt.
+- Giờ đến phải sớm hơn thời điểm đặt ít nhất 60 phút.
+- Chỉ đặt được trong vòng 60 ngày tới.
+- Tối đa 3 bàn mỗi lần đặt, chia theo 3 loại: bàn nhỏ (≤5 người), vừa (≤10 người), lớn (≤15 người).
+- Sau khi đặt và thanh toán, có thể hủy đơn nếu thời điểm hủy sớm hơn giờ đặt (booking_date + start_time) ít nhất 60 phút. Không cần chờ admin duyệt mới được hủy.
+- Thanh toán bằng VNPay hoặc bằng Điểm tích lũy.
+
+=== ĐẶT SHIP ===
+- Không giới hạn khung giờ đặt, có thể đặt bất cứ lúc nào.
+- Nhập địa chỉ giao hàng, hệ thống tự tính khoảng cách/thời gian/phí ship. Thời gian giao dự kiến có cộng thêm 15 phút chuẩn bị hàng trước khi giao.
+- Sau khi thanh toán, đơn cần nhà hàng chúng tôi duyệt trước khi bắt đầu giao. Đơn hàng chỉ được duyệt trong khung giờ từ 07:30 sáng đến 22:00 mỗi ngày, và chỉ khi đủ thời gian hoàn tất giao trước 22:00. Nếu đặt ngoài khung giờ này, đơn sẽ được duyệt vào sáng hôm sau.
+- Có thể hủy đơn sau khi thanh toán nhưng trước khi nhà hàng chúng tôi duyệt bắt đầu giao.
+- Thanh toán bằng VNPay hoặc bằng Điểm tích lũy.
+
+=== ĐIỂM TÍCH LŨY & THÀNH VIÊN ===
+- Tỷ lệ quy đổi: 100đ = 1 điểm khi thanh toán bằng điểm.
+- Điểm thưởng cơ bản khi thanh toán: làm tròn xuống (số tiền / 1000) điểm.
+- Đơn hàng từ 100.000đ trở lên được cộng thêm điểm thưởng theo hạng thành viên (kể cả khi thanh toán bằng điểm, không chỉ khi thanh toán bằng tiền):
+  Đồng (bronze): +10, Bạc (silver): +20, Vàng (gold): +30, Bạch kim (platinum): +40, Kim cương (diamond): +50.
+- Hạng thành viên dựa theo số điểm hiện tại đang có: Đồng (0+), Bạc (1000+), Vàng (3000+), Bạch kim (6000+), Kim cương (10000+).
+
+=== TÀI KHOẢN ===
+- Có thể xem/sửa thông tin cá nhân, cập nhật ảnh đại diện, đổi mật khẩu, xem lịch sử giao dịch, xem điểm và hạng thành viên.
+
+=== HỦY ĐƠN & HOÀN TIỀN ===
+- Khi hủy đơn: điểm đã tiêu hao để thanh toán sẽ được hoàn lại, hoặc hoàn tiền nếu thanh toán bằng VNPay, sau đó điểm tích lũy có được từ đơn hàng đó sẽ bị thu hồi.
+- Hoàn tiền qua VNPay: xử lý qua cổng thanh toán VNPay.

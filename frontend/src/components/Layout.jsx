@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Sidebar from './Sidebar';
 import Footer from './Footer';
 import AccountDeletedModal from './AccountDeletedModal';
+import ChatbotWidget from './Chatbot/ChatbotWidget';
 
 const Layout = ({ children }) => {
     const [collapsed, setCollapsed] = useState(true);
@@ -21,6 +22,7 @@ const Layout = ({ children }) => {
             </div>
 
             <AccountDeletedModal />
+            <ChatbotWidget />
         </div>
     );
 };

@@ -144,13 +144,6 @@ export const statisticsAPI = {
     getUserStats: () => axiosInstance.get('/statistics/user'),
 };
 
-// Discounts API
-export const discountAPI = {
-    getUserDiscounts: () => axiosInstance.get('/discounts'),
-    getByMembership: (membership) =>
-        axiosInstance.get(`/discounts/membership/${membership}`),
-};
-
 // Promotions API
 export const promotionAPI = {
     getAll: () => axiosInstance.get('/sale-off-events'),
@@ -287,6 +280,7 @@ export const bookingService = {
     updateBooking: (id, data) => bookingTableAPI.update(id, data),
     deleteBooking: (id) => bookingTableAPI.delete(id),
     cancelBooking: (id) => bookingTableAPI.delete(id),
+    cancelWithPoints: (orderId) => axiosInstance.post('/booking-tables/cancel-points', { order_id: orderId }),
 };
 
 export const deliveryService = {

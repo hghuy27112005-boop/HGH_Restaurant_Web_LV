@@ -20,6 +20,8 @@ DROP TABLE IF EXISTS table_types CASCADE;
 DROP TABLE IF EXISTS dishes CASCADE;
 DROP TABLE IF EXISTS dish_types CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS chat_messages CASCADE;
+DROP TABLE IF EXISTS chat_sessions CASCADE;
 
 -- =====================================================================
 -- 1. users
@@ -285,7 +287,33 @@ CREATE TABLE statistics (
 );
 
 -- =====================================================================
--- 15. FOREIGN KEY CONSTRAINTS (tường minh, để PowerDesigner reverse-engineer
+-- 15. chat_sessions
+-- =====================================================================
+
+CREATE TABLE chat_sessions (
+    session_id      BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT NOT NULL,
+    current_node_id VARCHAR(255) NOT NULL DEFAULT 'root',
+    context_data    JSONB,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =====================================================================
+-- 16. chat_messages
+-- =====================================================================
+CREATE TABLE chat_messages (
+    message_id   BIGSERIAL PRIMARY KEY,
+    session_id   BIGINT NOT NULL,
+    sender       VARCHAR(10) NOT NULL CHECK (sender IN ('user', 'bot')),
+    content      TEXT NOT NULL,
+    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_chat_messages_created_at ON chat_messages(created_at);
+
+-- =====================================================================
+-- End. FOREIGN KEY CONSTRAINTS (tường minh, để PowerDesigner reverse-engineer
 --     nhận diện được quan hệ và vẽ đường nối trên CDM/PDM)
 -- =====================================================================
 
@@ -345,6 +373,11 @@ ALTER TABLE statistics
     ADD CONSTRAINT fk_statistics_user_id
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
 
--- =====================================================================
--- HẾT
--- =====================================================================
+ALTER TABLE chat_sessions
+    ADD CONSTRAINT fk_chat_sessions_user_id
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+ALTER TABLE chat_messages
+    ADD CONSTRAINT fk_chat_messages_session_id
+    FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE;
+

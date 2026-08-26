@@ -110,6 +110,17 @@ const AdminOrderManagement = () => {
     const getBillStatus = (bill) => {
         const orderType = bill.order?.order_type;
         const paymentMethod = bill.payment_method;
+
+        const isCancelled = orderType === 'delivery'
+            ? bill.delivery?.delivery_status === 'cancelled'
+            : orderType === 'booking_table'
+                ? bill.booking_table?.[0]?.booking_status === 'cancelled'
+                : false;
+
+        if (isCancelled) {
+            return <Badge variant="danger">✕ Đã hủy</Badge>;
+        }
+
         const isPaidByMethod = Boolean(paymentMethod && paymentMethod !== 'unpaid');
         const isPaidByRecord = orderType === 'delivery'
             ? bill.delivery?.D_payment_status === 'paid'

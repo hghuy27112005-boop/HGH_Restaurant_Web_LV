@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\VnpayController;
+use App\Http\Controllers\ChatbotController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -66,17 +67,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Booking Tables
     Route::apiResource('booking-tables', \App\Http\Controllers\BookingTableController::class);
     Route::post('booking-tables/check-overlap', [\App\Http\Controllers\BookingTableController::class, 'checkMultiOverlap']);
+    Route::post('booking-tables/cancel-points', [\App\Http\Controllers\BookingTableController::class, 'cancelWithPoints']);
 
     // Points & Statistics
     Route::get('points', [\App\Http\Controllers\PointsController::class, 'userPoints']);
-    Route::get('statistics/user', [\App\Http\Controllers\Admin_StatisticsController::class, 'userStats']);
-
-    // Discounts
-    Route::get('discounts', [\App\Http\Controllers\DiscountController::class, 'userDiscounts']);
-    Route::get('discounts/membership/{membership}', [\App\Http\Controllers\DiscountController::class, 'byMembership']);
 
     //Password
     Route::post('/user/change-password', [\App\Http\Controllers\UserController::class, 'changePassword']);
+
+    //Chatbot
+    Route::get('/chatbot/session', [ChatbotController::class, 'getSession']);
+    Route::post('/chatbot/interact', [ChatbotController::class, 'interact']);   
 
 });
 
@@ -116,7 +117,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 
     // Promotions
     Route::apiResource('admin/sale-off-events', \App\Http\Controllers\Admin\Admin_SaleOffEventController::class);
-    Route::apiResource('admin/discounts', \App\Http\Controllers\Admin\Admin_DiscountController::class);
 
     Route::get('admin/statistics/available-months', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'availableMonths']);
     Route::get('admin/statistics/order-counts-by-month', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'orderCountsByMonth']);

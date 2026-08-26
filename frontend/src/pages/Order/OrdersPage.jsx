@@ -24,6 +24,7 @@ const OrdersPage = () => {
     const [statusFilter, setStatusFilter] = useState('all');
 
     const [detailBill, setDetailBill] = useState(null); // bill đang xem chi tiết (null = đóng modal)
+    const [searchBillId, setSearchBillId] = useState('');
 
     // FIX: chỉ đóng modal khi cả mousedown lẫn mouseup đều rơi đúng trên lớp nền
     // (backdrop), tránh trường hợp bôi đen text trong bảng chi tiết rồi lỡ kéo
@@ -108,6 +109,9 @@ const OrdersPage = () => {
         if (typeFilter === 'delivery' && statusFilter !== 'all') {
             result = result.filter(o => getDeliveryStatusGroup(o.delivery?.delivery_status) === statusFilter);
         }
+        if (searchBillId.trim()) {
+            result = result.filter(o => String(o.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase()));
+        }
         return result;
     };
 
@@ -141,7 +145,19 @@ const OrdersPage = () => {
     return (
         <div className="min-h-screen bg-gray-50 py-8">
             <div className="max-w-6xl mx-auto px-4">
-                <h1 className="text-4xl font-bold mb-8 text-red-600">Lịch sử giao dịch</h1>
+                <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
+                    <h1 className="text-4xl font-bold text-red-600">Lịch sử giao dịch</h1>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
+                        <input
+                            type="text"
+                            value={searchBillId}
+                            onChange={e => setSearchBillId(e.target.value)}
+                            placeholder="Nhập mã hóa đơn..."
+                            className="border rounded px-3 py-2 text-sm w-48 focus:outline-none focus:border-red-600"
+                        />
+                    </div>
+                </div>
 
                 {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
@@ -199,7 +215,15 @@ const OrdersPage = () => {
                                 const delivery = bill.delivery;
 
                                 return (
-                                    <Card key={bill.bill_id || bill.order_id || idx} title={`Đơn hàng ${bill.order_stt || bill.order_id || ''} ngày ${formatDateOnly(bill.created_at)}`}>
+                                    <Card
+                                        key={bill.bill_id || bill.order_id || idx}
+                                        title={
+                                            <div className="flex items-baseline flex-wrap">
+                                                <span>{`Đơn hàng ${bill.order_stt || bill.order_id || ''} ngày ${formatDateOnly(bill.created_at)}`}</span>
+                                                <span className="ml-[2.5cm] text-sm font-normal text-gray-500">Mã hóa đơn: {bill.bill_id || '—'}</span>
+                                            </div>
+                                        }
+                                    >
                                         <div className="mb-3">
                                             <Badge variant="info">{isBooking ? 'Đặt bàn' : 'Đặt ship'}</Badge>
                                         </div>
@@ -226,8 +250,18 @@ const OrdersPage = () => {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-gray-600 mb-1">Trạng thái</p>
-                                                    <Badge variant={bill.status === 'paid' ? 'success' : 'warning'}>
-                                                        {bill.status === 'paid' ? '✓ Đã thanh toán' : '⏳ Chờ thanh toán'}
+                                                    <Badge variant={
+                                                        booking?.booking_status === 'cancelled'
+                                                            ? 'danger'
+                                                            : bill.status === 'paid'
+                                                                ? 'success'
+                                                                : 'warning'
+                                                    }>
+                                                        {booking?.booking_status === 'cancelled'
+                                                            ? '✕ Đã hủy'
+                                                            : bill.status === 'paid'
+                                                                ? '✓ Đã thanh toán'
+                                                                : '⏳ Chờ thanh toán'}
                                                     </Badge>
                                                 </div>
                                             </div>

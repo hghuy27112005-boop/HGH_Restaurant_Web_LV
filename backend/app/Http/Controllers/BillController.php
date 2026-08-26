@@ -579,7 +579,7 @@ class BillController extends Controller
                 foreach ($bookingTables as $bt) {
                     $bt->update([
                         'B_payment_status' => 'paid',
-                        'booking_status'   => 'waiting_confirmation',
+                        'booking_status'   => 'completed',
                     ]);
                 }
                 $firstBt = $bookingTables->first();
@@ -697,7 +697,7 @@ class BillController extends Controller
                     foreach ($bookingTables as $bt) {
                         $bt->update([
                             'B_payment_status' => 'paid',
-                            'booking_status'   => 'waiting_confirmation',
+                            'booking_status'   => 'completed',
                         ]);
                     }
                     $firstBt = $bookingTables->first();

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { deliveryService, billService, vnpayService, extractListData, userAPI, orderService, stockAPI, promotionAPI, shippingAPI } from '../../services/api';
 import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal, ShippingProgressBar, CountdownTimer } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
@@ -22,6 +22,8 @@ const DeliveriesPage = () => {
     const [address, setAddress] = useState('');
     const [checkoutStage, setCheckoutStage] = useState('info'); // info, payment
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [showTimeWarningModal, setShowTimeWarningModal] = useState(false);
+    const mouseDownOnTimeWarningBackdrop = useRef(false);
 
     // Preview phí ship: chỉ hợp lệ (previewedAddress === address) khi khách chưa sửa
     // lại địa chỉ sau lần preview gần nhất, tránh xác nhận đặt hàng với phí ship cũ.
@@ -51,6 +53,7 @@ const DeliveriesPage = () => {
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
     const [stockErrorItems, setStockErrorItems] = useState(null); // null = ẩn, [...] = danh sách món vượt kho
+    const [searchBillId, setSearchBillId] = useState('');
 
     // Sale-off event states
     const [saleOffEvent, setSaleOffEvent] = useState(null); // null = không có sự kiện đang diễn ra
@@ -198,11 +201,38 @@ const DeliveriesPage = () => {
         );
     };
 
+    const willFinishAfterClose = () => {
+        if (!shippingPreview) return false;
+        const now = new Date();
+        const todayClose = new Date(now);
+        todayClose.setHours(22, 0, 0, 0);
+        const durationMinutes = (shippingPreview.duration_minutes ?? 0) + 15;
+        const estimatedFinish = new Date(now.getTime() + durationMinutes * 60000);
+        return estimatedFinish > todayClose;
+    };
+
     const handleConfirmInfo = (e) => {
         e.preventDefault();
         if (deliveryCart.length === 0 || !address.trim()) return;
         if (!shippingPreview || previewedAddress !== address.trim()) return;
+
+        if (willFinishAfterClose()) {
+            setShowTimeWarningModal(true);
+            return;
+        }
+
         setIsConfirmModalOpen(true);
+    };
+
+    const handleTimeWarningBackdropMouseDown = (e) => {
+        mouseDownOnTimeWarningBackdrop.current = e.target === e.currentTarget;
+    };
+
+    const handleTimeWarningBackdropMouseUp = (e) => {
+        if (mouseDownOnTimeWarningBackdrop.current && e.target === e.currentTarget) {
+            setShowTimeWarningModal(false);
+        }
+        mouseDownOnTimeWarningBackdrop.current = false;
     };
 
     const confirmOrder = async () => {
@@ -435,7 +465,9 @@ const DeliveriesPage = () => {
 
     if (loading) return <Loading />;
 
-    const filtered = getFilteredDeliveries();
+    const filtered = getFilteredDeliveries().filter(bill =>
+    !searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())
+);
 
     return (
         <div className="min-h-screen bg-gray-50 py-8">
@@ -669,7 +701,61 @@ const DeliveriesPage = () => {
                     )}
                 </div>
 
-                <h2 className="text-3xl font-bold mb-6 text-gray-800">Các đơn đã đặt</h2>
+                <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+                    <h2 className="text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
+                        <input
+                            type="text"
+                            value={searchBillId}
+                            onChange={e => setSearchBillId(e.target.value)}
+                            placeholder="Nhập mã hóa đơn..."
+                            className="border rounded px-3 py-2 text-sm w-48 focus:outline-none focus:border-red-600"
+                        />
+                    </div>
+                </div>
+                
+                {/* Time Warning Modal */}
+                {showTimeWarningModal && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                        onMouseDown={handleTimeWarningBackdropMouseDown}
+                        onMouseUp={handleTimeWarningBackdropMouseUp}
+                    >
+                        <div className="bg-white rounded-lg w-full max-w-md overflow-hidden">
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
+                                Thông báo
+                            </div>
+                            <div className="p-6">
+                                <p className="text-gray-700 mb-6">
+                                    Đơn hàng này được dự kiến là không thể hoàn tất giao trước 10h tối.
+                                    <br /><br />
+                                    Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng mai thì chúng tôi mới duyệt được đơn hàng cho quý khách.
+                                    <br /><br />
+                                    Thời điểm bắt đầu duyệt đơn giao hàng của mỗi ngày là từ 7h30 sáng.
+                                </p>
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => setShowTimeWarningModal(false)}
+                                        className="flex-1 bg-white border border-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-100"
+                                    >
+                                        Đóng
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowTimeWarningModal(false);
+                                            setIsConfirmModalOpen(true);
+                                        }}
+                                        className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
+                                    >
+                                        Tiếp tục đặt hàng
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Confirm Modal */}
                 <Modal
@@ -805,22 +891,34 @@ const DeliveriesPage = () => {
 
                 {filtered.length === 0 ? (
                     <EmptyState
-                        icon="📦"
-                        title="Không có đơn giao hàng"
-                        description={deliveries.length === 0
-                            ? 'Bạn chưa có đơn mang về nào.'
-                            : `Chưa có đơn với bộ lọc "${[
-                                { id: 'all', label: 'Tất cả' },
-                                { id: 'waiting_confirmation', label: 'Đang chờ duyệt' },
-                                { id: 'waiting_delivery', label: 'Đang giao hàng' },
-                                { id: 'delivered', label: 'Đã giao hàng' },
-                                { id: 'cancelled', label: 'Đã hủy' }
-                            ].find(f => f.id === filter)?.label || filter}"`}
+                        icon={deliveries.length === 0 ? "📦" : "🧾"}
+                        title={deliveries.length === 0 ? "Không có đơn giao hàng" : "Không có đơn hàng"}
+                        description={
+                            deliveries.length === 0
+                                ? 'Bạn chưa có đơn mang về nào.'
+                                : searchBillId.trim()
+                                    ? 'Không tìm thấy đơn hàng phù hợp với bộ lọc.'
+                                    : `Chưa có đơn với bộ lọc "${[
+                                        { id: 'all', label: 'Tất cả' },
+                                        { id: 'waiting_confirmation', label: 'Đang chờ duyệt' },
+                                        { id: 'waiting_delivery', label: 'Đang giao hàng' },
+                                        { id: 'delivered', label: 'Đã giao hàng' },
+                                        { id: 'cancelled', label: 'Đã hủy' }
+                                    ].find(f => f.id === filter)?.label || filter}"`
+                        }
                     />
                 ) : (
                     <div className="space-y-4">
                         {filtered.map((bill, idx) => (
-                            <Card key={bill.order_id || idx} title={`Đơn hàng ${bill.order_stt || bill.order_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}>
+                            <Card
+                                key={bill.order_id || idx}
+                                title={
+                                    <div className="flex items-baseline flex-wrap">
+                                        <span>{`Đơn hàng ${bill.order_stt || bill.order_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}</span>
+                                        <span className="ml-[2.5cm] text-sm font-normal text-gray-500">Mã hóa đơn: {bill.bill_id || '—'}</span>
+                                    </div>
+                                }
+                            >
                                 <div className="grid md:grid-cols-3 gap-4 mb-4">
                                     <div>
                                         <p className="text-sm text-gray-600">Địa chỉ</p>

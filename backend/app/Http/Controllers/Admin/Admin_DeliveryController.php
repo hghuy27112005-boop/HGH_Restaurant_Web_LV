@@ -190,7 +190,26 @@ class Admin_DeliveryController extends Controller
             ], 422);
         }
 
-        $startedAt = now();
+        $now = now();
+        $durationMinutes = $delivery->estimated_duration_minutes ?? 30;
+        $estimatedFinish = $now->copy()->addMinutes($durationMinutes + 15);
+
+        $todayOpen = $now->copy()->setTime(7, 30, 0);
+        $todayClose = $now->copy()->setTime(22, 0, 0);
+
+        if ($now->lt($todayOpen)) {
+            return response()->json([
+                'message' => 'Chưa tới giờ duyệt đơn giao hàng. Chỉ được duyệt từ 07:30 sáng.',
+            ], 422);
+        }
+
+        if ($estimatedFinish->gt($todayClose)) {
+            return response()->json([
+                'message' => 'Đơn hàng này không thể hoàn tất giao trước 22:00 hôm nay, không thể duyệt lúc này.',
+            ], 422);
+        }
+
+        $startedAt = $now;
         // Nếu vì lý do nào đó chưa có estimated_duration_minutes (VD: đơn cũ tạo trước
         // khi có tính năng này), mặc định dự phòng 30 phút để không bị lỗi cộng null.
         $durationMinutes = $delivery->estimated_duration_minutes ?? 30;
