@@ -2,6 +2,8 @@
 - Trang web hoạt động 24/24.
 - Có 2 hình thức đặt: Đặt bàn ăn tại quán, Đặt ship giao tận nơi.
 - Mỗi hóa đơn có 1 mã hóa đơn riêng, dùng để tra cứu. Có thể tra cứu ở cả trang Đặt bàn và trang Đặt ship, nhưng tra cứu chi tiết đầy đủ nhất là ở trang Lịch sử giao dịch.
+- Trang Lịch sử giao dịch cho phép xem lại toàn bộ đơn hàng đã đặt, xem chi tiết và xuất hóa đơn PDF cho từng đơn.
+- Sau khi thanh toán xong, người dùng có thể lưu lại mã hóa đơn để khi tìm lại hóa đơn cũ thì có thể tìm theo mã hóa đơn sẽ nhanh hơn.
 
 === ĐẶT BÀN ===
 - Chỉ nhận đặt bàn trong khung giờ nhà hàng mở cửa: 07:00 đến 22:00 mỗi ngày.
@@ -32,3 +34,8 @@
 === HỦY ĐƠN & HOÀN TIỀN ===
 - Khi hủy đơn: điểm đã tiêu hao để thanh toán sẽ được hoàn lại, hoặc hoàn tiền nếu thanh toán bằng VNPay, sau đó điểm tích lũy có được từ đơn hàng đó sẽ bị thu hồi.
 - Hoàn tiền qua VNPay: xử lý qua cổng thanh toán VNPay.
+
+=== XEM MÓN ĂN (TẠI TRANG MENU) ===
+- Tại trang Menu, khách có thể xem các món ăn, bao gồm số lượng còn lại của món đó.
+- Có thể lọc/xem món theo từng loại món, bao gồm cả bestseller.
+- Ngoài ra, các món bestseller cũng được hiển thị trực tiếp ngay tại trang chủ của nhà hàng (nhưng khi tư vấn thì ưu tiên dẫn khách tới trang thực đơn cho nhanh gọn)

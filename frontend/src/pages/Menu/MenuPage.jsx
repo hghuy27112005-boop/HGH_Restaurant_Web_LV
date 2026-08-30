@@ -73,7 +73,9 @@ const MenuPage = () => {
             );
         }
 
-        if (selectedType) {
+        if (selectedType === 'bestseller') {
+            filtered = filtered.filter(dish => dish.is_bestseller);
+        } else if (selectedType) {
             filtered = filtered.filter(
                 dish => dish.type_id === parseInt(selectedType)
             );
@@ -124,10 +126,51 @@ const MenuPage = () => {
         setIsModalOpen(true);
     };
 
+    const handleDecreaseQty = () => {
+        setQuantity(prev => {
+            const q = parseInt(prev) || 1;
+            return Math.max(1, q - 1);
+        });
+    };
+
+    const handleIncreaseQty = () => {
+        const max = selectedDish?.quantity_left ?? 10;
+        setQuantity(prev => {
+            const q = parseInt(prev) || 1;
+            return Math.min(max, q + 1);
+        });
+    };
+
+    const handleSetMinQty = () => setQuantity(1);
+
+    const handleSetMaxQty = () => setQuantity(selectedDish?.quantity_left ?? 10);
+    
+    const handleDecrease10Qty = () => {
+        setQuantity(prev => {
+            const q = parseInt(prev) || 1;
+            return Math.max(1, q - 10);
+        });
+    };
+
+    const handleIncrease10Qty = () => {
+        const max = selectedDish?.quantity_left ?? 10;
+        setQuantity(prev => {
+            const q = parseInt(prev) || 1;
+            return Math.min(max, q + 10);
+        });
+    };
+
     const confirmAddToCart = async () => {
         let qty = parseInt(quantity);
-        if (isNaN(qty) || qty < 1 || qty > 10) {
-            alert('Vui lòng nhập số lượng từ 1 đến 10!');
+        const maxQty = selectedDish?.quantity_left ?? 10;
+
+        if (isNaN(qty) || qty < 1) {
+            alert('Vui lòng nhập số lượng hợp lệ!');
+            return;
+        }
+
+        if (qty > maxQty) {
+            alert('Đặt hàng quá số lượng còn lại');
             return;
         }
 
@@ -155,8 +198,19 @@ const MenuPage = () => {
     };
 
     if (loading) return <Loading />;
-
+    const numberInputNoSpinnerCSS = `
+        input[type=number].no-spinner::-webkit-outer-spin-button,
+        input[type=number].no-spinner::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number].no-spinner {
+            -moz-appearance: textfield;
+        }
+    `;
     return (
+        <>
+        <style>{numberInputNoSpinnerCSS}</style>
         <div className="min-h-screen bg-gray-50">
             <div className="max-w-7xl mx-auto px-4 py-8">
                 <h1 className="text-4xl font-bold mb-8 text-red-600">Thực đơn</h1>
@@ -217,13 +271,14 @@ const MenuPage = () => {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold mb-2">Loại món</label>
+                            <label className="block text-sm font-semibold mb-2">Bộ lọc</label>
                             <select
                                 value={selectedType}
                                 onChange={(e) => setSelectedType(e.target.value)}
                                 className="w-full border border-gray-300 rounded px-4 py-2 focus:outline-none focus:border-red-600"
                             >
                                 <option value="">Tất cả loại</option>
+                                <option value="bestseller">⭐ Bestseller</option>
                                 {types.map(type => (
                                     <option key={type.type_id} value={type.type_id}>
                                         {type.type_name}
@@ -300,20 +355,70 @@ const MenuPage = () => {
                 confirmText="Xác nhận thêm vào giỏ hàng"
             >
                 <div className="flex flex-col gap-4">
+                    {selectedDish?.quantity_left !== undefined && (
+                        <div>
+                            <span className={`text-sm font-semibold ${selectedDish.quantity_left <= 15 ? 'text-red-600' : 'text-green-700'}`}>
+                                Còn lại {selectedDish.quantity_left} phần
+                            </span>
+                        </div>
+                    )}
                     <div>
-                        <label className="block font-semibold mb-1 text-gray-700">Số lượng (Tối đa 10):</label>
-                        <input
-                            type="number"
-                            value={quantity}
-                            onChange={(e) => setQuantity(e.target.value)}
-                            min="1"
-                            max="10"
-                            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-red-600"
-                        />
+                        <label className="block font-semibold mb-1 text-gray-700">Nhập số lượng</label>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleDecrease10Qty}
+                                className="px-2 h-9 flex-shrink-0 border border-gray-300 rounded text-xs font-semibold hover:bg-gray-100"
+                            >
+                                −10
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDecreaseQty}
+                                className="w-9 h-9 flex-shrink-0 flex items-center justify-center border border-gray-300 rounded font-bold text-lg hover:bg-gray-100"
+                            >
+                                −
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSetMinQty}
+                                className="px-3 h-9 flex-shrink-0 border border-gray-300 rounded text-sm font-semibold hover:bg-gray-100"
+                            >
+                                Min
+                            </button>
+                            <input
+                                type="number"
+                                value={quantity}
+                                onChange={(e) => setQuantity(e.target.value)}
+                                className="no-spinner flex-1 min-w-0 border border-gray-300 rounded px-3 py-2 text-center focus:outline-none focus:border-red-600"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleSetMaxQty}
+                                className="px-3 h-9 flex-shrink-0 border border-gray-300 rounded text-sm font-semibold hover:bg-gray-100"
+                            >
+                                Max
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleIncreaseQty}
+                                className="w-9 h-9 flex-shrink-0 flex items-center justify-center border border-gray-300 rounded font-bold text-lg hover:bg-gray-100"
+                            >
+                                +
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleIncrease10Qty}
+                                className="px-2 h-9 flex-shrink-0 border border-gray-300 rounded text-xs font-semibold hover:bg-gray-100"
+                            >
+                                +10
+                            </button>
+                        </div>
                     </div>
                 </div>
             </Modal>
         </div>
+        </>
     );
 };
 

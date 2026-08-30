@@ -13,12 +13,19 @@ const chatbotCustomerScripts = {
       "Chào khách, giới thiệu ngắn gọn có thể giúp gì, liệt kê các chức năng chính để khách chọn.",
     options: [
       { id: "order_food", label: "Đặt món", intent: "Khách muốn đặt món ăn, đặt bàn hoặc đặt ship" },
-      { id: "view_history", label: "Xem lịch sử giao dịch", intent: "Khách muốn xem lại lịch sử các đơn hàng đã đặt" },
-      { id: "view_bill", label: "Xem hóa đơn", intent: "Khách muốn xem hóa đơn thanh toán" },
+      {
+        id: "view_history",
+        label: "Xem lịch sử giao dịch",
+        intent: "Khách muốn xem lại lịch sử các đơn hàng đã đặt, hoặc xem/xuất hóa đơn",
+        action: { type: "navigate", path: "/orders" },
+      },
       { id: "cancel_order", label: "Hủy đơn hàng", intent: "Khách muốn hủy 1 đơn hàng đã đặt" },
-      { id: "view_profile", label: "Xem, sửa thông tin cá nhân", intent: "Khách muốn xem hoặc chỉnh sửa thông tin tài khoản cá nhân" },
-      { id: "change_password", label: "Đổi mật khẩu", intent: "Khách muốn đổi mật khẩu tài khoản" },
-      { id: "view_points", label: "Xem điểm tích lũy, bậc thành viên", intent: "Khách muốn xem số điểm tích lũy hoặc hạng thành viên hiện tại" },
+      {
+        id: "view_profile",
+        label: "Xem, sửa thông tin cá nhân",
+        intent: "Khách muốn xem hoặc chỉnh sửa thông tin tài khoản cá nhân",
+        action: { type: "navigate", path: "/profile" },
+      },
       { id: "logout", label: "Đăng xuất", intent: "Khách muốn đăng xuất khỏi tài khoản" },
     ],
   },
@@ -143,15 +150,15 @@ const chatbotCustomerScripts = {
     ],
   },
 
-  // ===================== CÁC CHỨC NĂNG KHÁC (placeholder) =====================
+  // ===================== CÁC CHỨC NĂNG KHÁC =====================
   view_history: {
-    intentSummary: "Chức năng xem lịch sử giao dịch đang được hoàn thiện.",
-    options: [{ id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" }],
+    intentSummary:
+      "Đã đưa khách tới trang lịch sử giao dịch. Cho khách biết ở đây có thể xem lại tất cả đơn hàng đã đặt, đồng thời xem và xuất hóa đơn PDF cho từng đơn.",
+    options: [
+      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+    ],
   },
-  view_bill: {
-    intentSummary: "Chức năng xem hóa đơn đang được hoàn thiện.",
-    options: [{ id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" }],
-  },
+
   cancel_order: {
     intentSummary:
       "Khách muốn hủy đơn hàng nhưng chưa nói rõ là đơn đặt bàn hay đơn đặt ship. Cần hỏi rõ khách muốn hủy đơn nào.",
@@ -187,18 +194,15 @@ const chatbotCustomerScripts = {
       { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
+
   view_profile: {
-    intentSummary: "Chức năng xem/sửa thông tin cá nhân đang được hoàn thiện.",
-    options: [{ id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" }],
+    intentSummary:
+      "Đã đưa khách tới trang cá nhân. Cho khách biết ngoài việc xem các thông tin cơ bản, khách cũng có thể xem điểm tích lũy và bậc thành viên hiện tại ngay ở trang này.",
+    options: [
+      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+    ],
   },
-  change_password: {
-    intentSummary: "Chức năng đổi mật khẩu đang được hoàn thiện.",
-    options: [{ id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" }],
-  },
-  view_points: {
-    intentSummary: "Chức năng xem điểm tích lũy, bậc thành viên đang được hoàn thiện.",
-    options: [{ id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" }],
-  },
+
   logout: {
     intentSummary: "Xác nhận khách muốn đăng xuất khỏi tài khoản.",
     options: [

@@ -21,8 +21,20 @@ class ChatbotController extends Controller
             ['current_node_id' => 'root', 'context_data' => []]
         );
 
+        $todayStart = now()->startOfDay();
+        $todayEnd = now()->endOfDay();
+
+        $hasMessageToday = ChatMessage::where('session_id', $session->session_id)
+            ->whereBetween('created_at', [$todayStart, $todayEnd])
+            ->exists();
+
+        // Ngày mới, hôm nay chưa có tin nhắn nào -> reset lại từ đầu để bot chủ động chào lại
+        if (!$hasMessageToday) {
+            $session->update(['current_node_id' => 'root']);
+        }
+
         $messages = ChatMessage::where('session_id', $session->session_id)
-            ->where('created_at', '>=', now()->subDays(7))
+            ->whereBetween('created_at', [$todayStart, $todayEnd])
             ->orderBy('created_at')
             ->get(['sender', 'content', 'created_at']);
 
@@ -36,6 +48,9 @@ class ChatbotController extends Controller
 
     public function interact(Request $request)
     {
+        $suggestedRoute = null;
+        $suggestedLabel = null;
+
         $request->validate([
             'type' => 'required|in:button,text,auto',
             'user_input' => 'required_if:type,text|nullable|string|max:500',
@@ -101,8 +116,11 @@ class ChatbotController extends Controller
 
             if ($matchedId === 'unclear') {
                 // Phương án dự phòng: câu hỏi không khớp kịch bản, để AI tự trả lời
-                // dựa trên tài liệu kiến thức tổng quát về website.
-                $reply = $this->gemini->answerFreeform($request->user_input);
+                // dựa trên tài liệu kiến thức tổng quát về website, kèm gợi ý điều hướng.
+                $freeform = $this->gemini->answerFreeform($request->user_input);
+                $reply = $freeform['reply'];
+                $suggestedRoute = $freeform['suggested_route'];
+                $suggestedLabel = $freeform['suggested_label'];
             } else {
                 $reply = $result['reply'];
             }
@@ -122,6 +140,64 @@ class ChatbotController extends Controller
             'success' => true,
             'matched_id' => $matchedId,
             'reply' => $reply,
+            'suggested_route' => $suggestedRoute,
+            'suggested_label' => $suggestedLabel,
         ]);
+    }
+
+        public function chatDays()
+    {
+        $user = Auth::user();
+        $session = ChatSession::where('user_id', $user->user_id)->first();
+
+        if (!$session) {
+            return response()->json(['success' => true, 'days' => []]);
+        }
+
+        $today = now()->startOfDay();
+        $sixDaysAgo = $today->copy()->subDays(6);
+
+        $rows = ChatMessage::where('session_id', $session->session_id)
+            ->whereBetween('created_at', [$sixDaysAgo, now()->endOfDay()])
+            ->selectRaw('DATE(created_at) as chat_date')
+            ->groupBy('chat_date')
+            ->orderByDesc('chat_date')
+            ->pluck('chat_date');
+
+        $todayStr = $today->format('Y-m-d');
+
+        $days = $rows->map(function ($dateStr) use ($todayStr) {
+            $isToday = $dateStr === $todayStr;
+            return [
+                'date' => $dateStr,
+                'label' => $isToday
+                    ? 'Đoạn chat hôm nay'
+                    : 'Đoạn chat ngày ' . \Carbon\Carbon::parse($dateStr)->format('d/m/Y'),
+                'is_today' => $isToday,
+            ];
+        })->values();
+
+        return response()->json(['success' => true, 'days' => $days]);
+    }
+
+    public function messagesByDate(Request $request)
+    {
+        $request->validate(['date' => 'required|date_format:Y-m-d']);
+
+        $user = Auth::user();
+        $session = ChatSession::where('user_id', $user->user_id)->first();
+
+        if (!$session) {
+            return response()->json(['success' => true, 'messages' => []]);
+        }
+
+        $date = \Carbon\Carbon::parse($request->date);
+
+        $messages = ChatMessage::where('session_id', $session->session_id)
+            ->whereBetween('created_at', [$date->copy()->startOfDay(), $date->copy()->endOfDay()])
+            ->orderBy('created_at')
+            ->get(['sender', 'content', 'created_at']);
+
+        return response()->json(['success' => true, 'messages' => $messages]);
     }
 }

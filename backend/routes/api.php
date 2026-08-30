@@ -77,7 +77,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     //Chatbot
     Route::get('/chatbot/session', [ChatbotController::class, 'getSession']);
-    Route::post('/chatbot/interact', [ChatbotController::class, 'interact']);   
+    Route::post('/chatbot/interact', [ChatbotController::class, 'interact']);
+    Route::get('/chatbot/chat-days', [ChatbotController::class, 'chatDays']);
+    Route::get('/chatbot/messages-by-date', [ChatbotController::class, 'messagesByDate']);
 
 });
 

@@ -14,7 +14,7 @@ class DishController extends Controller
     public function index(Request $request)
     {
         // Chỉ lấy món đang bán (is_active = true) cho trang menu công khai / đặt hàng
-        $dishes = Dish::where('is_active', true)->get();
+        $dishes = Dish::where('is_active', true)->orderBy('dish_id', 'asc')->get();
 
         // Lấy/tạo stock của ngày hôm nay và gắn quantity_left vào mỗi món
         $generator = new OrderCodeGenerator();
