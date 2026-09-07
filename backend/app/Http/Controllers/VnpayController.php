@@ -30,6 +30,10 @@ class VnpayController extends Controller
             return response()->json(['message' => 'Order not found'], 404);
         }
 
+        if ($order->user_id !== $request->user()->user_id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         // Luôn tự xác thực sự kiện giảm giá ở server, không tin trực tiếp
         // giá trị use_sale_off từ client.
         $saleOffPercentage = null;
@@ -136,13 +140,49 @@ class VnpayController extends Controller
 
         $orderId = $request->input('order_id');
 
-        $order = Order::with('user')->where('order_id', $orderId)->first();
+        $order = Order::with(['user', 'bill', 'booking', 'delivery'])->where('order_id', $orderId)->first();
 
         if (!$order) {
             return response()->json(['message' => 'Order not found'], 404);
         }
 
-        $amount = (int) round((float) $order->subtotal_price);
+        if ($order->user_id !== $request->user()->user_id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $bill = $order->bill;
+        if (!$bill || $bill->payment_method === 'unpaid' || $bill->payment_method === null) {
+            return response()->json(['message' => 'Đơn hàng chưa được thanh toán, không thể hủy/hoàn tiền.'], 400);
+        }
+
+        if ($order->order_type === 'booking_table') {
+            $booking = $order->booking;
+
+            if (!$booking || $booking->booking_status !== 'completed') {
+                return response()->json(['message' => 'Không thể hủy đơn hàng ở trạng thái này'], 400);
+            }
+
+            $bookingDateStr = $booking->booking_date instanceof \Carbon\Carbon
+                ? $booking->booking_date->format('Y-m-d')
+                : \Carbon\Carbon::parse($booking->booking_date)->format('Y-m-d');
+
+            $bookingDateTime = \Carbon\Carbon::parse($bookingDateStr . ' ' . $booking->start_time);
+            $deadline = $bookingDateTime->copy()->subHour();
+
+            if (now()->greaterThanOrEqualTo($deadline)) {
+                return response()->json(['message' => 'Đã quá thời hạn cho phép hủy đơn (phải hủy trước giờ đặt ít nhất 60 phút).'], 400);
+            }
+        } elseif ($order->order_type === 'delivery') {
+            $delivery = $order->delivery;
+
+            if (!$delivery || !in_array($delivery->delivery_status, ['waiting_info', 'waiting_confirmation', 'waiting_approval'])) {
+                return response()->json(['message' => 'Không thể hủy đơn hàng ở trạng thái này'], 400);
+            }
+        }
+
+        // Dùng số tiền khách THỰC SỰ đã trả (có tính giảm giá sự kiện nếu có),
+        // không dùng order->subtotal_price (giá gốc trước giảm giá).
+        $amount = (int) round((float) ($bill->sale_off_total_price ?? $bill->total_price));
 
         if ($amount < 1000) {
             return response()->json(['message' => 'Invalid order amount (amount < 1000 VND)'], 422);

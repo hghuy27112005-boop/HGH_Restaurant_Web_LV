@@ -277,6 +277,7 @@ export const bookingService = {
     getBookings: () => myBillsAPI.getAll({ order_type: 'booking_table' }),
     createBooking: (data) => bookingTableAPI.create(data),
     checkOverlap: (data) => axiosInstance.post('/booking-tables/check-overlap', data),
+    getOccupiedTables: (data) => axiosInstance.post('/booking-tables/occupied', data),
     updateBooking: (id, data) => bookingTableAPI.update(id, data),
     deleteBooking: (id) => bookingTableAPI.delete(id),
     cancelBooking: (id) => bookingTableAPI.delete(id),

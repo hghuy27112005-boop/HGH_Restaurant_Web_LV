@@ -59,6 +59,37 @@ class BookingTableController extends Controller
         }
     }
 
+    /**
+     * Trả về danh sách số bàn đã bị đặt (chưa hủy) trong 1 khung ngày/giờ cụ thể.
+     * Dùng để tô xám/khóa các ô bàn ở bước chọn bàn, giúp khách thấy ngay bàn nào
+     * đã có người đặt mà không cần bấm thử từng bàn.
+     */
+    public function getOccupiedTables(Request $request)
+    {
+        try {
+            $date = $request->date;
+            $startTime = $request->start_time;
+            $endTime = $request->end_time;
+            $excludeOrderId = $request->order_id;
+
+            $occupied = DB::table('booking_tables')
+                ->join('bills', 'booking_tables.order_id', '=', 'bills.order_id')
+                ->where('booking_tables.booking_date', $date)
+                ->where('booking_tables.booking_status', '!=', 'cancelled')
+                ->when($excludeOrderId, function ($query) use ($excludeOrderId) {
+                    $query->where('booking_tables.order_id', '!=', $excludeOrderId);
+                })
+                ->whereRaw("booking_tables.start_time < ? AND booking_tables.end_time > ?", [$endTime, $startTime])
+                ->pluck('booking_tables.table_number')
+                ->unique()
+                ->values();
+
+            return response()->json(['status' => 'success', 'occupied_tables' => $occupied]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => 'Lỗi kiểm tra bàn trống: ' . $e->getMessage()], 500);
+        }
+    }
+
         /**
      * Khách hủy đơn đặt bàn đã thanh toán bằng điểm, tự hoàn điểm.
      * Điều kiện: đã thanh toán (booking_status = completed) và còn cách giờ đặt ít nhất 60 phút.

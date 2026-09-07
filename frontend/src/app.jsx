@@ -4,7 +4,6 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { CartProvider } from './context/CartContext';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import PaymentResultPage from './pages/Payment/PaymentResultPage';
@@ -23,10 +22,6 @@ import BookingsPage from './pages/Booking/BookingsPage';
 import BookingFormPage from './pages/Booking/BookingFormPage';
 import BookingListPage from './pages/Booking/BookingListPage';
 import OrdersPage from './pages/Order/OrdersPage';
-import OrderConfirmationPage from './pages/Order/OrderConfirmationPage';
-import OrderTrackingPage from './pages/Order/OrderTrackingPage';
-import CartPage from './pages/Order/CartPage';
-import CheckoutPage from './pages/Order/CheckoutPage';
 import DeliveriesPage from './pages/Delivery/DeliveriesPage';
 import AdminUsersPage from './pages/Admin/AdminUsersPage';
 import AdminStockPage from './pages/Admin/AdminStockPage';
@@ -64,7 +59,6 @@ function App() {
     <BrowserRouter>
       <ScrollToTop />
       <AuthProvider>
-        <CartProvider>
           <Layout>
             <Routes>
               {/* Home */}
@@ -91,10 +85,6 @@ function App() {
 
               {/* Orders */}
               <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
-              <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
-              <Route path="/checkout" element={<ProtectedRoute><CheckoutPage /></ProtectedRoute>} />
-              <Route path="/order-confirmation/:billId" element={<ProtectedRoute><OrderConfirmationPage /></ProtectedRoute>} />
-              <Route path="/order-tracking/:billId" element={<ProtectedRoute><OrderTrackingPage /></ProtectedRoute>} />
               <Route path="/deliveries" element={<ProtectedRoute><DeliveriesPage /></ProtectedRoute>} />
 
               {/* Admin Routes */}
@@ -115,7 +105,6 @@ function App() {
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </Layout>
-        </CartProvider>
       </AuthProvider>
     </BrowserRouter>
   );

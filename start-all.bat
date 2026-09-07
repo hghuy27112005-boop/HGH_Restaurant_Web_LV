@@ -11,6 +11,9 @@ echo Dang khoi chay Frontend (Vite dev)...
 start "Frontend Dev" cmd /k "cd /d %ROOT%frontend && npm run dev"
 
 echo Dang khoi chay Backend (gui mail reminder + Laravel serve)...
-start "Backend Serve" cmd /k "cd /d %ROOT%backend && php artisan bookings:send-daily-reminders && php artisan serve"
+start "Backend Serve" cmd /k "cd /d %ROOT%backend && php artisan serve
+
+REM Code chay gui thong bao email
+REM && php artisan bookings:send-daily-reminders && php artisan serve"
 
 echo Da khoi chay xong 3 cua so. Kiem tra tung cua so de xac nhan.

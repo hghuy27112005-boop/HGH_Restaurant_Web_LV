@@ -3,14 +3,11 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\Bill;
-use App\Models\BookingTable;
-use App\Models\Dish;
 use App\Models\Delivery;
+use App\Models\Dish;
 use App\Models\Stock;
 use App\Services\OrderCodeGenerator;
 
@@ -177,7 +174,7 @@ class OrderController extends Controller
 
                 $bookingDate = $validated['booking_table']['start_date'];
                 $bookingDatePrefix = \Carbon\Carbon::parse($bookingDate)->format('dmy') . '1';
-                $maxBookingSeq = BookingTable::where('booking_id', 'like', $bookingDatePrefix . '%')
+                $maxBookingSeq = \App\Models\BookingTable::where('booking_id', 'like', $bookingDatePrefix . '%')
                     ->selectRaw('MAX(CAST(RIGHT(booking_id, 3) AS INTEGER)) as max_seq')
                     ->value('max_seq');
                 $baseCount = $maxBookingSeq ?? 0;
@@ -188,7 +185,7 @@ class OrderController extends Controller
                     $bookingId = $generator->generateBookingId($bookingDate, $seq);
                     $tableIndex++;
 
-                    BookingTable::create([
+                    \App\Models\BookingTable::create([
                         'booking_id'       => $bookingId,
                         'order_id'         => $orderId,
                         'table_number'     => $tableNumber,
@@ -216,8 +213,12 @@ class OrderController extends Controller
         }
     }
 
-    public function destroy(Order $order)
+    public function destroy(Request $request, Order $order)
     {
+        if ($order->user_id !== $request->user()->user_id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         // Order deletion should cascade to related items, booking tables, deliveries, and bills.
         try {
             if ($order->order_type === 'booking_table') {
@@ -232,245 +233,6 @@ class OrderController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 500);
         }
-    }
-
-    /**
-     * Add dish to session cart
-     */
-    public function addToCart(Request $request)
-    {
-        $id = $request->dish_id;
-        $type = $request->order_type; // 'mang-ve' or 'dat-ban'
-
-        if (session('last_confirmed_' . $type) && !session('paid_' . $type)) {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Bạn có đơn hàng [' . ($type == 'mang-ve' ? 'Mang về' : 'Tại bàn') . '] đang chờ thanh toán. Vui lòng hoàn tất thanh toán trước khi thêm món mới!'
-            ], 403);
-        }
-
-        $cart = session()->get('cart', []);
-        $cartKey = $id . '_' . $type;
-
-        if (isset($cart[$cartKey])) {
-            $cart[$cartKey]['quantity'] += $request->quantity;
-            $cart[$cartKey]['created_at'] = now()->format('H:i d/m/Y');
-            if ($request->note) {
-                $cart[$cartKey]['note'] = $request->note;
-            }
-        } else {
-            $cart[$cartKey] = [
-                "dish_id" => $id,
-                "name" => $request->dish_name,
-                "quantity" => (int) $request->quantity,
-                "price" => $request->price,
-                "order_type" => $type,
-                "note" => $request->note ?? 'Không có',
-                "created_at" => now()->format('H:i d/m/Y')
-            ];
-        }
-
-        session()->put('cart', $cart);
-
-        // Nếu user đang quay lại Menu đặt món mới khi đang có 1 đơn pending cũ, xóa đơn cũ để tránh rác
-        $oldBillCode = session('last_bill_code_' . $type);
-        if ($oldBillCode) {
-            $oldBill = Bill::where('bill_id', $oldBillCode)->first();
-            if ($oldBill) {
-                // Because of ON DELETE CASCADE, deleting Order will delete OrderItems, Deliveries, BookingTables, and Bills.
-                // Or deleting Bill deletes itself. Wait, Bill has order_id foreign key. 
-                // So we delete Order, and Bill gets cascaded (or we delete Order directly).
-                $order = Order::where('order_id', $oldBill->order_id)->first();
-                if ($order) {
-                    $order->delete();
-                }
-            }
-        }
-
-        session()->forget(['last_confirmed_' . $type, 'last_bill_code_' . $type, 'paid_' . $type]);
-
-        session()->save(); // Đảm bảo session được ghi ngay lập tức
-        \Log::info('Added to cart:', session('cart', []));
-
-        return response()->json(['message' => 'Thành công!', 'cart_count' => count($cart)]);
-    }
-
-    public function updateCart(Request $request)
-    {
-        $cart = session()->get('cart', []);
-        if ($request->has('updates')) {
-            foreach ($request->updates as $update) {
-                $key = $update['key'];
-                if (isset($cart[$key])) {
-                    $qty = (int) $update['quantity'];
-                    if ($qty < 0) $qty = 0;
-                    if ($qty == 0) unset($cart[$key]);
-                    else $cart[$key]['quantity'] = $qty;
-                }
-            }
-            session()->put('cart', $cart);
-            return response()->json(['success' => true]);
-        }
-        return response()->json(['success' => false]);
-    }
-
-    public function updateCartQuantities(Request $request)
-    {
-        $cart = session()->get('cart', []);
-        $quantities = $request->input('quantities', []);
-
-        foreach ($quantities as $id => $qty) {
-            $qty = (int) $qty;
-            if ($qty < 0) $qty = 0;
-            if ($qty == 0) unset($cart[$id]);
-            else if (isset($cart[$id])) $cart[$id]['quantity'] = $qty;
-        }
-
-        session()->put('cart', $cart);
-        return response()->json(['success' => true]);
-    }
-
-    /**
-     * Process payment
-     */
-    public function processPayment(Request $request)
-    {
-        try {
-            DB::beginTransaction();
-
-            $type = (string) $request->order_type;
-            $billCode = (string) ($request->input('bill_code') ?: session()->get('last_bill_code_' . $type));
-
-            if (!$billCode) {
-                DB::rollBack();
-                return response()->json(['status' => 'error', 'message' => 'Không tìm thấy hóa đơn.'], 400);
-            }
-
-            $bill = Bill::with('order.booking_table', 'order.delivery')->where('bill_id', $billCode)->first();
-
-            if (!$bill) {
-                DB::rollBack();
-                return response()->json(['status' => 'error', 'message' => 'Hóa đơn không tồn tại.'], 404);
-            }
-
-            if ($bill->payment_method !== 'unpaid' && $bill->payment_method !== null && $request->payment_method) {
-                // maybe already paid
-            }
-
-            // Check overlap again for booking
-            if ($bill->order->order_type === 'booking_table') {
-                $booking = $bill->order->booking;
-                if ($booking) {
-                    $overlap = DB::table('booking_tables')
-                        ->join('bills', 'booking_tables.order_id', '=', 'bills.order_id')
-                        ->where('booking_tables.table_number', $booking->table_number)
-                        ->where('booking_tables.B_payment_status', 'paid')
-                        ->where('booking_tables.booking_status', '!=', 'cancelled')
-                        ->where('bills.bill_id', '!=', $bill->bill_id)
-                        ->where(function ($query) use ($booking) {
-                            $query->where('booking_tables.start_time', '<', $booking->end_time)
-                                ->where('booking_tables.end_time', '>', $booking->start_time)
-                                ->where('booking_tables.booking_date', $booking->booking_date);
-                        })
-                        ->exists();
-
-                    if ($overlap) {
-                        DB::commit(); // Commit to keep the bill as pending/unpaid
-                        return response()->json([
-                            'status' => 'error',
-                            'message' => 'Rất tiếc, bàn số ' . $booking->table_number . ' vừa có người khác thanh toán trước trong khung giờ bạn chọn.'
-                        ], 422);
-                    }
-
-                    // Update booking status
-                    $booking->update([
-                        'B_payment_status' => 'paid',
-                        'booking_status' => 'waiting_confirmation'
-                    ]);
-                }
-            } else if ($bill->order->order_type === 'delivery') {
-                $delivery = $bill->order->delivery;
-                if ($delivery) {
-                    $delivery->update([
-                        'D_payment_status' => 'paid',
-                        'delivery_status' => 'waiting_confirmation'
-                    ]);
-                }
-            }
-
-            // Update bill
-            $bill->update([
-                'payment_method' => $request->payment_method ?? 'Tiền mặt',
-            ]);
-
-            DB::commit();
-
-            session(['paid_' . $type => true]);
-
-            if ($bill->order->order_type === 'booking_table') {
-                session()->forget(['table_numbers', 'tables_detail', 'start_date', 'start_time', 'end_time', 'total_tables', 'types', 'table_number']);
-            }
-
-            return response()->json(['status' => 'success']);
-        } catch (\Throwable $e) {
-            if (DB::transactionLevel() > 0) DB::rollBack();
-            \Log::error('processPayment failed: ' . $e->getMessage());
-            return response()->json(['status' => 'error', 'message' => 'Lỗi xử lý thanh toán: ' . $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * Transaction History
-     */
-    public function transactionHistory(Request $request)
-    {
-        $q = $request->input('q');
-        $date = $request->input('date');
-        $sort = $request->input('sort', 'desc');
-
-        $query = Order::with(['bill', 'items.dish', 'booking_table', 'delivery'])
-            ->where('user_id', auth()->id());
-
-        if ($q) {
-            $query->whereHas('bill', function ($b) use ($q) {
-                $b->where('bill_id', 'like', "%{$q}%");
-            });
-        }
-
-        if ($date) {
-            $query->whereDate('created_at', $date);
-        }
-
-        $orders = $query->orderBy('created_at', $sort)->get();
-
-        return view('transaction_history', compact('orders', 'q', 'date', 'sort'));
-    }
-
-    public function transactionManagement(Request $request)
-    {
-        $q = $request->input('q');
-        $order_type = $request->input('order_type');
-        $username = $request->input('username');
-
-        $query = Order::with(['bill', 'items.dish', 'booking_table', 'delivery', 'user']);
-
-        if ($q) {
-            $query->whereHas('bill', function ($b) use ($q) {
-                $b->where('bill_id', 'like', "%{$q}%");
-            });
-        }
-        if ($order_type) {
-            $query->where('order_type', $order_type);
-        }
-        if ($username) {
-            $query->whereHas('user', function ($u) use ($username) {
-                $u->where('username', 'like', "%{$username}%");
-            });
-        }
-
-        $orders = $query->orderBy('created_at', 'desc')->get();
-
-        return view('transaction_management', compact('orders', 'q', 'order_type', 'username'));
     }
 
     public function myBillsJson(Request $request)
@@ -538,22 +300,5 @@ class OrderController extends Controller
         })->filter()->values();
 
         return response()->json(['data' => $data]);
-    }
-
-    public function exportPDF(Request $request)
-    {
-        $type = $request->query('type');
-        $code = $request->query('code') ?: session()->get('last_bill_code_' . $type);
-
-        $bill = Bill::with(['order.items.dish', 'order.booking_table', 'order.delivery'])
-            ->where('bill_id', $code)
-            ->first();
-
-        if (!$bill) {
-            return "Không tìm thấy hóa đơn!";
-        }
-
-        $pdf = Pdf::loadView('pdf.invoice', compact('bill'));
-        return $pdf->stream('hoa-don-' . $bill->bill_id . '.pdf');
     }
 }

@@ -138,6 +138,31 @@ const BookingsPage = () => {
         return () => clearTimeout(timer);
     }, [error]);
 
+    // Khi vào bước chọn bàn (bước 4), chủ động lấy danh sách bàn đã bị đặt trong
+    // đúng khung ngày/giờ khách chọn ở bước 1, để tô xám/khóa luôn thay vì để
+    // khách bấm thử rồi mới báo lỗi.
+    useEffect(() => {
+        if (wizardStep === 4) {
+            setIsCheckingOverlap(true);
+            (async () => {
+                try {
+                    const res = await bookingService.getOccupiedTables({
+                        date: bookingDate,
+                        start_time: `${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}`,
+                        end_time: `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`,
+                        order_id: createdOrderId,
+                    });
+                    setUnavailableTables(res.data.occupied_tables || []);
+                } catch (err) {
+                    console.warn('Không thể tải danh sách bàn đã đặt:', err);
+                    setUnavailableTables([]);
+                } finally {
+                    setIsCheckingOverlap(false);
+                }
+            })();
+        }
+    }, [wizardStep, bookingDate, startH, startM, endH, endM, createdOrderId]);
+
     // Kiểm tra có sự kiện giảm giá nào đang diễn ra không — chỉ gọi khi vào tới
     // bước chọn phương thức thanh toán (bookingConfirmModalStep === 2), không cần gọi sớm hơn.
     useEffect(() => {
@@ -533,7 +558,9 @@ const BookingsPage = () => {
 
     const tableTypeLabels = { type5: 'nhỏ', type10: 'vừa', type15: 'lớn' };
 
-    const handleTableSelect = async (tableNum) => {
+    const handleTableSelect = (tableNum) => {
+        if (unavailableTables.includes(tableNum)) return;
+
         if (selectedTables.includes(tableNum)) {
             setSelectedTables(selectedTables.filter(t => t !== tableNum));
         } else {
@@ -549,17 +576,7 @@ const BookingsPage = () => {
                 return;
             }
 
-            try {
-                await bookingService.checkOverlap({
-                    date: bookingDate,
-                    start_time: `${String(startH).padStart(2, '0')}:${String(startM).padStart(2, '0')}`,
-                    end_time: `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`,
-                    tables: [tableNum]
-                });
-                setSelectedTables([...selectedTables, tableNum].sort((a, b) => a - b));
-            } catch (err) {
-                setError(err.response?.data?.message || `Bàn số ${tableNum} đã có người đặt trong khung giờ này.`);
-            }
+            setSelectedTables([...selectedTables, tableNum].sort((a, b) => a - b));
         }
     };
 
@@ -932,7 +949,14 @@ const BookingsPage = () => {
                                     {wizardStep === 4 && (
                                         <div className="animate-fade-in">
                                             <h3 className="font-bold text-lg text-red-600 mb-2">Bước 4: Chọn bàn trống</h3>
-                                            <p className="text-gray-600 mb-2 text-sm">Vui lòng chọn <b>{totalTables}</b> bàn. Đã chọn {selectedTables.length}/{totalTables}.</p>
+                                            <p className="text-gray-600 mb-1 text-sm">Vui lòng chọn <b>{totalTables}</b> bàn. Đã chọn {selectedTables.length}/{totalTables}.</p>
+                                            <p className="text-gray-500 mb-2 text-xs">
+                                                <span className="inline-block w-3 h-3 bg-gray-400 rounded-sm align-middle mr-1"></span>
+                                                Bàn xám: đã có người đặt trong khung giờ này
+                                            </p>
+                                            {isCheckingOverlap && (
+                                                <p className="text-sm text-gray-500 mb-2">Đang kiểm tra bàn trống...</p>
+                                            )}
 
                                             <div className="max-h-60 overflow-y-auto border p-2 bg-white rounded">
                                                 {tableTypes.type5 > 0 && (
@@ -943,7 +967,14 @@ const BookingsPage = () => {
                                                                 <button
                                                                     key={num}
                                                                     onClick={() => handleTableSelect(num)}
-                                                                    className={`p-2 text-xs border rounded transition ${selectedTables.includes(num) ? 'bg-red-600 text-white border-red-600 font-bold' : 'bg-white hover:border-red-600'}`}
+                                                                    disabled={unavailableTables.includes(num)}
+                                                                    className={`p-2 text-xs border rounded transition ${
+                                                                        unavailableTables.includes(num)
+                                                                            ? 'bg-gray-400 text-white border-gray-400 cursor-not-allowed opacity-80'
+                                                                            : selectedTables.includes(num)
+                                                                                ? 'bg-red-600 text-white border-red-600 font-bold'
+                                                                                : 'bg-white hover:border-red-600'
+                                                                    }`}
                                                                 >
                                                                     {num}
                                                                 </button>
@@ -960,7 +991,14 @@ const BookingsPage = () => {
                                                                 <button
                                                                     key={num}
                                                                     onClick={() => handleTableSelect(num)}
-                                                                    className={`p-2 text-xs border rounded transition ${selectedTables.includes(num) ? 'bg-red-600 text-white border-red-600 font-bold' : 'bg-white hover:border-red-600'}`}
+                                                                    disabled={unavailableTables.includes(num)}
+                                                                    className={`p-2 text-xs border rounded transition ${
+                                                                        unavailableTables.includes(num)
+                                                                            ? 'bg-gray-400 text-white border-gray-400 cursor-not-allowed opacity-80'
+                                                                            : selectedTables.includes(num)
+                                                                                ? 'bg-red-600 text-white border-red-600 font-bold'
+                                                                                : 'bg-white hover:border-red-600'
+                                                                    }`}
                                                                 >
                                                                     {num}
                                                                 </button>
@@ -977,7 +1015,14 @@ const BookingsPage = () => {
                                                                 <button
                                                                     key={num}
                                                                     onClick={() => handleTableSelect(num)}
-                                                                    className={`p-2 text-xs border rounded transition ${selectedTables.includes(num) ? 'bg-red-600 text-white border-red-600 font-bold' : 'bg-white hover:border-red-600'}`}
+                                                                    disabled={unavailableTables.includes(num)}
+                                                                    className={`p-2 text-xs border rounded transition ${
+                                                                        unavailableTables.includes(num)
+                                                                            ? 'bg-gray-400 text-white border-gray-400 cursor-not-allowed opacity-80'
+                                                                            : selectedTables.includes(num)
+                                                                                ? 'bg-red-600 text-white border-red-600 font-bold'
+                                                                                : 'bg-white hover:border-red-600'
+                                                                    }`}
                                                                 >
                                                                     {num}
                                                                 </button>

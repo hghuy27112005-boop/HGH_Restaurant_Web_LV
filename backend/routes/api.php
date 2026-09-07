@@ -53,8 +53,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('bills/{bill}/export-pdf', [\App\Http\Controllers\BillController::class, 'exportPDF']);
 
     // Orders
-    Route::apiResource('orders', \App\Http\Controllers\OrderController::class);
-    Route::post('orders/bill/{bill}', [\App\Http\Controllers\OrderController::class, 'addToBill']);
+    Route::apiResource('orders', \App\Http\Controllers\OrderController::class)->only(['store', 'destroy']);
     Route::post('orders/{order}/pay-with-points', [\App\Http\Controllers\BillController::class, 'payWithPointsByOrder']);
 
     // Deliveries
@@ -67,7 +66,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Booking Tables
     Route::apiResource('booking-tables', \App\Http\Controllers\BookingTableController::class);
     Route::post('booking-tables/check-overlap', [\App\Http\Controllers\BookingTableController::class, 'checkMultiOverlap']);
+        Route::post('booking-tables/occupied', [\App\Http\Controllers\BookingTableController::class, 'getOccupiedTables']);
     Route::post('booking-tables/cancel-points', [\App\Http\Controllers\BookingTableController::class, 'cancelWithPoints']);
+
+    // VNPay - yêu cầu đăng nhập để tạo link thanh toán/hoàn tiền cho đúng đơn của mình
+    Route::post('vnpay/create-payment-url', [VnpayController::class, 'createPaymentUrl']);
+    Route::post('vnpay/create-refund-url', [VnpayController::class, 'createRefundUrl']);
 
     // Points & Statistics
     Route::get('points', [\App\Http\Controllers\PointsController::class, 'userPoints']);
@@ -110,7 +114,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::apiResource('admin/users', \App\Http\Controllers\Admin\Admin_UserController::class);
 
     // Dishes Management
-    // GET danh sách TẤT CẢ món (kể cả đã ẩn) - dùng cho trang quản lý, khác với /dishes (chỉ món đang bán)
     Route::get('admin/dishes', [\App\Http\Controllers\DishController::class, 'adminIndex']);
     Route::post('admin/dishes', [\App\Http\Controllers\DishController::class, 'addDish']);
     Route::post('admin/dishes/{id}', [\App\Http\Controllers\DishController::class, 'updateDish']);
@@ -136,6 +139,4 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('admin/statistics/customers', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'customers']);
 });
 
-Route::post('/vnpay/create-payment-url', [VnpayController::class, 'createPaymentUrl']);
-Route::post('/vnpay/create-refund-url', [VnpayController::class, 'createRefundUrl']);
 Route::get('/vnpay/ipn', [VnpayController::class, 'vnpayIpn']);
