@@ -9,6 +9,7 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
 
     const isActive = (path) => {
         if (path === '/menu' && location.pathname.startsWith('/menu')) return true;
+        if (path === '/dish-details' && location.pathname.startsWith('/dish-details')) return true;
         return location.pathname === path;
     };
 
@@ -27,7 +28,9 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
     const userLinks = [
         { path: '/gioi-thieu', label: 'Giới Thiệu' },
         { path: '/menu', label: 'Menu' },
+        { path: '/dish-details', label: 'Chi tiết món ăn' },
         { path: '/orders', label: 'Lịch sử giao dịch' },
+        { path: '/ratings', label: 'Đánh giá dịch vụ' },
         { path: '/bookings', label: 'Đặt bàn' },
         { path: '/deliveries', label: 'Đặt ship' },
     ];

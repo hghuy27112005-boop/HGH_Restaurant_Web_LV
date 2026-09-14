@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { dishAPI } from '../../services/api';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { dishAPI, recommendationAPI } from '../../services/api';
 import { Loading, ErrorMessage, EmptyState, Button, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
 
 const MenuPage = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { isAuthenticated } = useAuthContext();
     const [dishes, setDishes] = useState([]);
     const [filteredDishes, setFilteredDishes] = useState([]);
@@ -27,14 +28,109 @@ const MenuPage = () => {
     const [quantity, setQuantity] = useState(1);
     const [orderType, setOrderType] = useState('mang-ve');
 
+    // Recommendation states
+    const [recommendedDishes, setRecommendedDishes] = useState([]);
+    const [recommendStatus, setRecommendStatus] = useState(null); // { has_favorites, skipped_modal }
+    const [recommendLoading, setRecommendLoading] = useState(false);
+    const [isRecommendModalOpen, setIsRecommendModalOpen] = useState(false);
+    const [modalSelections, setModalSelections] = useState([]); // mảng dish_id theo đúng thứ tự bấm
+    const [favoriteDishIds, setFavoriteDishIds] = useState([]);
+    const [showFavoritesSection, setShowFavoritesSection] = useState(false); // collapse mặc định
+    const [showRecommendedSection, setShowRecommendedSection] = useState(true); // expand mặc định
+
     useEffect(() => {
         fetchDishes();
         fetchTypes();
     }, []);
 
     useEffect(() => {
+        // Đến từ chatbot (điều hướng kèm state.filter) -> tự chọn filter Đề xuất.
+        // Dùng location.state thay vì query string vì nó kích hoạt lại được kể cả
+        // khi khách đang đứng sẵn ở trang Menu (query string không tự re-run
+        // effect trong trường hợp đó do component không bị mount lại).
+        if (location.state?.filter === 'recommended') {
+            setSelectedType('recommended');
+        }
+    }, [location.state]);
+
+    useEffect(() => {
         filterDishes();
     }, [submittedSearch, selectedType, dishes]);
+
+    useEffect(() => {
+        if (selectedType === 'recommended') {
+            loadRecommendations();
+        }
+    }, [selectedType]);
+
+    const loadRecommendations = async () => {
+        try {
+            setRecommendLoading(true);
+            const statusRes = await recommendationAPI.getStatus();
+            const status = statusRes.data;
+            setRecommendStatus(status);
+            setFavoriteDishIds(status.favorite_dish_ids || []);
+
+            if (!status.has_favorites) {
+                setRecommendedDishes([]);
+                if (!status.skipped_modal) {
+                    openRecommendModal();
+                }
+                return;
+            }
+
+            const listRes = await recommendationAPI.getRecommendations();
+            const items = listRes.data?.data || listRes.data || [];
+            setRecommendedDishes(items);
+        } catch (err) {
+            console.error('Lỗi tải danh sách đề xuất:', err);
+        } finally {
+            setRecommendLoading(false);
+        }
+    };
+
+    const favoriteDishes = favoriteDishIds
+        .map(id => dishes.find(d => d.dish_id === id))
+        .filter(Boolean);
+
+    const openRecommendModal = () => {
+        setModalSelections([]);
+        setIsRecommendModalOpen(true);
+    };
+
+    const toggleModalSelection = (dishId) => {
+        setModalSelections(prev => {
+            if (prev.includes(dishId)) {
+                return prev.filter(id => id !== dishId);
+            }
+            if (prev.length >= 8) {
+                alert('Chỉ được chọn tối đa 8 món');
+                return prev;
+            }
+            return [...prev, dishId];
+        });
+    };
+
+    const handleSkipRecommendModal = async () => {
+        setIsRecommendModalOpen(false);
+        try {
+            await recommendationAPI.skipModal();
+            setRecommendStatus(prev => ({ ...(prev || {}), skipped_modal: true }));
+        } catch (err) {
+            console.error('Lỗi đánh dấu bỏ qua modal:', err);
+        }
+    };
+
+    const handleConfirmRecommendModal = async () => {
+        try {
+            await recommendationAPI.submitFavorites(modalSelections);
+            setIsRecommendModalOpen(false);
+            loadRecommendations();
+        } catch (err) {
+            alert('Lỗi khi lưu món yêu thích, vui lòng thử lại');
+            console.error(err);
+        }
+    };
 
     const fetchDishes = async () => {
         try {
@@ -279,6 +375,7 @@ const MenuPage = () => {
                             >
                                 <option value="">Tất cả loại</option>
                                 <option value="bestseller">⭐ Bestseller</option>
+                                <option value="recommended">🎯 Đề xuất cho bạn</option>
                                 {types.map(type => (
                                     <option key={type.type_id} value={type.type_id}>
                                         {type.type_name}
@@ -290,7 +387,116 @@ const MenuPage = () => {
                 </div>
 
                 {/* Dishes Grid */}
-                {filteredDishes.length === 0 ? (
+                {selectedType === 'recommended' ? (
+                    recommendLoading ? (
+                        <Loading />
+                    ) : recommendedDishes.length === 0 && favoriteDishes.length === 0 ? (
+                        <EmptyState
+                            icon="🎯"
+                            title="Chưa có món đề xuất"
+                            description="Chọn vài món bạn thích để AI gợi ý món phù hợp"
+                            action={
+                                <Button onClick={openRecommendModal}>Chọn món yêu thích</Button>
+                            }
+                        />
+                    ) : (
+                        <>
+                            {/* Mục: Các món ăn yêu thích */}
+                            <div className="mb-6">
+                                <button
+                                    onClick={() => setShowFavoritesSection(prev => !prev)}
+                                    className="w-full flex items-center justify-start gap-3 text-left py-2 mb-4"
+                                >
+                                    <h2 className="text-xl font-bold text-red-600">Các món ăn yêu thích</h2>
+                                    <span className="text-red-600 text-lg">{showFavoritesSection ? '▲' : '▼'}</span>
+                                </button>
+                                {showFavoritesSection && (
+                                    favoriteDishes.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">Chưa có món yêu thích nào.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {favoriteDishes.map(dish => (
+                                                <div key={dish.dish_id} className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition flex flex-col h-full">
+                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={dish.dish_name} className="w-full h-48 object-cover cursor-pointer" />
+                                                    <div className="p-4 flex flex-col flex-grow">
+                                                        <h3 className="font-semibold text-lg mb-2">{dish.dish_name}</h3>
+                                                        <p className="text-red-600 font-bold text-xl mb-4">
+                                                            {Number(dish.price).toLocaleString('vi-VN')}đ
+                                                        </p>
+                                                        <div className="mt-auto grid grid-cols-2 gap-2">
+                                                            <button
+                                                                onClick={() => handleAddToCart(dish, 'mang-ve')}
+                                                                className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
+                                                            >
+                                                                Đặt Ship
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleAddToCart(dish, 'dat-ban')}
+                                                                className="w-full py-2 px-2 rounded border border-gray-800 text-gray-800 font-semibold bg-white hover:bg-gray-800 hover:text-white transition-colors duration-300 text-sm"
+                                                            >
+                                                                Đặt Bàn
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )
+                                )}
+                            </div>
+
+                            {/* Mục: Các món ăn được đề xuất */}
+                            <div className="mb-6">
+                                <button
+                                    onClick={() => setShowRecommendedSection(prev => !prev)}
+                                    className="w-full flex items-center justify-start gap-3 text-left py-2 mb-4"
+                                >
+                                    <h2 className="text-xl font-bold text-red-600">Các món ăn được đề xuất</h2>
+                                    <span className="text-red-600 text-lg">{showRecommendedSection ? '▲' : '▼'}</span>
+                                </button>
+                                {showRecommendedSection && (
+                                    recommendedDishes.length === 0 ? (
+                                        <p className="text-gray-500 text-sm">Chưa đủ dữ liệu để đề xuất món phù hợp.</p>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {recommendedDishes.map(dish => (
+                                                <div key={dish.dish_id} className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition flex flex-col h-full">
+                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={dish.dish_name} className="w-full h-48 object-cover cursor-pointer" />
+                                                    <div className="p-4 flex flex-col flex-grow">
+                                                        <h3 className="font-semibold text-lg mb-2">{dish.dish_name}</h3>
+                                                        <p className="text-red-600 font-bold text-xl mb-4">
+                                                            {Number(dish.price).toLocaleString('vi-VN')}đ
+                                                        </p>
+                                                        <div className="mt-auto grid grid-cols-2 gap-2">
+                                                            <button
+                                                                onClick={() => handleAddToCart(dish, 'mang-ve')}
+                                                                className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
+                                                            >
+                                                                Đặt Ship
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleAddToCart(dish, 'dat-ban')}
+                                                                className="w-full py-2 px-2 rounded border border-gray-800 text-gray-800 font-semibold bg-white hover:bg-gray-800 hover:text-white transition-colors duration-300 text-sm"
+                                                            >
+                                                                Đặt Bàn
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )
+                                )}
+                            </div>
+
+                            <div className="text-center mt-6">
+                                <Button variant="primary" onClick={openRecommendModal}>
+                                    Chọn lại món yêu thích
+                                </Button>
+                            </div>
+                        </>
+                    )
+                ) : filteredDishes.length === 0 ? (
                     <EmptyState
                         icon="🔍"
                         title="Không tìm thấy"
@@ -301,9 +507,10 @@ const MenuPage = () => {
                         {filteredDishes.map(dish => (
                             <div key={dish.dish_id} className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition flex flex-col h-full">
                                 <img
+                                    onClick={() => navigate(`/dish-details/${dish.dish_id}`)}
                                     src={dish.image_url}
                                     alt={dish.dish_name}
-                                    className="w-full h-48 object-cover"
+                                    className="w-full h-48 object-cover cursor-pointer"
                                 />
                                 <div className="p-4 flex flex-col flex-grow">
                                     <h3 className="font-semibold text-lg mb-2">{dish.dish_name}</h3>
@@ -414,6 +621,46 @@ const MenuPage = () => {
                                 +10
                             </button>
                         </div>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Recommendation Selection Modal */}
+            <Modal
+                isOpen={isRecommendModalOpen}
+                title="Chọn món yêu thích"
+                titleClassName="text-red-600"
+                onClose={handleSkipRecommendModal}
+                onConfirm={handleConfirmRecommendModal}
+                confirmText="Xác nhận"
+                cancelText="Quay lại"
+            >
+                <div className="flex flex-col gap-4">
+                    <p className="text-sm text-gray-600">
+                        Vui lòng chọn các món yêu thích theo thứ tự giảm dần (không bắt buộc chọn hết, tối đa 8 món).
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
+                        {dishes.map(dish => {
+                            const order = modalSelections.indexOf(dish.dish_id);
+                            const isSelected = order !== -1;
+                            return (
+                                <div
+                                    key={dish.dish_id}
+                                    onClick={() => toggleModalSelection(dish.dish_id)}
+                                    className={`relative cursor-pointer rounded-lg border-2 overflow-hidden transition ${
+                                        isSelected ? 'border-red-600' : 'border-transparent hover:border-gray-300'
+                                    }`}
+                                >
+                                    <img src={dish.image_url} alt={dish.dish_name} className="w-full h-20 object-cover" />
+                                    <p className="text-xs p-1 truncate">{dish.dish_name}</p>
+                                    {isSelected && (
+                                        <span className="absolute top-1 right-1 bg-red-600 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                                            {order + 1}
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </Modal>

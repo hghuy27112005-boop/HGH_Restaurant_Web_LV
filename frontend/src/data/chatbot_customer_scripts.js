@@ -14,6 +14,12 @@ const chatbotCustomerScripts = {
     options: [
       { id: "order_food", label: "Đặt món", intent: "Khách muốn đặt món ăn, đặt bàn hoặc đặt ship" },
       {
+        id: "recommend_food",
+        label: "Đề xuất món ăn",
+        intent: "Khách muốn xem các món ăn được gợi ý dựa trên món yêu thích của khách",
+        action: { type: "navigate", path: "/menu", state: { filter: "recommended" } },
+      },
+      {
         id: "view_history",
         label: "Xem lịch sử giao dịch",
         intent: "Khách muốn xem lại lịch sử các đơn hàng đã đặt, hoặc xem/xuất hóa đơn",
@@ -27,6 +33,14 @@ const chatbotCustomerScripts = {
         action: { type: "navigate", path: "/profile" },
       },
       { id: "logout", label: "Đăng xuất", intent: "Khách muốn đăng xuất khỏi tài khoản" },
+    ],
+  },
+
+  recommend_food: {
+    intentSummary:
+      "Đã đưa khách tới trang thực đơn với mục Đề xuất cho bạn. Cho khách biết nếu đây là lần đầu, sẽ có 1 bảng cho khách chọn vài món yêu thích, sau đó hệ thống sẽ gợi ý thêm các món có khẩu vị tương đồng.",
+    options: [
+      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 

@@ -160,7 +160,7 @@ const ChatbotWidget = () => {
     const runNodeAction = (option) => {
         if (!option?.action) return;
         if (option.action.type === 'navigate') {
-            navigate(option.action.path);
+            navigate(option.action.path, { state: option.action.state });
         } else if (option.action.type === 'logout') {
             logout();
         }

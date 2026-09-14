@@ -13,10 +13,13 @@ DROP TABLE IF EXISTS sale_off_events CASCADE;
 DROP TABLE IF EXISTS bills CASCADE;
 DROP TABLE IF EXISTS deliveries CASCADE;
 DROP TABLE IF EXISTS booking_tables CASCADE;
+DROP TABLE IF EXISTS reviews CASCADE;
 DROP TABLE IF EXISTS order_items CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;
 DROP TABLE IF EXISTS restaurant_tables CASCADE;
 DROP TABLE IF EXISTS table_types CASCADE;
+DROP TABLE IF EXISTS favorite_dishes CASCADE;
+DROP TABLE IF EXISTS dish_similarities CASCADE;
 DROP TABLE IF EXISTS dishes CASCADE;
 DROP TABLE IF EXISTS dish_types CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
@@ -40,6 +43,9 @@ CREATE TABLE users (
                          CHECK (membership IN ('bronze','silver','gold','platinum','diamond','administrator')),
     provider            VARCHAR(20),
     provider_id         VARCHAR(100),
+    -- --- Thêm cho tính năng AI gợi ý món ---
+    recommendation_reset_at        TIMESTAMP,
+    skipped_recommendation_modal   BOOLEAN NOT NULL DEFAULT FALSE,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_users_provider UNIQUE (provider, provider_id)
@@ -63,7 +69,43 @@ CREATE TABLE dishes (
     image_url       TEXT NOT NULL,
     price           DECIMAL(10,2) NOT NULL DEFAULT 30000,
     is_bestseller   BOOLEAN NOT NULL DEFAULT FALSE,
-    is_active       BOOLEAN NOT NULL DEFAULT TRUE
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    -- --- Thêm cho tính năng AI gợi ý món ---
+    food_com_recipe_id      INTEGER UNIQUE,
+    original_name            VARCHAR(255),
+    ingredients               TEXT,
+    recipe_instructions       TEXT,
+    original_rating           DECIMAL(3,2),
+    original_review_count     INTEGER
+);
+
+-- =====================================================================
+-- 3a. dish_similarities  (ma trận tương đồng, tính sẵn offline từ dataset)
+-- =====================================================================
+CREATE TABLE dish_similarities (
+    similarity_id      BIGSERIAL PRIMARY KEY,
+    dish_id_1           BIGINT NOT NULL,
+    dish_id_2           BIGINT NOT NULL,
+    similarity_score    DECIMAL(6,5) NOT NULL,
+    created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_dish_pair UNIQUE (dish_id_1, dish_id_2),
+    CONSTRAINT chk_similarity_score CHECK (similarity_score BETWEEN -1 AND 1),
+    CONSTRAINT chk_no_self_pair CHECK (dish_id_1 <> dish_id_2)
+);
+
+-- =====================================================================
+-- 3b. favorite_dishes  (danh sách đề xuất mỗi user, tối đa 8 món)
+-- =====================================================================
+CREATE TABLE favorite_dishes (
+    favorite_id       BIGSERIAL PRIMARY KEY,
+    user_id            BIGINT NOT NULL,
+    dish_id            BIGINT NOT NULL,
+    rating_snapshot     SMALLINT,
+    pick_order          SMALLINT ,
+    updated_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_user_favorite_dish UNIQUE (user_id, dish_id),
+    CONSTRAINT chk_rating_snapshot CHECK (rating_snapshot IS NULL OR rating_snapshot BETWEEN 1 AND 5),
+    CONSTRAINT chk_pick_order CHECK (pick_order BETWEEN 1 AND 8)
 );
 
 -- =====================================================================
@@ -131,6 +173,21 @@ CREATE TABLE order_items (
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_order_dish UNIQUE (order_id, dish_id)
+);
+
+-- =====================================================================
+-- 7a. reviews  (đánh giá thật từ khách, gắn với 1 lần đặt món cụ thể)
+-- =====================================================================
+CREATE TABLE reviews (
+    review_id       BIGSERIAL PRIMARY KEY,
+    dish_id          BIGINT NOT NULL,
+    user_id          BIGINT NOT NULL,
+    order_item_id     BIGINT NOT NULL,
+    rating            SMALLINT NOT NULL,
+    comment           TEXT,
+    created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_review_per_order_item UNIQUE (order_item_id),
+    CONSTRAINT chk_review_rating CHECK (rating BETWEEN 1 AND 5)
 );
 
 -- =====================================================================
@@ -321,6 +378,22 @@ ALTER TABLE dishes
     ADD CONSTRAINT fk_dishes_type_id
     FOREIGN KEY (type_id) REFERENCES dish_types(type_id);
 
+ALTER TABLE dish_similarities
+    ADD CONSTRAINT fk_dish_similarities_dish_id_1
+    FOREIGN KEY (dish_id_1) REFERENCES dishes(dish_id) ON DELETE CASCADE;
+
+ALTER TABLE dish_similarities
+    ADD CONSTRAINT fk_dish_similarities_dish_id_2
+    FOREIGN KEY (dish_id_2) REFERENCES dishes(dish_id) ON DELETE CASCADE;
+
+ALTER TABLE favorite_dishes
+    ADD CONSTRAINT fk_favorite_dishes_user_id
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+ALTER TABLE favorite_dishes
+    ADD CONSTRAINT fk_favorite_dishes_dish_id
+    FOREIGN KEY (dish_id) REFERENCES dishes(dish_id) ON DELETE CASCADE;
+
 ALTER TABLE restaurant_tables
     ADD CONSTRAINT fk_tables_table_type_id
     FOREIGN KEY (table_type_id) REFERENCES table_types(table_type_id);
@@ -336,6 +409,18 @@ ALTER TABLE order_items
 ALTER TABLE order_items
     ADD CONSTRAINT fk_order_items_dish_id
     FOREIGN KEY (dish_id) REFERENCES dishes(dish_id);
+
+ALTER TABLE reviews
+    ADD CONSTRAINT fk_reviews_dish_id
+    FOREIGN KEY (dish_id) REFERENCES dishes(dish_id) ON DELETE CASCADE;
+
+ALTER TABLE reviews
+    ADD CONSTRAINT fk_reviews_user_id
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+ALTER TABLE reviews
+    ADD CONSTRAINT fk_reviews_order_item_id
+    FOREIGN KEY (order_item_id) REFERENCES order_items(order_item_id) ON DELETE CASCADE;
 
 ALTER TABLE booking_tables
     ADD CONSTRAINT fk_booking_tables_order_id
@@ -381,3 +466,6 @@ ALTER TABLE chat_messages
     ADD CONSTRAINT fk_chat_messages_session_id
     FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE;
 
+
+SELECT * FROM favorite_dishes;
+SELECT COUNT(*) FROM dish_similarities;

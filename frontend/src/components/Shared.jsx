@@ -61,13 +61,13 @@ export const WarningMessage = ({ message, onClose }) => (
     </div>
 );
 
-export const Modal = ({ isOpen, title, children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng' }) => {
+export const Modal = ({ isOpen, title, titleClassName = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng' }) => {
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
             <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
-                <h2 className="text-xl font-bold mb-4">{title}</h2>
+                <h2 className={`text-xl font-bold mb-4 ${titleClassName}`}>{title}</h2>
                 <div className="mb-6">{children}</div>
                 <div className="flex gap-2 justify-end">
                     <button

@@ -14,6 +14,7 @@ import ScrollToTop from './components/ScrollToTop';
 import HomeApp from './pages/Home/HomeApp';
 import LoginPage from './pages/Auth/LoginPage';
 import MenuPage from './pages/Menu/MenuPage';
+import DishDetailPage from './pages/Menu/DishDetailPage';
 import AboutPage from './pages/Home/AboutPage';
 import ProfilePage from './pages/User/ProfilePage';
 import StatisticsPage from './pages/User/StatisticsPage';
@@ -22,6 +23,7 @@ import BookingsPage from './pages/Booking/BookingsPage';
 import BookingFormPage from './pages/Booking/BookingFormPage';
 import BookingListPage from './pages/Booking/BookingListPage';
 import OrdersPage from './pages/Order/OrdersPage';
+import RatingPage from './pages/Rating/RatingPage';
 import DeliveriesPage from './pages/Delivery/DeliveriesPage';
 import AdminUsersPage from './pages/Admin/AdminUsersPage';
 import AdminStockPage from './pages/Admin/AdminStockPage';
@@ -69,6 +71,7 @@ function App() {
 
               {/* Menu */}
               <Route path="/menu" element={<MenuPage />} />
+              <Route path="/dish-details/:id?" element={<ProtectedRoute><DishDetailPage /></ProtectedRoute>} />
 
               {/* About */}
               <Route path="/gioi-thieu" element={<AboutPage />} />
@@ -85,6 +88,7 @@ function App() {
 
               {/* Orders */}
               <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
+              <Route path="/ratings" element={<ProtectedRoute><RatingPage /></ProtectedRoute>} />
               <Route path="/deliveries" element={<ProtectedRoute><DeliveriesPage /></ProtectedRoute>} />
 
               {/* Admin Routes */}

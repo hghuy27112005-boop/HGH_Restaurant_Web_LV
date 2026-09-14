@@ -126,7 +126,23 @@ export const dishAPI = {
     getAll: (filters = {}) =>
         axiosInstance.get('/dishes', { params: filters }),
     getById: (id) => axiosInstance.get(`/dishes/${id}`),
+    getDetail: (id) => axiosInstance.get(`/dish-details/${id}`),
     getDishTypes: () => axiosInstance.get('/dish-types'),
+};
+
+// Recommendations API (AI gợi ý món dựa trên món yêu thích đã chọn)
+export const recommendationAPI = {
+    getStatus: () => axiosInstance.get('/recommendations/status'),
+    getRecommendations: () => axiosInstance.get('/recommendations'),
+    submitFavorites: (dishIds) =>
+        axiosInstance.post('/recommendations/favorites', { dish_ids: dishIds }),
+    skipModal: () => axiosInstance.post('/recommendations/skip'),
+};
+
+// Ratings API (đánh giá dịch vụ - món ăn đã đặt)
+export const ratingAPI = {
+    getRatableItems: () => axiosInstance.get('/ratings/ratable-items'),
+    submit: (data) => axiosInstance.post('/ratings', data),
 };
 
 // Server time API (public)
