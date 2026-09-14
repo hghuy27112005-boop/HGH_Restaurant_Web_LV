@@ -16,6 +16,14 @@ return new class extends Migration
             $table->decimal('price', 10, 2)->default(30000);
             $table->boolean('is_bestseller')->default(false);
             $table->boolean('is_active')->default(true)->after('is_bestseller');
+
+            // --- Thêm cho tính năng AI gợi ý món ---
+            $table->unsignedInteger('food_com_recipe_id')->nullable()->unique();
+            $table->string('original_name', 255)->nullable();
+            $table->text('ingredients')->nullable();
+            $table->text('recipe_instructions')->nullable();
+            $table->decimal('original_rating', 3, 2)->nullable();
+            $table->unsignedInteger('original_review_count')->nullable();
         });
     }
 

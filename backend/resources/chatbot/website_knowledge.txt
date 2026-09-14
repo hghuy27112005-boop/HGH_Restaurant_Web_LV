@@ -39,3 +39,4 @@
 - Tại trang Menu, khách có thể xem các món ăn, bao gồm số lượng còn lại của món đó.
 - Có thể lọc/xem món theo từng loại món, bao gồm cả bestseller.
 - Ngoài ra, các món bestseller cũng được hiển thị trực tiếp ngay tại trang chủ của nhà hàng (nhưng khi tư vấn thì ưu tiên dẫn khách tới trang thực đơn cho nhanh gọn)
+- Trang Menu còn có mục lọc "Đề xuất cho bạn": khách chọn vài món yêu thích, hệ thống sẽ gợi ý thêm các món khác có khẩu vị tương đồng. Khách cũng có thể chọn lại danh sách món yêu thích bất cứ lúc nào ở mục này.

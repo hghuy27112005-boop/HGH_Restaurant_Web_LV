@@ -25,6 +25,10 @@ return new class extends Migration {
             $table->unique(['provider', 'provider_id']);
             $table->timestamp('created_at')->useCurrent();
             $table->timestamp('updated_at')->useCurrent();
+
+            // --- Thêm cho tính năng AI gợi ý món ---
+            $table->timestamp('recommendation_reset_at')->nullable();
+            $table->boolean('skipped_recommendation_modal')->default(false);
         });
 
         Schema::create('sessions', function (Blueprint $table) {

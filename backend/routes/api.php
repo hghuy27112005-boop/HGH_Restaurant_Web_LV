@@ -38,6 +38,9 @@ Route::get('/sale-off-events/{id}', [\App\Http\Controllers\SaleOffEventControlle
 
 // Protected Routes (Require Auth)
 Route::middleware(['auth:sanctum'])->group(function () {
+    // Chi tiết món ăn chỉ dành cho người dùng đã đăng nhập
+    Route::get('/dish-details/{id}', [\App\Http\Controllers\DishController::class, 'show']);
+
     // User Profile
     Route::get('/user', [\App\Http\Controllers\UserController::class, 'profile']);
     Route::get('/my-bills', [\App\Http\Controllers\OrderController::class, 'myBillsJson']);
@@ -84,6 +87,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/chatbot/interact', [ChatbotController::class, 'interact']);
     Route::get('/chatbot/chat-days', [ChatbotController::class, 'chatDays']);
     Route::get('/chatbot/messages-by-date', [ChatbotController::class, 'messagesByDate']);
+
+    // Ratings (đánh giá dịch vụ)
+    Route::get('/ratings/ratable-items', [\App\Http\Controllers\RatingController::class, 'ratableItems']);
+    Route::post('/ratings', [\App\Http\Controllers\RatingController::class, 'store']);
+
+    // Recommendations (AI gợi ý món)
+    Route::get('/recommendations/status', [\App\Http\Controllers\RecommendationController::class, 'status']);
+    Route::get('/recommendations', [\App\Http\Controllers\RecommendationController::class, 'index']);
+    Route::post('/recommendations/favorites', [\App\Http\Controllers\RecommendationController::class, 'storeFavorites']);
+    Route::post('/recommendations/skip', [\App\Http\Controllers\RecommendationController::class, 'skip']);
 
 });
 
