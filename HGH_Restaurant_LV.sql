@@ -8,6 +8,9 @@ ALTER TABLE IF EXISTS booking_tables DROP CONSTRAINT IF EXISTS booking_tables_no
 
 DROP TABLE IF EXISTS statistics CASCADE;
 DROP TABLE IF EXISTS points CASCADE;
+DROP TABLE IF EXISTS ingredient_stock_transactions CASCADE;
+DROP TABLE IF EXISTS ingredient_stocks CASCADE;
+DROP TABLE IF EXISTS content_moderation_warnings CASCADE;
 DROP TABLE IF EXISTS stocks CASCADE;
 DROP TABLE IF EXISTS sale_off_events CASCADE;
 DROP TABLE IF EXISTS bills CASCADE;
@@ -18,6 +21,7 @@ DROP TABLE IF EXISTS order_items CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;
 DROP TABLE IF EXISTS restaurant_tables CASCADE;
 DROP TABLE IF EXISTS table_types CASCADE;
+DROP TABLE IF EXISTS recommendation_exclusions CASCADE;
 DROP TABLE IF EXISTS favorite_dishes CASCADE;
 DROP TABLE IF EXISTS dish_similarities CASCADE;
 DROP TABLE IF EXISTS dishes CASCADE;
@@ -109,6 +113,17 @@ CREATE TABLE favorite_dishes (
 );
 
 -- =====================================================================
+-- 3c. recommendation_exclusions  (món bị loại khỏi đề xuất theo từng user)
+-- =====================================================================
+CREATE TABLE recommendation_exclusions (
+    exclusion_id   BIGSERIAL PRIMARY KEY,
+    user_id        BIGINT NOT NULL,
+    dish_id        BIGINT NOT NULL,
+    created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_recommendation_exclusion UNIQUE (user_id, dish_id)
+);
+
+-- =====================================================================
 -- 4. table_types
 -- =====================================================================
 CREATE TABLE table_types (
@@ -162,21 +177,42 @@ CREATE TABLE orders (
 );
 
 -- =====================================================================
--- 7. order_items
+-- 7. dish_customizations
+-- =====================================================================
+CREATE TABLE dish_customizations (
+    dish_customization_id BIGSERIAL PRIMARY KEY,
+    user_id               BIGINT NOT NULL,
+    dish_id               BIGINT NOT NULL,
+    recipe_name           VARCHAR(255) NOT NULL DEFAULT 'Công thức thay thế',
+    ingredients           TEXT NOT NULL,
+    recipe_instructions   TEXT NOT NULL,
+    removed_ingredients   JSONB,
+    replacements          JSONB,
+    created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_dish_customization_user_dish_name UNIQUE (user_id, dish_id, recipe_name)
+);
+
+-- =====================================================================
+-- 7a. order_items
 -- =====================================================================
 CREATE TABLE order_items (
     order_item_id   BIGSERIAL PRIMARY KEY,
     order_id        VARCHAR(20) NOT NULL,
     dish_id         BIGINT NOT NULL,
+    customization_id BIGINT,
+    customization_name VARCHAR(255),
+    ingredients     TEXT,
+    removed_ingredients JSONB,
     quantity        INTEGER NOT NULL,
     unit_price      DECIMAL(10,2) NOT NULL DEFAULT 30000,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_order_dish UNIQUE (order_id, dish_id)
+    CONSTRAINT uq_order_dish_variant UNIQUE (order_id, dish_id, customization_id)
 );
 
 -- =====================================================================
--- 7a. reviews  (đánh giá thật từ khách, gắn với 1 lần đặt món cụ thể)
+-- 7b. reviews  (đánh giá thật từ khách, gắn với 1 lần đặt món cụ thể)
 -- =====================================================================
 CREATE TABLE reviews (
     review_id       BIGSERIAL PRIMARY KEY,
@@ -185,9 +221,57 @@ CREATE TABLE reviews (
     order_item_id     BIGINT NOT NULL,
     rating            SMALLINT NOT NULL,
     comment           TEXT,
+    ai_response       TEXT,
     created_at         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_review_per_order_item UNIQUE (order_item_id),
     CONSTRAINT chk_review_rating CHECK (rating BETWEEN 1 AND 5)
+);
+
+-- =====================================================================
+-- 7a. content_moderation_warnings  (cảnh báo văng tục theo user/ngày)
+-- =====================================================================
+CREATE TABLE content_moderation_warnings (
+    warning_id      BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT NOT NULL,
+    source          VARCHAR(20) NOT NULL
+                    CHECK (source IN ('chatbot', 'rating')),
+    warning_date    DATE NOT NULL,
+    content         TEXT NOT NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_moderation_warnings_user_date
+    ON content_moderation_warnings(user_id, warning_date);
+
+-- =====================================================================
+-- 7b. ingredient_stocks  (tồn kho nguyên liệu theo ngày)
+-- =====================================================================
+CREATE TABLE ingredient_stocks (
+    ingredient_stock_id   BIGSERIAL PRIMARY KEY,
+    ingredient_key        VARCHAR(255) NOT NULL,
+    ingredient_name       VARCHAR(255) NOT NULL,
+    stock_date            DATE NOT NULL,
+    quantity_start        INTEGER NOT NULL DEFAULT 50,
+    quantity_left         INTEGER NOT NULL DEFAULT 50,
+    refill_count          INTEGER NOT NULL DEFAULT 0,
+    created_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_ingredient_stock_date UNIQUE (ingredient_key, stock_date)
+);
+
+-- =====================================================================
+-- 7c. ingredient_stock_transactions  (lịch sử trừ tồn kho nguyên liệu)
+-- =====================================================================
+CREATE TABLE ingredient_stock_transactions (
+    ingredient_transaction_id   BIGSERIAL PRIMARY KEY,
+    order_id                    VARCHAR(20) NOT NULL,
+    ingredient_stock_id         BIGINT NOT NULL,
+    ingredient_name             VARCHAR(255) NOT NULL,
+    quantity_before             INTEGER NOT NULL,
+    quantity_deducted           INTEGER NOT NULL,
+    quantity_after              INTEGER NOT NULL,
+    created_at                  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- =====================================================================
@@ -234,6 +318,7 @@ CREATE TABLE deliveries (
     address                      TEXT NOT NULL,
     distance_km                  DECIMAL(8,2),
     estimated_duration_minutes   INTEGER,
+    preferred_delivery_time      TIME,
     shipping_fee                 INTEGER,
     destination_lat              DECIMAL(10,7),
     destination_lng              DECIMAL(10,7),
@@ -394,6 +479,14 @@ ALTER TABLE favorite_dishes
     ADD CONSTRAINT fk_favorite_dishes_dish_id
     FOREIGN KEY (dish_id) REFERENCES dishes(dish_id) ON DELETE CASCADE;
 
+ALTER TABLE recommendation_exclusions
+    ADD CONSTRAINT fk_recommendation_exclusions_user_id
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+ALTER TABLE recommendation_exclusions
+    ADD CONSTRAINT fk_recommendation_exclusions_dish_id
+    FOREIGN KEY (dish_id) REFERENCES dishes(dish_id) ON DELETE CASCADE;
+
 ALTER TABLE restaurant_tables
     ADD CONSTRAINT fk_tables_table_type_id
     FOREIGN KEY (table_type_id) REFERENCES table_types(table_type_id);
@@ -402,6 +495,14 @@ ALTER TABLE orders
     ADD CONSTRAINT fk_orders_user_id
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
 
+ALTER TABLE dish_customizations
+    ADD CONSTRAINT fk_dish_customizations_user_id
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+ALTER TABLE dish_customizations
+    ADD CONSTRAINT fk_dish_customizations_dish_id
+    FOREIGN KEY (dish_id) REFERENCES dishes(dish_id) ON DELETE CASCADE;
+
 ALTER TABLE order_items
     ADD CONSTRAINT fk_order_items_order_id
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE;
@@ -409,6 +510,10 @@ ALTER TABLE order_items
 ALTER TABLE order_items
     ADD CONSTRAINT fk_order_items_dish_id
     FOREIGN KEY (dish_id) REFERENCES dishes(dish_id);
+
+ALTER TABLE order_items
+    ADD CONSTRAINT fk_order_items_customization_id
+    FOREIGN KEY (customization_id) REFERENCES dish_customizations(dish_customization_id) ON DELETE SET NULL;
 
 ALTER TABLE reviews
     ADD CONSTRAINT fk_reviews_dish_id
@@ -421,6 +526,18 @@ ALTER TABLE reviews
 ALTER TABLE reviews
     ADD CONSTRAINT fk_reviews_order_item_id
     FOREIGN KEY (order_item_id) REFERENCES order_items(order_item_id) ON DELETE CASCADE;
+
+ALTER TABLE content_moderation_warnings
+    ADD CONSTRAINT fk_moderation_warnings_user_id
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE;
+
+ALTER TABLE ingredient_stock_transactions
+    ADD CONSTRAINT fk_ingredient_stock_transactions_order_id
+    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE;
+
+ALTER TABLE ingredient_stock_transactions
+    ADD CONSTRAINT fk_ingredient_stock_transactions_stock_id
+    FOREIGN KEY (ingredient_stock_id) REFERENCES ingredient_stocks(ingredient_stock_id) ON DELETE CASCADE;
 
 ALTER TABLE booking_tables
     ADD CONSTRAINT fk_booking_tables_order_id

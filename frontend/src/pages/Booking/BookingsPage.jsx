@@ -219,6 +219,24 @@ const BookingsPage = () => {
 
     const cartTotal = bookingCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
+    const renderCartItemName = (item) => {
+        const customizationName = item.customization_name;
+        const fullName = item.name || item.dish_name || 'N/A';
+        const suffix = customizationName ? ` (${customizationName})` : '';
+        const dishName = suffix && fullName.endsWith(suffix)
+            ? fullName.slice(0, -suffix.length)
+            : fullName;
+
+        return (
+            <>
+                <div>{dishName}</div>
+                {customizationName && (
+                    <div className="mt-1 text-xs text-gray-500">Công thức thay thế: {customizationName}</div>
+                )}
+            </>
+        );
+    };
+
     // Ngày nhỏ nhất/lớn nhất được phép chọn (theo giờ server, khớp giới hạn backend 60 ngày)
     const toLocalDateStr = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
     const minBookingDateStr = toLocalDateStr(getServerNow());
@@ -367,6 +385,10 @@ const BookingsPage = () => {
                 items: bookingCart.map(item => ({
                     dish_id: item.dish_id,
                     quantity: item.quantity,
+                    customization_id: item.customization_id ?? null,
+                    customization_name: item.customization_name ?? null,
+                    ingredients: item.ingredients ?? null,
+                    removed_ingredients: item.removed_ingredients ?? [],
                 })),
             };
 
@@ -768,7 +790,7 @@ const BookingsPage = () => {
                                     <tbody>
                                         {bookingCart.map((item, idx) => (
                                             <tr key={idx}>
-                                                <td className="py-2 px-3 border border-black">{item.name}</td>
+                                                <td className="py-2 px-3 border border-black">{renderCartItemName(item)}</td>
                                                 <td className="py-2 px-3 border border-black">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
@@ -1434,21 +1456,19 @@ const BookingsPage = () => {
                             <h2 className="text-xl font-bold">Báo lỗi</h2>
                         </div>
                         <div className="p-6">
-                            <p className="text-gray-700 mb-4">Hiện có món ăn đang được đặt quá số lượng còn trong kho:</p>
+                            <p className="text-gray-700 mb-4">Các món sau đang thiếu nguyên liệu:</p>
                             <table className="w-full text-sm border border-gray-200 rounded">
-                                <thead className="bg-gray-100">
+                                <thead className="bg-red-600 text-white">
                                     <tr>
                                         <th className="px-3 py-2 text-left">Món ăn</th>
-                                        <th className="px-3 py-2 text-center">SL yêu cầu</th>
-                                        <th className="px-3 py-2 text-center">SL còn trong kho</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {stockErrorItems.map((item, i) => (
-                                        <tr key={i} className="border-t">
+                                    {stockErrorItems
+                                        .filter((item, index, items) => items.findIndex(other => other.dish_id === item.dish_id) === index)
+                                        .map((item) => (
+                                        <tr key={item.dish_id} className="border-t">
                                             <td className="px-3 py-2">{item.dish_name}</td>
-                                            <td className="px-3 py-2 text-center text-red-600 font-semibold">{item.requested}</td>
-                                            <td className="px-3 py-2 text-center text-green-700 font-semibold">{item.available}</td>
                                         </tr>
                                     ))}
                                 </tbody>

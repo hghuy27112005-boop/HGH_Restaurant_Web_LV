@@ -31,6 +31,15 @@
 === TÀI KHOẢN ===
 - Có thể xem/sửa thông tin cá nhân, cập nhật ảnh đại diện, đổi mật khẩu, xem lịch sử giao dịch, xem điểm và hạng thành viên.
 
+=== QUY TẮC NGÔN TỪ & SỬ DỤNG CHATBOT ===
+- Khách hàng vui lòng sử dụng ngôn từ lịch sự khi trò chuyện với chatbot hoặc gửi đánh giá món ăn.
+- Hệ thống có thể phát hiện nội dung có dấu hiệu chửi thề, tục tĩu, xúc phạm hoặc lăng mạ.
+- Khi phát hiện lần đầu trong ngày, nhà hàng sẽ gửi cảnh báo và không tiếp nhận nội dung vi phạm đó.
+- Số lần cảnh báo được tính chung giữa chatbot và phần đánh giá món ăn trong cùng một ngày.
+- Khi khách hàng nhận đủ 2 cảnh báo trong ngày, quyền sử dụng chatbot và gửi đánh giá sẽ bị tạm khóa đến hết ngày hôm đó.
+- Sang ngày mới, số lần cảnh báo và trạng thái khóa trong ngày trước đó sẽ được tự động kết thúc.
+- Khi phản hồi về việc bị cảnh báo hoặc tạm khóa, chatbot cần giải thích ngắn gọn, lịch sự và không lặp lại nội dung vi phạm của khách hàng.
+
 === HỦY ĐƠN & HOÀN TIỀN ===
 - Khi hủy đơn: điểm đã tiêu hao để thanh toán sẽ được hoàn lại, hoặc hoàn tiền nếu thanh toán bằng VNPay, sau đó điểm tích lũy có được từ đơn hàng đó sẽ bị thu hồi.
 - Hoàn tiền qua VNPay: xử lý qua cổng thanh toán VNPay.
@@ -38,5 +47,12 @@
 === XEM MÓN ĂN (TẠI TRANG MENU) ===
 - Tại trang Menu, khách có thể xem các món ăn, bao gồm số lượng còn lại của món đó.
 - Có thể lọc/xem món theo từng loại món, bao gồm cả bestseller.
+- Nếu khách hỏi về nguyên liệu, thành phần, công thức, cách nấu hoặc các bước chế biến của một món ăn cụ thể, hãy dẫn khách đến trang chi tiết món đó để xem đầy đủ thông tin.
+- Khi dẫn khách tới trang chi tiết món, nhắc: "Bạn có thể tự do bỏ bớt các nguyên liệu mà bạn không thích, sau đó xác nhận nguyên liệu để tạo 1 công thức mới."
 - Ngoài ra, các món bestseller cũng được hiển thị trực tiếp ngay tại trang chủ của nhà hàng (nhưng khi tư vấn thì ưu tiên dẫn khách tới trang thực đơn cho nhanh gọn)
-- Trang Menu còn có mục lọc "Đề xuất cho bạn": khách chọn vài món yêu thích, hệ thống sẽ gợi ý thêm các món khác có khẩu vị tương đồng. Khách cũng có thể chọn lại danh sách món yêu thích bất cứ lúc nào ở mục này.
+- Sau khi đã đặt và thanh toán đơn hàng, khách có thể đánh giá món ăn theo số sao và viết nhận xét góp ý cho từng món.
+- Món được khách đánh giá cao hoặc khen ngợi (từ 4 sao trở lên) sẽ được tự động thêm hoặc ưu tiên trong danh sách món yêu thích của khách.
+- Món bị khách đánh giá thấp hoặc chê (từ 3 sao trở xuống) sẽ bị loại khỏi danh sách đề xuất của chính khách hàng đó và không xuất hiện lại trong các món được đề xuất.
+- Trang Menu có mục lọc "Đề xuất cho bạn": khách có thể chọn vài món yêu thích, hệ thống sẽ gợi ý thêm các món khác có khẩu vị tương đồng.
+- Các món bị đánh giá thấp hoặc bị loại khỏi đề xuất sẽ không được dùng làm kết quả đề xuất, nên danh sách có thể có ít hơn 6 món nếu không còn đủ món phù hợp.
+- Khách có thể chọn lại danh sách món yêu thích bất cứ lúc nào ở mục "Đề xuất cho bạn".

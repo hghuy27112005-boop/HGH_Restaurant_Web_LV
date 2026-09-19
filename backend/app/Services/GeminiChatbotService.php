@@ -11,6 +11,8 @@ class GeminiChatbotService
     private string $model = 'gemini-3.5-flash-lite';
 
     private const UNCLEAR_FALLBACK = 'Xin lỗi, tôi chưa hiểu rõ ý bạn lắm. Bạn có thể chọn 1 trong các lựa chọn bên dưới, hoặc nói rõ hơn giúp tôi nhé.';
+    private const RATING_FALLBACK_PRAISE = 'Cảm ơn quý khách đã ủng hộ nhà hàng chúng tôi. Chúng tôi rất vui khi món ăn đã làm quý khách hài lòng.';
+    private const RATING_FALLBACK_FEEDBACK = 'Cảm ơn quý khách đã góp ý cho nhà hàng chúng tôi. Chúng tôi sẽ tiếp thu và cải thiện món ăn tốt hơn.';
 
     public function __construct()
     {
@@ -34,6 +36,42 @@ Hãy viết MỘT câu trả lời hoàn chỉnh, tự nhiên, bám sát đúng 
 PROMPT;
 
         return $this->callGemini($prompt, false)['text'] ?? $targetIntentSummary;
+    }
+
+    public function generateRatingResponse(int $rating, ?string $comment): string
+    {
+        $fallback = $rating >= 4 ? self::RATING_FALLBACK_PRAISE : self::RATING_FALLBACK_FEEDBACK;
+        $sentiment = $rating >= 4 ? 'lời khen và sự hài lòng' : 'lời chê hoặc góp ý cần được tiếp thu';
+        $commentText = $comment ? trim($comment) : '(khách không viết nhận xét)';
+
+        $prompt = <<<PROMPT
+Bạn là đại diện nhà hàng HGH trả lời khách hàng sau khi họ đánh giá món ăn.
+Hãy xưng là "nhà hàng chúng tôi" hoặc "chúng tôi", gọi người đánh giá là "quý khách".
+Đánh giá {$rating}/5 sao thể hiện {$sentiment}.
+Nhận xét của khách: "{$commentText}"
+
+Viết một phản hồi tiếng Việt ngắn vừa phải, tự nhiên, lịch sự, tối đa 2 câu.
+Nếu từ 4 sao trở lên, ưu tiên cảm ơn quý khách đã ủng hộ.
+Nếu từ 3 sao trở xuống, ưu tiên cảm ơn quý khách đã góp ý và thể hiện nhà hàng sẽ tiếp thu, cải thiện.
+Không tranh luận, không hứa hẹn bồi thường, không bịa hành động cụ thể và không dùng markdown.
+Chỉ trả về nội dung phản hồi.
+PROMPT;
+
+        $response = $this->callGemini($prompt, false)['text'] ?? '';
+        return $response !== '' ? $response : $fallback;
+    }
+
+    public function detectsProfanity(string $content): ?bool
+    {
+        $prompt = <<<PROMPT
+Bạn là bộ lọc ngôn từ cho nhà hàng. Hãy xác định nội dung dưới đây có chứa lời chửi thề, tục tĩu, xúc phạm hoặc lăng mạ hay không.
+Chỉ trả về JSON chính xác theo định dạng: {"profane":true} hoặc {"profane":false}
+Không đánh dấu là tục tĩu chỉ vì khách phàn nàn lịch sự.
+Nội dung cần kiểm tra: "{$content}"
+PROMPT;
+
+        $result = $this->callGemini($prompt, true);
+        return isset($result['profane']) ? (bool) $result['profane'] : null;
     }
 
     public function classifyAndReply(string $currentNodeIntent, string $userInput, array $candidateOptions): array
@@ -165,5 +203,35 @@ PROMPT;
             'suggested_route' => $result['suggested_route'] ?? null,
             'suggested_label' => $result['suggested_label'] ?? null,
         ];
+    }
+    
+    public function buildAlternativeRecipe(string $userInput, array $dishes): array
+    {
+        $catalog = collect($dishes)->map(fn ($dish) => [
+            'dish_id' => $dish['dish_id'],
+            'dish_name' => $dish['dish_name'],
+            'ingredients' => $dish['ingredients'],
+            'recipe_instructions' => $dish['recipe_instructions'],
+        ])->values()->toJson(JSON_UNESCAPED_UNICODE);
+
+        $prompt = <<<PROMPT
+Bạn xử lý yêu cầu thay đổi công thức món ăn cho nhà hàng. Câu khách nói: "{$userInput}"
+
+Danh sách món ăn và dữ liệu gốc đáng tin cậy:
+{$catalog}
+
+Chỉ xử lý khi câu khách xác định rõ một món trong danh sách và nêu rõ nguyên liệu cần bỏ hoặc thay thế.
+Không được thêm nguyên liệu khách không yêu cầu. Công thức mới phải bám sát công thức gốc, chỉ sửa các bước bị ảnh hưởng bởi nguyên liệu đã bỏ/thay.
+Nếu khách chỉ hỏi chung chung hoặc không xác định được món/nguyên liệu, trả về {"matched":false}.
+
+Trả về JSON chính xác. removed_ingredients phải dùng đúng tên trong dữ liệu gốc; removed_ingredient_labels phải là tiếng Việt để trả lời khách:
+{"matched":true,"recipe_name":"Công thức bỏ ...","dish_id":0,"removed_ingredients":["..."],"removed_ingredient_labels":["..."],"replacements":[{"from":"...","to":"..."}],"ingredients":"...","recipe_instructions":"..."}
+Hoặc:
+{"matched":false}
+PROMPT;
+
+        $result = $this->callGemini($prompt, true);
+
+        return is_array($result) ? $result : ['matched' => false];
     }
 }

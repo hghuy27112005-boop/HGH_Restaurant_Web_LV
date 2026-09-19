@@ -56,6 +56,11 @@ class Dish extends Model
         return $this->hasOne(Stock::class, 'dish_id', 'dish_id');
     }
 
+    public function customizations()
+    {
+        return $this->hasMany(DishCustomization::class, 'dish_id', 'dish_id');
+    }
+
     // ============================================
     // SCOPES
     // ============================================

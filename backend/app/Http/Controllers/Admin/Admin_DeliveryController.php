@@ -194,6 +194,16 @@ class Admin_DeliveryController extends Controller
         $durationMinutes = $delivery->estimated_duration_minutes ?? 30;
         $estimatedFinish = $now->copy()->addMinutes($durationMinutes + 15);
 
+        if ($delivery->preferred_delivery_time) {
+            $preferredAt = $now->copy()->setTimeFromTimeString((string) $delivery->preferred_delivery_time);
+            $expectedStart = $preferredAt->copy()->subMinutes($durationMinutes + 15);
+            if ($now->lt($expectedStart)) {
+                return response()->json([
+                    'message' => 'Chưa tới thời điểm bắt đầu giao hàng dự kiến cho đơn này.',
+                ], 422);
+            }
+        }
+
         $todayOpen = $now->copy()->setTime(7, 30, 0);
         $todayClose = $now->copy()->setTime(22, 0, 0);
 

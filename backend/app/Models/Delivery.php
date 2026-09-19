@@ -20,6 +20,7 @@ class Delivery extends Model
         'address',
         'distance_km',
         'estimated_duration_minutes',
+        'preferred_delivery_time',
         'shipping_fee',
         'destination_lat',
         'destination_lng',
@@ -34,6 +35,7 @@ class Delivery extends Model
     protected $casts = [
         'distance_km' => 'float',
         'estimated_duration_minutes' => 'integer',
+        'preferred_delivery_time' => 'string',
         'shipping_fee' => 'integer',
         'destination_lat' => 'float',
         'destination_lng' => 'float',

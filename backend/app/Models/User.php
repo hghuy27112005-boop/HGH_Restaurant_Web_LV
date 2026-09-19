@@ -76,6 +76,11 @@ class User extends Authenticatable
         return $this->hasOne(Statistics::class, 'user_id', 'user_id');
     }
 
+    public function dishCustomizations()
+    {
+        return $this->hasMany(DishCustomization::class, 'user_id', 'user_id');
+    }
+
     // ============================================
     // HELPER METHODS
     // ============================================

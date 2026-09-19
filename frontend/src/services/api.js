@@ -130,6 +130,13 @@ export const dishAPI = {
     getDishTypes: () => axiosInstance.get('/dish-types'),
 };
 
+export const dishCustomizationAPI = {
+    getAll: () => axiosInstance.get('/dish-customizations'),
+    getByDish: (dishId) => axiosInstance.get(`/dish-customizations/${dishId}`),
+    save: (dishId, data) => axiosInstance.put(`/dish-customizations/${dishId}`, data),
+    remove: (dishId, customizationId) => axiosInstance.delete(`/dish-customizations/${dishId}/${customizationId}`),
+};
+
 // Recommendations API (AI gợi ý món dựa trên món yêu thích đã chọn)
 export const recommendationAPI = {
     getStatus: () => axiosInstance.get('/recommendations/status'),

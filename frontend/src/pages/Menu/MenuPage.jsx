@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { dishAPI, recommendationAPI } from '../../services/api';
+import { dishAPI, recommendationAPI, dishCustomizationAPI } from '../../services/api';
 import { Loading, ErrorMessage, EmptyState, Button, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
 
@@ -27,6 +27,8 @@ const MenuPage = () => {
     const [selectedDish, setSelectedDish] = useState(null);
     const [quantity, setQuantity] = useState(1);
     const [orderType, setOrderType] = useState('mang-ve');
+    const [selectedRecipeOptions, setSelectedRecipeOptions] = useState([]);
+    const [selectedCustomization, setSelectedCustomization] = useState(null);
 
     // Recommendation states
     const [recommendedDishes, setRecommendedDishes] = useState([]);
@@ -217,8 +219,17 @@ const MenuPage = () => {
             return;
         }
         setSelectedDish(dish);
+        setSelectedCustomization(null);
         setQuantity(1);
         setOrderType(type);
+        setSelectedRecipeOptions([]);
+        if (dish?.dish_id) {
+            dishCustomizationAPI.getByDish(dish.dish_id)
+                .then((response) => {
+                    setSelectedRecipeOptions(response.data?.custom_recipes || []);
+                })
+                .catch(() => setSelectedRecipeOptions([]));
+        }
         setIsModalOpen(true);
     };
 
@@ -273,17 +284,22 @@ const MenuPage = () => {
         const cartKey = orderType === 'mang-ve' ? 'delivery_cart' : 'booking_cart';
         const currentCart = JSON.parse(localStorage.getItem(cartKey)) || [];
 
-        const existingItemIndex = currentCart.findIndex(item => item.dish_id === selectedDish.dish_id);
+        const selectedRecipeId = selectedCustomization?.dish_customization_id ?? null;
+        const existingItemIndex = currentCart.findIndex(item => item.dish_id === selectedDish.dish_id && (item.customization_id ?? null) === selectedRecipeId);
 
         if (existingItemIndex > -1) {
             currentCart[existingItemIndex].quantity += qty;
         } else {
             currentCart.push({
                 dish_id: selectedDish.dish_id,
-                name: selectedDish.dish_name,
+                name: selectedCustomization ? `${selectedDish.dish_name} (${selectedCustomization.recipe_name})` : selectedDish.dish_name,
                 price: selectedDish.price,
                 quantity: qty,
-                image_url: selectedDish.image_url
+                image_url: selectedDish.image_url,
+                customization_id: selectedCustomization?.dish_customization_id ?? null,
+                customization_name: selectedCustomization?.recipe_name ?? null,
+                ingredients: selectedCustomization?.ingredients ?? null,
+                removed_ingredients: selectedCustomization?.removed_ingredients ?? [],
             });
         }
 
@@ -423,6 +439,11 @@ const MenuPage = () => {
                                                         <p className="text-red-600 font-bold text-xl mb-4">
                                                             {Number(dish.price).toLocaleString('vi-VN')}đ
                                                         </p>
+                                                        <div className="mb-3 flex items-center justify-end">
+                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="w-2/5 rounded border border-amber-600 py-2 px-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">
+                                                                Xem chi tiết món
+                                                            </button>
+                                                        </div>
                                                         <div className="mt-auto grid grid-cols-2 gap-2">
                                                             <button
                                                                 onClick={() => handleAddToCart(dish, 'mang-ve')}
@@ -467,6 +488,11 @@ const MenuPage = () => {
                                                         <p className="text-red-600 font-bold text-xl mb-4">
                                                             {Number(dish.price).toLocaleString('vi-VN')}đ
                                                         </p>
+                                                        <div className="mb-3 flex items-center justify-end">
+                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="w-2/5 rounded border border-amber-600 py-2 px-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">
+                                                                Xem chi tiết món
+                                                            </button>
+                                                        </div>
                                                         <div className="mt-auto grid grid-cols-2 gap-2">
                                                             <button
                                                                 onClick={() => handleAddToCart(dish, 'mang-ve')}
@@ -517,21 +543,23 @@ const MenuPage = () => {
                                     <p className="text-red-600 font-bold text-xl mb-4">
                                         {Number(dish.price).toLocaleString('vi-VN')}đ
                                     </p>
-                                    {dish.is_bestseller && (
-                                        <div className="mb-2">
-                                            <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-3 py-1 rounded-full">
-                                                ⭐ Bán chạy
-                                            </span>
+                                    <div className="mb-3 flex items-center justify-between gap-3">
+                                        <div className="min-w-0 flex flex-1 flex-col items-start gap-2">
+                                            {dish.is_bestseller && (
+                                                <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-3 py-1 rounded-full">
+                                                    ⭐ Bán chạy
+                                                </span>
+                                            )}
+                                            {dish.quantity_left !== undefined && (
+                                                <span className={`text-xs font-semibold ${dish.quantity_left <= 15 ? 'text-red-600' : 'text-green-700'}`}>
+                                                    Còn lại {dish.quantity_left} phần
+                                                </span>
+                                            )}
                                         </div>
-                                    )}
-                                    {dish.quantity_left !== undefined && (
-                                        <div className="mb-4">
-                                            <span className={`text-xs font-semibold ${dish.quantity_left <= 15 ? 'text-red-600' : 'text-green-700'}`}>
-                                                Còn lại {dish.quantity_left} phần
-                                            </span>
-                                        </div>
-                                    )}
-
+                                        <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="w-2/5 shrink-0 rounded border border-amber-600 py-2 px-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">
+                                            Xem chi tiết món
+                                        </button>
+                                    </div>
                                     <div className="mt-auto grid grid-cols-2 gap-2">
                                         <button
                                             onClick={() => handleAddToCart(dish, 'mang-ve')}
@@ -569,6 +597,33 @@ const MenuPage = () => {
                             </span>
                         </div>
                     )}
+
+                    <div>
+                        <label className="block font-semibold mb-2 text-gray-700">Chọn công thức thay thế</label>
+                        <div className="flex flex-col items-start gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setSelectedCustomization(null)}
+                                className={`rounded border px-3 py-2 text-left ${!selectedCustomization ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
+                            >
+                                Món gốc
+                            </button>
+
+                            {selectedRecipeOptions.length === 0 ? (
+                                <p className="text-sm text-gray-500">Bạn chưa lưu công thức thay thế nào cho món này.</p>
+                            ) : selectedRecipeOptions.map((recipe) => (
+                                <button
+                                    key={recipe.dish_customization_id}
+                                    type="button"
+                                    onClick={() => setSelectedCustomization(recipe)}
+                                    className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
+                                >
+                                    {recipe.recipe_name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <div>
                         <label className="block font-semibold mb-1 text-gray-700">Nhập số lượng</label>
                         <div className="flex items-center gap-2">

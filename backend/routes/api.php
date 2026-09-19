@@ -40,6 +40,10 @@ Route::get('/sale-off-events/{id}', [\App\Http\Controllers\SaleOffEventControlle
 Route::middleware(['auth:sanctum'])->group(function () {
     // Chi tiết món ăn chỉ dành cho người dùng đã đăng nhập
     Route::get('/dish-details/{id}', [\App\Http\Controllers\DishController::class, 'show']);
+    Route::get('/dish-customizations', [\App\Http\Controllers\DishCustomizationController::class, 'index']);
+    Route::get('/dish-customizations/{dishId}', [\App\Http\Controllers\DishCustomizationController::class, 'show']);
+    Route::put('/dish-customizations/{dishId}', [\App\Http\Controllers\DishCustomizationController::class, 'store']);
+    Route::delete('/dish-customizations/{dishId}/{customizationId}', [\App\Http\Controllers\DishCustomizationController::class, 'destroy']);
 
     // User Profile
     Route::get('/user', [\App\Http\Controllers\UserController::class, 'profile']);
@@ -87,6 +91,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/chatbot/interact', [ChatbotController::class, 'interact']);
     Route::get('/chatbot/chat-days', [ChatbotController::class, 'chatDays']);
     Route::get('/chatbot/messages-by-date', [ChatbotController::class, 'messagesByDate']);
+    Route::get('/chatbot/moderation-status', [ChatbotController::class, 'moderationStatus']);
 
     // Ratings (đánh giá dịch vụ)
     Route::get('/ratings/ratable-items', [\App\Http\Controllers\RatingController::class, 'ratableItems']);
@@ -121,6 +126,8 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     // Stock Management
     Route::get('admin/stocks/low-stock', [\App\Http\Controllers\Admin\Admin_StockController::class, 'lowStock']);
     Route::get('admin/stocks/by-date', [\App\Http\Controllers\Admin\Admin_StockController::class, 'byDate']);
+    Route::get('admin/stocks/ingredients/by-date', [\App\Http\Controllers\Admin\Admin_StockController::class, 'ingredientsByDate']);
+    Route::get('admin/stocks/ingredients/history', [\App\Http\Controllers\Admin\Admin_StockController::class, 'ingredientHistory']);
     Route::apiResource('admin/stocks', \App\Http\Controllers\Admin\Admin_StockController::class);
 
     // Users Management

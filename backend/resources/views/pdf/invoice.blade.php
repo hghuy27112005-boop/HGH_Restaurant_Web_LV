@@ -103,7 +103,12 @@
                 @foreach($order->items as $item)
                 <tr>
                     <td style="text-align: center;">{{ $loop->iteration }}</td>
-                    <td><div class="highlight">{{ $item->dish->dish_name ?? 'N/A' }}</div></td>
+                    <td>
+                        <div class="highlight">{{ $item->dish->dish_name ?? 'N/A' }}</div>
+                        @if($item->customization_name)
+                            <div style="font-size: 11px; color: #666; margin-top: 3px;">Công thức thay thế: {{ $item->customization_name }}</div>
+                        @endif
+                    </td>
                     <td style="text-align: center;">{{ $item->quantity }}</td>
                     <td style="text-align: right;">{{ number_format($item->unit_price, 0, ',', '.') }}đ</td>
                     <td style="text-align: right; font-weight: bold;">{{ number_format($item->unit_price * $item->quantity, 0, ',', '.') }}đ</td>

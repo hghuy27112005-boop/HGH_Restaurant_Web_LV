@@ -15,6 +15,7 @@ const AdminDeliveriesPage = () => {
     const [selectedDelivery, setSelectedDelivery] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [overallStats, setOverallStats] = useState({ total: 0, pending: 0, shipping: 0, completed: 0, cancelled: 0 });
+    const [, setClock] = useState(Date.now());
 
     // Delivery status constants
     const DELIVERY_STATUS = {
@@ -43,6 +44,11 @@ const AdminDeliveriesPage = () => {
 
     useEffect(() => {
         fetchOverallStats();
+    }, []);
+
+    useEffect(() => {
+        const timer = setInterval(() => setClock(Date.now()), 30000);
+        return () => clearInterval(timer);
     }, []);
 
     const fetchOverallStats = async () => {
@@ -133,7 +139,30 @@ const AdminDeliveriesPage = () => {
         const durationMinutes = (delivery.estimated_duration_minutes ?? 30) + 15;
         const estimatedFinish = new Date(now.getTime() + durationMinutes * 60000);
 
+        if (delivery.preferred_delivery_time) {
+            const [hours, minutes] = String(delivery.preferred_delivery_time).split(':').map(Number);
+            const expectedStart = new Date(now);
+            expectedStart.setHours(hours, minutes, 0, 0);
+            expectedStart.setMinutes(expectedStart.getMinutes() - durationMinutes);
+            if (now < expectedStart) return false;
+        }
+
         return estimatedFinish <= todayClose;
+    };
+
+    const getExpectedDeliveryStart = (delivery) => {
+        if (!delivery.preferred_delivery_time) return null;
+        const [hours, minutes] = String(delivery.preferred_delivery_time).split(':').map(Number);
+        const expectedStart = new Date();
+        expectedStart.setHours(hours, minutes, 0, 0);
+        expectedStart.setMinutes(expectedStart.getMinutes() - ((delivery.estimated_duration_minutes ?? 30) + 15));
+        return expectedStart;
+    };
+
+    const formatDeliveryTime = (value) => {
+        if (!value) return '—';
+        const [hours, minutes] = String(value).split(':');
+        return `${hours}:${minutes}`;
     };
 
     const getActionButtons = (delivery) => {
@@ -144,7 +173,7 @@ const AdminDeliveriesPage = () => {
                     <button
                         onClick={() => canApprove && handleStartDelivery(delivery)}
                         disabled={!canApprove}
-                        title={!canApprove ? 'Đơn dự kiến không hoàn tất trước 22:00, hoặc chưa tới giờ duyệt (07:30)' : ''}
+                        title={!canApprove ? 'Chưa tới thời điểm bắt đầu dự kiến, hoặc đơn không thể hoàn tất trước 22:00' : ''}
                         className={`px-3 py-1 rounded text-xs ${canApprove
                             ? 'bg-green-600 text-white hover:bg-green-700'
                             : 'bg-gray-300 text-gray-500 cursor-not-allowed'
@@ -356,25 +385,35 @@ const AdminDeliveriesPage = () => {
                             <div>
                                 <h3 className="font-bold text-lg mb-3">Thông tin giao hàng</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-xs text-gray-500">ID Giao hàng</p>
                                         <p className="font-mono font-bold text-sm">{selectedDelivery.delivery_id}</p>
                                     </div>
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-xs text-gray-500">ID Đơn hàng</p>
                                         <p className="font-mono font-bold text-sm">{selectedDelivery.order?.order_stt || selectedDelivery.order_id}</p>
                                     </div>
-                                    <div>
-                                        <p className="text-xs text-gray-500">Địa chỉ giao</p>
-                                        <p className="text-sm">{selectedDelivery.address}</p>
+                                    <div className="col-span-2 min-w-0">
+                                        <p className="text-xs text-gray-500">Địa chỉ giao hàng</p>
+                                        <p className="text-sm break-words">{selectedDelivery.address}</p>
                                     </div>
-                                    <div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs text-gray-500">Bắt đầu giao hàng (dự kiến)</p>
+                                        <p className="text-sm font-semibold">
+                                            {getExpectedDeliveryStart(selectedDelivery)?.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) || 'Theo thời điểm duyệt'}
+                                        </p>
+                                    </div>
+                                    <div className="min-w-0">
                                         <p className="text-xs text-gray-500">Thời gian giao hàng dự kiến</p>
                                         <p className="text-sm font-semibold">
                                             {selectedDelivery.estimated_duration_minutes != null
                                                 ? `${selectedDelivery.estimated_duration_minutes + 15} phút (Đã gồm 15 phút lấy hàng để giao)`
                                                 : '—'}
                                         </p>
+                                    </div>
+                                    <div className="col-span-2 min-w-0">
+                                        <p className="text-xs text-gray-500">Thời điểm hàng tới (dự kiến)</p>
+                                        <p className="text-sm font-semibold">{formatDeliveryTime(selectedDelivery.preferred_delivery_time)}</p>
                                     </div>
                                 </div>
                             </div>
@@ -412,7 +451,12 @@ const AdminDeliveriesPage = () => {
                                     <tbody>
                                         {(selectedDelivery.order?.items || []).map((item, i) => (
                                             <tr key={i}>
-                                                <td className="py-2 px-3 border border-black">{item.dish?.dish_name || item.dish_name || 'N/A'}</td>
+                                                <td className="py-2 px-3 border border-black">
+                                                    <div>{item.dish?.dish_name || item.dish_name || 'N/A'}</div>
+                                                    {item.customization_name && (
+                                                        <div className="mt-1 text-xs text-gray-500">Công thức thay thế: {item.customization_name}</div>
+                                                    )}
+                                                </td>
                                                 <td className="py-2 px-3 text-center border border-black">{item.quantity}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
                                                     {(Number(item.unit_price) * item.quantity).toLocaleString('vi-VN')}đ

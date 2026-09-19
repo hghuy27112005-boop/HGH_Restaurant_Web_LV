@@ -14,6 +14,10 @@ class OrderItem extends Model
     protected $fillable = [
         'order_id',
         'dish_id',
+        'customization_id',
+        'customization_name',
+        'ingredients',
+        'removed_ingredients',
         'quantity',
         'unit_price',
     ];
@@ -21,6 +25,7 @@ class OrderItem extends Model
     protected $casts = [
         'quantity' => 'integer',
         'unit_price' => 'decimal:2',
+        'removed_ingredients' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -37,6 +42,11 @@ class OrderItem extends Model
     public function dish()
     {
         return $this->belongsTo(Dish::class, 'dish_id', 'dish_id');
+    }
+
+    public function customization()
+    {
+        return $this->belongsTo(DishCustomization::class, 'customization_id', 'dish_customization_id');
     }
 
     public function review()

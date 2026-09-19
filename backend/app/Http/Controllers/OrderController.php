@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Delivery;
 use App\Models\Dish;
+use App\Models\DishCustomization;
 use App\Models\Stock;
 use App\Services\OrderCodeGenerator;
 
@@ -27,19 +28,58 @@ class OrderController extends Controller
         $exceeded = [];
 
         foreach ($items as $item) {
-            $stock = Stock::getOrCreateForDishAndDate($item['dish_id'], $date);
-            if ($item['quantity'] > $stock->quantity_left) {
-                $dish = Dish::find($item['dish_id']);
-                $exceeded[] = [
-                    'dish_id' => $item['dish_id'],
-                    'dish_name' => $dish?->dish_name ?? 'Unknown',
-                    'requested' => $item['quantity'],
-                    'available' => (int) $stock->quantity_left,
-                ];
+            $dish = Dish::find($item['dish_id']);
+            $ingredients = $this->resolveItemIngredients($dish, $item);
+            $requirements = [];
+
+            foreach ($ingredients as $ingredient) {
+                $key = \App\Models\IngredientStock::keyFor($ingredient);
+                $requirements[$key] = ($requirements[$key] ?? 0) + (int) $item['quantity'];
+            }
+
+            foreach ($requirements as $key => $requiredQuantity) {
+                $stock = \App\Models\IngredientStock::getOrCreateForDate($key, $date);
+                if ($requiredQuantity > $stock->quantity_left) {
+                    $exceeded[] = [
+                        'dish_id' => $item['dish_id'],
+                        'dish_name' => $dish?->dish_name ?? 'Unknown',
+                        'ingredient_name' => $stock->ingredient_name,
+                        'requested' => $requiredQuantity,
+                        'available' => (int) $stock->quantity_left,
+                    ];
+                }
             }
         }
 
         return count($exceeded) > 0 ? $exceeded : null;
+    }
+
+    private function resolveItemIngredients(?Dish $dish, array $item): array
+    {
+        if (!empty($item['customization_id'])) {
+            $customization = DishCustomization::find($item['customization_id']);
+            if ($customization && $customization->dish_id == ($dish?->dish_id ?? null)) {
+                $ingredients = $customization->ingredients;
+                if (!empty($ingredients)) {
+                    return collect(explode(',', (string) $ingredients))
+                        ->map(fn ($ingredient) => trim($ingredient))
+                        ->filter()
+                        ->values()->all();
+                }
+            }
+        }
+
+        if (!empty($item['ingredients'])) {
+            return collect(explode(',', (string) $item['ingredients']))
+                ->map(fn ($ingredient) => trim($ingredient))
+                ->filter()
+                ->values()->all();
+        }
+
+        return collect(explode(',', (string) $dish?->ingredients ?? ''))
+            ->map(fn ($ingredient) => trim($ingredient))
+            ->filter()
+            ->values()->all();
     }
 
     public function store(Request $request, \App\Services\DeliveryDistanceService $distanceService)
@@ -48,11 +88,16 @@ class OrderController extends Controller
             'order_type' => 'required|in:booking_table,delivery',
             'items' => 'required|array|min:1',
             'items.*.dish_id' => 'required|exists:dishes,dish_id',
+            'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
+            'items.*.customization_name' => 'nullable|string|max:255',
+            'items.*.ingredients' => 'nullable|string',
+            'items.*.removed_ingredients' => 'nullable|array',
             'items.*.quantity' => 'required|integer|min:1',
             'delivery.address' => 'required_if:order_type,delivery|string',
             'delivery.phone' => 'required_if:order_type,delivery|string',
             'delivery.lat' => 'nullable|numeric|between:-90,90',
             'delivery.lng' => 'nullable|numeric|between:-180,180',
+            'delivery.preferred_delivery_time' => ['nullable', 'date_format:H:i'],
             'booking_table' => 'required_if:order_type,booking_table|array',
             'booking_table.tables' => 'required_if:order_type,booking_table|array',
             'booking_table.start_date' => 'required_if:order_type,booking_table|date',
@@ -61,10 +106,10 @@ class OrderController extends Controller
         ]);
 
         $stockDate = $this->resolveStockDate($validated);
-        $stockExceeded = $this->ensureStockAvailability($validated['items'], $stockDate);
+        $stockExceeded = \App\Models\Stock::ensureIngredientAvailability($validated['items'], $stockDate);
         if ($stockExceeded) {
             return response()->json([
-                'message' => 'Một số món ăn vượt quá số lượng còn trong kho.',
+                'message' => 'Một số nguyên liệu không đủ định lượng trong kho.',
                 'exceeded' => $stockExceeded,
             ], 422);
         }
@@ -92,6 +137,10 @@ class OrderController extends Controller
 
                 $itemsWithRealPrice[] = [
                     'dish_id'  => $item['dish_id'],
+                    'customization_id' => $item['customization_id'] ?? null,
+                    'customization_name' => $item['customization_name'] ?? null,
+                    'ingredients' => $item['ingredients'] ?? null,
+                    'removed_ingredients' => $item['removed_ingredients'] ?? [],
                     'quantity' => $item['quantity'],
                     'price'    => $realPrice,
                 ];
@@ -121,6 +170,10 @@ class OrderController extends Controller
                 \App\Models\OrderItem::create([
                     'order_id' => $orderId,
                     'dish_id' => $item['dish_id'],
+                    'customization_id' => $item['customization_id'] ?? null,
+                    'customization_name' => $item['customization_name'] ?? null,
+                    'ingredients' => $item['ingredients'] ?? null,
+                    'removed_ingredients' => $item['removed_ingredients'] ?? [],
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['price'],
                 ]);
@@ -154,12 +207,29 @@ class OrderController extends Controller
                     ], 422);
                 }
 
+                $preferredDeliveryTime = $validated['delivery']['preferred_delivery_time'] ?? null;
+                if ($preferredDeliveryTime) {
+                    $preferredAt = \Carbon\Carbon::createFromFormat('H:i', $preferredDeliveryTime)
+                        ->setDate(now()->year, now()->month, now()->day);
+                    $minimumPreferred = now()->copy()
+                        ->addMinutes(15 + $shippingResult['duration_minutes'] + 15);
+                    $latestPreferred = now()->copy()->setTime(22, 0, 0);
+
+                    if ($preferredAt->lt($minimumPreferred) || $preferredAt->gt($latestPreferred)) {
+                        DB::rollBack();
+                        return response()->json([
+                            'message' => 'Thời điểm giao hàng mong muốn phải từ 07:30 cộng thời gian giao dự kiến và không muộn hơn 22:00.',
+                        ], 422);
+                    }
+                }
+
                 \App\Models\Delivery::create([
                     'delivery_id' => $deliveryId,
                     'order_id' => $orderId,
                     'address' => $validated['delivery']['address'],
                     'distance_km' => $shippingResult['distance_km'],
                     'estimated_duration_minutes' => $shippingResult['duration_minutes'],
+                    'preferred_delivery_time' => $preferredDeliveryTime,
                     'shipping_fee' => $shippingResult['shipping_fee'],
                     'destination_lat' => $shippingResult['lat'],
                     'destination_lng' => $shippingResult['lng'],
@@ -239,7 +309,7 @@ class OrderController extends Controller
     {
         \App\Models\Delivery::autoCompleteExpired();
 
-        $query = Order::where('user_id', auth()->id());
+        $query = Order::where('user_id', $request->user()->user_id);
 
         if ($request->filled('order_type')) {
             $query->where('order_type', $request->order_type);
@@ -293,6 +363,8 @@ class OrderController extends Controller
                 'items' => $order->items->map(fn ($item) => [
                     'dish_id'    => $item->dish_id,
                     'dish_name'  => $item->dish?->dish_name,
+                    'customization_id' => $item->customization_id,
+                    'customization_name' => $item->customization_name,
                     'quantity'   => $item->quantity,
                     'unit_price' => $item->unit_price,
                 ]),

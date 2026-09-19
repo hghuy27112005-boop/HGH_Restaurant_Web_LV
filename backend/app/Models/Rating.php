@@ -16,6 +16,7 @@ class Rating extends Model
         'order_item_id',
         'rating',
         'comment',
+        'ai_response',
     ];
 
     protected $casts = [

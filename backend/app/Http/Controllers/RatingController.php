@@ -8,9 +8,17 @@ use App\Models\Rating;
 use App\Models\OrderItem;
 use App\Models\FavoriteDish;
 use App\Models\Order;
+use App\Models\RecommendationExclusion;
+use App\Services\GeminiChatbotService;
+use App\Services\ContentModerationService;
 
 class RatingController extends Controller
 {
+    public function __construct(
+        private GeminiChatbotService $gemini,
+        private ContentModerationService $moderation
+    ) {}
+
     /**
      * Danh sách các món đã từng đặt (thuộc đơn đã có hóa đơn), kèm đánh giá cũ
      * nếu có, để trang "Đánh giá dịch vụ" hiển thị cho khách chấm điểm.
@@ -18,6 +26,7 @@ class RatingController extends Controller
     public function ratableItems(Request $request)
     {
         $userId = Auth::id();
+        $moderationStatus = $this->moderation->status($userId);
 
         $orders = Order::where('user_id', $userId)
             ->whereHas('bill')
@@ -41,12 +50,13 @@ class RatingController extends Controller
                     'existing_rating' => $item->review ? [
                         'rating' => $item->review->rating,
                         'comment' => $item->review->comment,
+                        'ai_response' => $item->review->ai_response,
                     ] : null,
                 ]),
             ];
         })->values();
 
-        return response()->json(['data' => $data]);
+        return response()->json(['data' => $data, 'moderation' => $moderationStatus]);
     }
 
     /**
@@ -71,19 +81,44 @@ class RatingController extends Controller
             ], 403);
         }
 
+        if ($request->filled('comment')) {
+            $moderationResult = $this->moderation->check($request->comment, Auth::id(), 'rating');
+            if ($moderationResult) {
+                return response()->json([
+                    'success' => false,
+                    'blocked' => $moderationResult['blocked'],
+                    'warning' => true,
+                    'message' => $moderationResult['message'],
+                    'moderation' => $moderationResult,
+                ], $moderationResult['blocked'] ? 403 : 422);
+            }
+        }
+
+        $rating = (int) $request->rating;
+        $aiResponse = $this->gemini->generateRatingResponse(
+            $rating,
+            $request->input('comment')
+        );
+
         $review = Rating::updateOrCreate(
             ['order_item_id' => $orderItem->order_item_id],
             [
                 'dish_id' => $orderItem->dish_id,
                 'user_id' => Auth::id(),
-                'rating' => $request->rating,
+                'rating' => $rating,
                 'comment' => $request->comment,
+                'ai_response' => $aiResponse,
             ]
         );
 
-        // "Khen" (>=4 sao) -> tự động đẩy món lên đầu danh sách đề xuất
-        if ($request->rating >= 4) {
-            $this->promoteToFavorite(Auth::id(), $orderItem->dish_id, $request->rating);
+        if ($rating <= 3) {
+            RecommendationExclusion::firstOrCreate([
+                'user_id' => Auth::id(),
+                'dish_id' => $orderItem->dish_id,
+            ]);
+        } else {
+            // "Khen" (>=4 sao) -> tự động đẩy món lên đầu danh sách đề xuất.
+            $this->promoteToFavorite(Auth::id(), $orderItem->dish_id, $rating);
         }
 
         return response()->json([

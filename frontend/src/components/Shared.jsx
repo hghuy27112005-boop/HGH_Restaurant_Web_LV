@@ -61,18 +61,34 @@ export const WarningMessage = ({ message, onClose }) => (
     </div>
 );
 
-export const Modal = ({ isOpen, title, titleClassName = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng' }) => {
+export const Modal = ({ isOpen, title, titleClassName = '', className = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng', onSecondary, secondaryText = 'Quay lại', secondaryClassName = '', onTertiary, tertiaryText = 'Quay lại', tertiaryClassName = '' }) => {
     if (!isOpen) return null;
 
     return (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
-            <div className="bg-white rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
-                <h2 className={`text-xl font-bold mb-4 ${titleClassName}`}>{title}</h2>
+            <div className={`bg-white rounded-lg shadow-lg p-6 w-full mx-4 ${className || 'max-w-md'}`}>
+                <h2 className={`-mx-6 -mt-6 mb-4 rounded-t-lg bg-red-600 px-6 py-4 text-xl font-bold ${titleClassName} text-white`}>{title}</h2>
                 <div className="mb-6">{children}</div>
                 <div className="flex gap-2 justify-end">
+                    {onSecondary && (
+                        <button
+                            onClick={onSecondary}
+                            className={`px-4 py-2 rounded border border-gray-300 hover:bg-gray-100 ${secondaryClassName}`}
+                        >
+                            {secondaryText}
+                        </button>
+                    )}
+                    {onTertiary && (
+                        <button
+                            onClick={onTertiary}
+                            className={`px-4 py-2 rounded border border-gray-300 hover:bg-gray-100 ${tertiaryClassName}`}
+                        >
+                            {tertiaryText}
+                        </button>
+                    )}
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 rounded border border-gray-300 hover:bg-gray-100"
+                        className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
                     >
                         {cancelText}
                     </button>

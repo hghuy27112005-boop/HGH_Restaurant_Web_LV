@@ -7,14 +7,23 @@ use App\Models\ChatMessage;
 use App\Services\GeminiChatbotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Services\ContentModerationService;
+use App\Models\Dish;
+use App\Services\DishCustomizationService;
+use Illuminate\Support\Str;
 
 class ChatbotController extends Controller
 {
-    public function __construct(private GeminiChatbotService $gemini) {}
+    public function __construct(
+        private GeminiChatbotService $gemini,
+        private ContentModerationService $moderation,
+        private DishCustomizationService $dishCustomization
+    ) {}
 
     public function getSession()
     {
         $user = Auth::user();
+        $moderationStatus = $this->moderation->status($user->user_id);
 
         $session = ChatSession::firstOrCreate(
             ['user_id' => $user->user_id],
@@ -43,6 +52,7 @@ class ChatbotController extends Controller
             'session_id' => $session->session_id,
             'current_node_id' => $session->current_node_id,
             'messages' => $messages,
+            'moderation' => $moderationStatus,
         ]);
     }
 
@@ -67,10 +77,66 @@ class ChatbotController extends Controller
         ]);
 
         $user = Auth::user();
+        $blockedStatus = $this->moderation->status($user->user_id);
+        if ($blockedStatus['blocked']) {
+            return response()->json([
+                'success' => false,
+                'blocked' => true,
+                'message' => 'Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.',
+                'moderation' => $blockedStatus,
+            ], 403);
+        }
+
+        if ($request->type === 'text') {
+            $moderationResult = $this->moderation->check($request->user_input, $user->user_id, 'chatbot');
+            if ($moderationResult) {
+                return response()->json([
+                    'success' => false,
+                    'blocked' => $moderationResult['blocked'],
+                    'warning' => true,
+                    'message' => $moderationResult['message'],
+                    'moderation' => $moderationResult,
+                ], $moderationResult['blocked'] ? 403 : 422);
+            }
+        }
+
         $session = ChatSession::firstOrCreate(
             ['user_id' => $user->user_id],
             ['current_node_id' => 'root', 'context_data' => []]
         );
+
+        if ($request->type === 'text' && $this->looksLikeRecipeChange($request->user_input)) {
+            $customization = $this->createRecipeCustomization($request->user_input, $session);
+            if ($customization) {
+                return $customization;
+            }
+        }
+
+        if ($request->type === 'text') {
+            $dishDetailSuggestion = $this->detectDishDetailSuggestion($request->user_input);
+            if ($dishDetailSuggestion) {
+                ChatMessage::create([
+                    'session_id' => $session->session_id,
+                    'sender' => 'user',
+                    'content' => $request->user_input,
+                ]);
+                ChatMessage::create([
+                    'session_id' => $session->session_id,
+                    'sender' => 'bot',
+                    'content' => $dishDetailSuggestion['reply'],
+                ]);
+
+                $session->update(['current_node_id' => 'root']);
+
+                return response()->json([
+                    'success' => true,
+                    'matched_id' => 'unclear',
+                    'reply' => $dishDetailSuggestion['reply'],
+                    'suggested_route' => $dishDetailSuggestion['suggested_route'],
+                    'suggested_label' => $dishDetailSuggestion['suggested_label'],
+                ]);
+            }
+        }
 
         // === auto: bot tự nói tiếp, không có input thật từ người dùng ===
         if ($request->type === 'auto') {
@@ -145,7 +211,120 @@ class ChatbotController extends Controller
         ]);
     }
 
-        public function chatDays()
+    private function looksLikeRecipeChange(string $input): bool
+    {
+        return Str::contains(Str::lower($input), [
+            'công thức', 'nguyên liệu', 'không thích', 'bỏ ', 'thay ', 'đổi ', 'loại bỏ',
+        ]);
+    }
+
+    private function detectDishDetailSuggestion(string $input): ?array
+    {
+        $normalizedInput = mb_strtolower($input, 'UTF-8');
+        $ingredientKeywords = [
+            'nguyên liệu', 'thành phần', 'ingredient', 'ingredients',
+            'công thức', 'cách nấu', 'cách làm', 'các bước', 'recipe', 'reicpe',
+            'nấu như thế nào', 'nấu ra sao', 'chế biến', 'bật mí', 'thế nào',
+            'có những gì', 'gồm những gì', 'có gì', 'giải thích', 'món này'
+        ];
+        $preferenceKeywords = [
+            'không thích', 'ko thích', 'không ăn', 'ko ăn', 'bỏ', 'loại bỏ', 'không muốn',
+            'không thích ăn', 'không ăn rau', 'không ăn thịt', 'bớt', 'thay', 'đổi', 'rau'
+        ];
+
+        $hasIngredientIntent = collect($ingredientKeywords)->contains(fn ($keyword) => Str::contains($normalizedInput, mb_strtolower($keyword, 'UTF-8')));
+        $hasPreferenceIntent = collect($preferenceKeywords)->contains(fn ($keyword) => Str::contains($normalizedInput, mb_strtolower($keyword, 'UTF-8')));
+
+        if (!$hasIngredientIntent && !$hasPreferenceIntent) {
+            return null;
+        }
+
+        $dishes = Dish::active()->get(['dish_id', 'dish_name']);
+        $bestMatch = null;
+        $bestLength = 0;
+
+        foreach ($dishes as $dish) {
+            $name = mb_strtolower($dish->dish_name, 'UTF-8');
+            if (Str::contains($normalizedInput, $name)) {
+                $length = mb_strlen($name, 'UTF-8');
+                if ($length > $bestLength) {
+                    $bestMatch = $dish;
+                    $bestLength = $length;
+                }
+            }
+        }
+
+        if ($bestMatch) {
+            return [
+                'reply' => "Món {$bestMatch->dish_name} có nguyên liệu và công thức nấu chi tiết ở trang chi tiết món. Bạn có thể tự do bỏ bớt các nguyên liệu mà bạn không thích, sau đó xác nhận nguyên liệu để tạo 1 công thức mới.",
+                'suggested_route' => '/dish-details/' . $bestMatch->dish_id,
+                'suggested_label' => 'Đến trang chi tiết món ' . $bestMatch->dish_name,
+            ];
+        }
+
+        return [
+            'reply' => 'Bạn có thể xem danh sách món ăn trên trang thực đơn để chọn món muốn biết nguyên liệu hoặc công thức. Bạn có thể tự do bỏ bớt các nguyên liệu mà bạn không thích, sau đó xác nhận nguyên liệu để tạo 1 công thức mới.',
+            'suggested_route' => '/menu',
+            'suggested_label' => 'Tới trang thực đơn',
+        ];
+    }
+
+    private function createRecipeCustomization(string $input, ChatSession $session)
+    {
+        $dishes = Dish::active()->get(['dish_id', 'dish_name', 'ingredients', 'recipe_instructions']);
+        $result = $this->gemini->buildAlternativeRecipe($input, $dishes->toArray());
+
+        if (!($result['matched'] ?? false)) {
+            return null;
+        }
+
+        $dish = $dishes->firstWhere('dish_id', (int) ($result['dish_id'] ?? 0));
+        $ingredients = trim((string) ($result['ingredients'] ?? ''));
+        $instructions = trim((string) ($result['recipe_instructions'] ?? ''));
+        $removed = array_values(array_filter($result['removed_ingredients'] ?? [], 'is_string'));
+
+        if (!$dish || $ingredients === '' || $instructions === '' || count($removed) === 0) {
+            return null;
+        }
+
+        foreach ($removed as $ingredient) {
+            if (!Str::contains(Str::lower((string) $dish->ingredients), Str::lower(trim($ingredient)))) {
+                return null;
+            }
+            if (Str::contains(Str::lower($ingredients), Str::lower(trim($ingredient)))) {
+                return null;
+            }
+        }
+
+        $removedLabels = array_values(array_filter($result['removed_ingredient_labels'] ?? [] , 'is_string'));
+        if (count($removedLabels) !== count($removed)) {
+            $removedLabels = array_map(fn ($ingredient) => $this->dishCustomization->ingredientLabel($ingredient), $removed);
+        }
+
+        $customization = $this->dishCustomization->save(
+            $dish,
+            $result['recipe_name'] ?? 'Công thức thay thế ' . now()->format('d/m/Y H:i'),
+            $ingredients,
+            $instructions,
+            $removed,
+            is_array($result['replacements'] ?? null) ? $result['replacements'] : []
+        );
+
+        ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'user', 'content' => $input]);
+        $reply = "Tôi đã tạo và lưu công thức thay thế cho món {$dish->dish_name}, đã bỏ: " . implode(', ', $removedLabels) . ". Bạn có thể xem công thức này ở trang chi tiết món ăn.";
+        ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'bot', 'content' => $reply]);
+
+        return response()->json([
+            'success' => true,
+            'matched_id' => 'unclear',
+            'reply' => $reply,
+            'custom_recipe' => $customization,
+            'suggested_route' => '/dish-details/' . $dish->dish_id,
+            'suggested_label' => 'Xem công thức thay thế',
+        ]);
+    }
+
+    public function chatDays()
     {
         $user = Auth::user();
         $session = ChatSession::where('user_id', $user->user_id)->first();
@@ -178,6 +357,14 @@ class ChatbotController extends Controller
         })->values();
 
         return response()->json(['success' => true, 'days' => $days]);
+    }
+
+    public function moderationStatus()
+    {
+        return response()->json([
+            'success' => true,
+            'moderation' => $this->moderation->status(Auth::id()),
+        ]);
     }
 
     public function messagesByDate(Request $request)

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Dish;
 use App\Models\FavoriteDish;
 use App\Models\DishSimilarity;
+use App\Models\RecommendationExclusion;
 
 class RecommendationController extends Controller
 {
@@ -45,13 +46,17 @@ class RecommendationController extends Controller
         $userId = Auth::id();
 
         $favoriteDishIds = FavoriteDish::where('user_id', $userId)->pluck('dish_id')->all();
+        $excludedDishIds = RecommendationExclusion::where('user_id', $userId)->pluck('dish_id')->all();
 
         if (empty($favoriteDishIds)) {
             return response()->json(['data' => []]);
         }
 
         $allDishes = Dish::where('is_active', true)->get()->keyBy('dish_id');
-        $candidateIds = $allDishes->keys()->diff($favoriteDishIds)->values()->all();
+        $candidateIds = $allDishes->keys()
+            ->diff(array_merge($favoriteDishIds, $excludedDishIds))
+            ->values()
+            ->all();
 
         $similarities = DishSimilarity::where(function ($q) use ($favoriteDishIds, $candidateIds) {
             $q->whereIn('dish_id_1', $favoriteDishIds)->whereIn('dish_id_2', $candidateIds);

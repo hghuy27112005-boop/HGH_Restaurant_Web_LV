@@ -29,6 +29,9 @@ const RatingPage = () => {
     const [drafts, setDrafts] = useState({});
     const [submittingId, setSubmittingId] = useState(null);
     const [savedIds, setSavedIds] = useState({}); // hiện tạm dòng "Đã lưu!" sau khi gửi
+    const [aiResponses, setAiResponses] = useState({});
+    const [moderationBlocked, setModerationBlocked] = useState(false);
+    const [moderationMessage, setModerationMessage] = useState('');
 
     useEffect(() => {
         fetchRatableItems();
@@ -40,18 +43,27 @@ const RatingPage = () => {
             setError(null);
             const response = await ratingAPI.getRatableItems();
             const items = response.data?.data || [];
+            setModerationBlocked(Boolean(response.data?.moderation?.blocked));
+            if (response.data?.moderation?.blocked) {
+                setModerationMessage('Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.');
+            }
             setOrders(items);
 
             const initialDrafts = {};
+            const initialAiResponses = {};
             items.forEach((order) => {
                 order.items.forEach((item) => {
                     initialDrafts[item.order_item_id] = {
                         rating: item.existing_rating?.rating || 0,
                         comment: item.existing_rating?.comment || '',
                     };
+                    if (item.existing_rating?.ai_response) {
+                        initialAiResponses[item.order_item_id] = item.existing_rating.ai_response;
+                    }
                 });
             });
             setDrafts(initialDrafts);
+            setAiResponses(initialAiResponses);
         } catch (err) {
             if (err.response?.status === 401) return;
             setError(err.response?.data?.message || 'Không thể tải danh sách món để đánh giá.');
@@ -77,18 +89,28 @@ const RatingPage = () => {
 
         setSubmittingId(orderItemId);
         try {
-            await ratingAPI.submit({
+            const response = await ratingAPI.submit({
                 order_item_id: orderItemId,
                 rating: draft.rating,
                 comment: draft.comment || null,
             });
+            setAiResponses((prev) => ({
+                ...prev,
+                [orderItemId]: response.data?.data?.ai_response,
+            }));
             setSavedIds((prev) => ({ ...prev, [orderItemId]: true }));
             setTimeout(() => {
                 setSavedIds((prev) => ({ ...prev, [orderItemId]: false }));
             }, 2000);
         } catch (err) {
-            alert('Lỗi khi gửi đánh giá, vui lòng thử lại.');
-            console.error(err);
+            const data = err.response?.data;
+            if (data?.warning || data?.blocked) {
+                setModerationMessage(data.message);
+                setModerationBlocked(Boolean(data.blocked));
+            } else {
+                alert('Lỗi khi gửi đánh giá, vui lòng thử lại.');
+                console.error(err);
+            }
         } finally {
             setSubmittingId(null);
         }
@@ -104,6 +126,11 @@ const RatingPage = () => {
                 <h1 className="text-4xl font-bold text-red-600 mb-8">Đánh giá dịch vụ</h1>
 
                 {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
+                {moderationMessage && (
+                    <div className="mb-6 rounded bg-yellow-100 px-4 py-3 text-sm text-yellow-800">
+                        {moderationMessage}
+                    </div>
+                )}
 
                 {orders.length === 0 ? (
                     <EmptyState
@@ -156,7 +183,7 @@ const RatingPage = () => {
                                                     <div className="flex items-center gap-3 mt-2">
                                                         <button
                                                             onClick={() => handleSubmit(item.order_item_id)}
-                                                            disabled={submittingId === item.order_item_id}
+                                                            disabled={moderationBlocked || submittingId === item.order_item_id}
                                                             className="px-4 py-1.5 text-sm font-bold rounded bg-red-600 text-white hover:bg-red-700 transition disabled:bg-gray-400"
                                                         >
                                                             {submittingId === item.order_item_id
@@ -167,6 +194,11 @@ const RatingPage = () => {
                                                             <span className="text-green-600 text-sm font-semibold">Đã lưu!</span>
                                                         )}
                                                     </div>
+                                                    {aiResponses[item.order_item_id] && (
+                                                        <p className="mt-2 text-sm text-gray-600">
+                                                            Phản hồi từ nhà hàng: {aiResponses[item.order_item_id]}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
                                         );

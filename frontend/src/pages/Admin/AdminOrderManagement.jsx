@@ -397,7 +397,12 @@ const AdminOrderManagement = () => {
                             <tbody>
                                 {(detailBill.order?.items || []).map((item, i) => (
                                     <tr key={i}>
-                                        <td className="py-2 px-3 border border-black">{item.dish?.dish_name || item.dish_name || 'N/A'}</td>
+                                        <td className="py-2 px-3 border border-black">
+                                            <div>{item.dish?.dish_name || item.dish_name || 'N/A'}</div>
+                                            {item.customization_name && (
+                                                <div className="mt-1 text-xs text-gray-500">Công thức thay thế: {item.customization_name}</div>
+                                            )}
+                                        </td>
                                         <td className="py-2 px-3 text-center border border-black">{item.quantity}</td>
                                         <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
                                             {(Number(item.unit_price) * item.quantity).toLocaleString('vi-VN')}đ

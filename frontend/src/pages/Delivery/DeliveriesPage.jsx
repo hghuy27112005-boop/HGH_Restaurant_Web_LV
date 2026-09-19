@@ -20,9 +20,13 @@ const DeliveriesPage = () => {
     // Cart states
     const [deliveryCart, setDeliveryCart] = useState([]);
     const [address, setAddress] = useState('');
+    const [preferredDeliveryEnabled, setPreferredDeliveryEnabled] = useState(false);
+    const [preferredTimeH, setPreferredTimeH] = useState('');
+    const [preferredTimeM, setPreferredTimeM] = useState('');
     const [checkoutStage, setCheckoutStage] = useState('info'); // info, payment
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [showTimeWarningModal, setShowTimeWarningModal] = useState(false);
+    const [showPreferredTimeErrorModal, setShowPreferredTimeErrorModal] = useState(false);
     const mouseDownOnTimeWarningBackdrop = useRef(false);
 
     // Preview phí ship: chỉ hợp lệ (previewedAddress === address) khi khách chưa sửa
@@ -87,6 +91,9 @@ const DeliveriesPage = () => {
                 if (session.stage === 'payment') {
                     setCheckoutStage('payment');
                     if (session.address) setAddress(session.address);
+                    if (session.preferredDeliveryEnabled) setPreferredDeliveryEnabled(true);
+                    if (session.preferredTimeH) setPreferredTimeH(session.preferredTimeH);
+                    if (session.preferredTimeM) setPreferredTimeM(session.preferredTimeM);
                     if (session.orderId) setCreatedOrderId(session.orderId);
                     // 🔑 Restore cart từ session (trong case quay lại từ VNPay)
                     if (session.deliveryCart && session.deliveryCart.length > 0) {
@@ -101,6 +108,24 @@ const DeliveriesPage = () => {
     }, []);
 
     const cartTotal = deliveryCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+    const renderCartItemName = (item) => {
+        const customizationName = item.customization_name;
+        const fullName = item.name || item.dish_name || 'N/A';
+        const suffix = customizationName ? ` (${customizationName})` : '';
+        const dishName = suffix && fullName.endsWith(suffix)
+            ? fullName.slice(0, -suffix.length)
+            : fullName;
+
+        return (
+            <>
+                <div>{dishName}</div>
+                {customizationName && (
+                    <div className="mt-1 text-xs text-gray-500">Công thức thay thế: {customizationName}</div>
+                )}
+            </>
+        );
+    };
 
     // Tự động kiểm tra phí ship sau khi khách ngừng gõ 800ms, tránh gọi API liên tục
     // theo từng ký tự gõ vào.
@@ -211,10 +236,50 @@ const DeliveriesPage = () => {
         return estimatedFinish > todayClose;
     };
 
+    const getPreferredDeliveryTime = () => {
+        if (!preferredDeliveryEnabled || !preferredTimeH || !preferredTimeM) return null;
+        return `${String(preferredTimeH).padStart(2, '0')}:${String(preferredTimeM).padStart(2, '0')}`;
+    };
+
+    const getEarliestApprovalTime = () => {
+        return new Date(Math.ceil((Date.now() + 15 * 60000) / 60000) * 60000);
+    };
+
+    const getEarliestArrivalTime = () => {
+        if (!shippingPreview) return null;
+        const totalDurationMinutes = Number(shippingPreview.duration_minutes ?? 0) + 15;
+        return new Date(Math.ceil((getEarliestApprovalTime().getTime() + totalDurationMinutes * 60000) / 60000) * 60000);
+    };
+
+    const formatShortTime = (date) => date
+        ? date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+        : '—';
+
+    const getMinimumPreferredTime = () => {
+        return formatShortTime(getEarliestArrivalTime());
+    };
+
+    const hasValidPreferredDeliveryTime = () => {
+        if (!preferredDeliveryEnabled) return true;
+        const hour = Number(preferredTimeH);
+        const minute = Number(preferredTimeM);
+        if (!/^\d{1,2}$/.test(String(preferredTimeH)) || !/^\d{1,2}$/.test(String(preferredTimeM))) return false;
+        const selected = hour * 60 + minute;
+        const earliestArrival = getEarliestArrivalTime();
+        if (!earliestArrival) return false;
+        const earliestArrivalMinutes = earliestArrival.getHours() * 60 + earliestArrival.getMinutes();
+        return hour >= 0 && hour <= 22 && minute >= 0 && minute <= 59 && selected >= earliestArrivalMinutes && selected <= 22 * 60;
+    };
+
     const handleConfirmInfo = (e) => {
         e.preventDefault();
         if (deliveryCart.length === 0 || !address.trim()) return;
         if (!shippingPreview || previewedAddress !== address.trim()) return;
+
+        if (!hasValidPreferredDeliveryTime()) {
+            setShowPreferredTimeErrorModal(true);
+            return;
+        }
 
         if (willFinishAfterClose()) {
             setShowTimeWarningModal(true);
@@ -243,12 +308,17 @@ const DeliveriesPage = () => {
                 delivery: {
                     address: address,
                     phone: 'N/A',
+                    preferred_delivery_time: getPreferredDeliveryTime(),
                     ...(gpsCoords ? { lat: gpsCoords.lat, lng: gpsCoords.lng } : {}),
                 },
                 items: deliveryCart.map(item => ({
                     dish_id: item.dish_id,
                     quantity: item.quantity,
                     price_at_order: item.price,
+                    customization_id: item.customization_id ?? null,
+                    customization_name: item.customization_name ?? null,
+                    ingredients: item.ingredients ?? null,
+                    removed_ingredients: item.removed_ingredients ?? [],
                 })),
             };
             const orderRes = await orderService.storeOrder(orderData);
@@ -258,6 +328,9 @@ const DeliveriesPage = () => {
             // 🔑 Lưu session với đủ thông tin (cart + info) để khôi phục nếu quay lại
             saveCheckoutSession('payment', {
                 address,
+                preferredDeliveryEnabled,
+                preferredTimeH,
+                preferredTimeM,
                 orderId,
                 deliveryCart: deliveryCart, // Lưu cart vào session
             });
@@ -501,7 +574,7 @@ const DeliveriesPage = () => {
                                     <tbody>
                                         {deliveryCart.map((item, idx) => (
                                             <tr key={idx}>
-                                                <td className="py-2 px-3 border border-black">{item.name}</td>
+                                                <td className="py-2 px-3 border border-black">{renderCartItemName(item)}</td>
                                                 <td className="py-2 px-3 border border-black">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
@@ -607,6 +680,33 @@ const DeliveriesPage = () => {
                                                 </div>
                                             </div>
                                         )}
+
+                                        <div className="flex items-start justify-between gap-4 pt-3">
+                                            <div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="font-semibold text-gray-700">Thời điểm giao hàng mong muốn</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setPreferredDeliveryEnabled(value => !value)}
+                                                        className={`relative inline-flex items-center w-14 h-7 rounded-full border-2 border-white shadow-inner transition-colors duration-200 flex-shrink-0 ${preferredDeliveryEnabled ? 'bg-green-500' : 'bg-gray-400'}`}
+                                                        aria-label="Bật thời điểm giao hàng mong muốn"
+                                                    >
+                                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${preferredDeliveryEnabled ? 'translate-x-1' : 'translate-x-8'}`} />
+                                                    </button>
+                                                </div>
+                                                <p className="mt-1 text-xs text-gray-500">Bạn muốn hàng được giao tới lúc mấy giờ?</p>
+                                            </div>
+                                            {preferredDeliveryEnabled && (
+                                                <div>
+                                                    <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
+                                                        <input type="text" maxLength="2" inputMode="numeric" placeholder="07" value={preferredTimeH} onChange={e => setPreferredTimeH(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
+                                                        <span className="font-bold text-gray-500">:</span>
+                                                        <input type="text" maxLength="2" inputMode="numeric" placeholder="30" value={preferredTimeM} onChange={e => setPreferredTimeM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
+                                                    </div>
+                                                    <p className="mt-1 text-xs text-gray-500 whitespace-nowrap">Sớm nhất: {getMinimumPreferredTime()}</p>
+                                                </div>
+                                            )}
+                                        </div>
 
                                         <button
                                             type="submit"
@@ -750,6 +850,36 @@ const DeliveriesPage = () => {
                                         className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
                                     >
                                         Tiếp tục đặt hàng
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Preferred delivery time validation modal. Clicking the backdrop does nothing. */}
+                {showPreferredTimeErrorModal && (
+                    <div
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                    >
+                        <div
+                            className="bg-white rounded-lg w-full max-w-md overflow-hidden"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
+                                Thông báo
+                            </div>
+                            <div className="p-6">
+                                <p className="text-gray-700">
+                                    Chúng tôi có thể duyệt giao hàng cho bạn sớm nhất là <strong className="text-red-600">{formatShortTime(getEarliestApprovalTime())}</strong>, nên hàng của bạn sẽ tới sớm nhất là <strong className="text-red-600">{getMinimumPreferredTime()}</strong>.
+                                </p>
+                                <div className="flex justify-end mt-6">
+                                    <button
+                                        onClick={() => setShowPreferredTimeErrorModal(false)}
+                                        className="px-5 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
+                                    >
+                                        Đóng
                                     </button>
                                 </div>
                             </div>
@@ -1021,21 +1151,19 @@ const DeliveriesPage = () => {
                             <h2 className="text-xl font-bold">Báo lỗi</h2>
                         </div>
                         <div className="p-6">
-                            <p className="text-gray-700 mb-4">Hiện có món ăn đang được đặt quá số lượng còn trong kho:</p>
+                            <p className="text-gray-700 mb-4">Các món sau đang thiếu nguyên liệu:</p>
                             <table className="w-full text-sm border border-gray-200 rounded">
-                                <thead className="bg-gray-100">
+                                <thead className="bg-red-600 text-white">
                                     <tr>
                                         <th className="px-3 py-2 text-left">Món ăn</th>
-                                        <th className="px-3 py-2 text-center">SL yêu cầu</th>
-                                        <th className="px-3 py-2 text-center">SL còn trong kho</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {stockErrorItems.map((item, i) => (
-                                        <tr key={i} className="border-t">
+                                    {stockErrorItems
+                                        .filter((item, index, items) => items.findIndex(other => other.dish_id === item.dish_id) === index)
+                                        .map((item) => (
+                                        <tr key={item.dish_id} className="border-t">
                                             <td className="px-3 py-2">{item.dish_name}</td>
-                                            <td className="px-3 py-2 text-center text-red-600 font-semibold">{item.requested}</td>
-                                            <td className="px-3 py-2 text-center text-green-700 font-semibold">{item.available}</td>
                                         </tr>
                                     ))}
                                 </tbody>

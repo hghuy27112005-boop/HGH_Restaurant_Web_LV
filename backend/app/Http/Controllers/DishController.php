@@ -8,6 +8,7 @@ use App\Models\Stock;
 use App\Models\OrderItem;
 use App\Services\OrderCodeGenerator;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 class DishController extends Controller
 {
@@ -63,7 +64,26 @@ class DishController extends Controller
         }
 
         if ($request->expectsJson()) {
-            return response()->json($dish);
+            $payload = $dish->toArray();
+            $stockId = (new OrderCodeGenerator())->generateStockId($dish->dish_id, now()->format('Y-m-d'));
+            $stock = Stock::find($stockId);
+            if (!$stock) {
+                $stock = Stock::create([
+                    'stock_id' => $stockId,
+                    'dish_id' => $dish->dish_id,
+                    'quantity_start' => 50,
+                    'quantity_left' => 50,
+                ]);
+            }
+            $payload['quantity_left'] = (int) $stock->quantity_left;
+            if (Auth::check()) {
+                $payload['custom_recipes'] = $dish->customizations()
+                    ->where('user_id', Auth::id())
+                    ->orderBy('created_at')
+                    ->get();
+            }
+
+            return response()->json($payload);
         }
 
         $allDishes = Dish::orderBy('dish_id', 'asc')->get();

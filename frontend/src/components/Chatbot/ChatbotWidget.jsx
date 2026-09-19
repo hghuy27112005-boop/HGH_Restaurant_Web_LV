@@ -16,6 +16,8 @@ const ChatbotWidget = () => {
     const [loading, setLoading] = useState(false);
     const [suppressOptions, setSuppressOptions] = useState(false);
     const [suggestedNav, setSuggestedNav] = useState(null); // { route, label } | null
+    const [moderationBlocked, setModerationBlocked] = useState(false);
+    const [moderationMessage, setModerationMessage] = useState('');
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
 
@@ -35,6 +37,10 @@ const ChatbotWidget = () => {
                 const nodeId = data.current_node_id || 'root';
                 setCurrentNodeId(nodeId);
                 setMessages(data.messages || []);
+                setModerationBlocked(Boolean(data.moderation?.blocked));
+                if (data.moderation?.blocked) {
+                    setModerationMessage('Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.');
+                }
                 setLoaded(true);
 
                 // Hôm nay chưa có tin nhắn nào -> để bot chủ động chào trước
@@ -193,7 +199,7 @@ const ChatbotWidget = () => {
 
     const handleTextSubmit = async (e) => {
         e.preventDefault();
-        if (loading || historyDate || !inputText.trim()) return;
+        if (loading || historyDate || moderationBlocked || !inputText.trim()) return;
 
         const text = inputText.trim();
         setInputText('');
@@ -222,10 +228,29 @@ const ChatbotWidget = () => {
                 // cho lượt này, tránh làm rối khi khách chỉ đang hỏi thông tin.
                 setSuppressOptions(true);
                 if (res.data.suggested_route) {
-                    setSuggestedNav({ route: res.data.suggested_route, label: res.data.suggested_label || 'Tới trang liên quan' });
+                    const route = res.data.suggested_route;
+                    if (route.startsWith('/dish-details/')) {
+                        navigate(route);
+                        setSuggestedNav(null);
+                    } else {
+                        setSuggestedNav({ route, label: res.data.suggested_label || 'Tới trang liên quan' });
+                    }
                 } else {
                     setSuggestedNav(null);
                 }
+            }
+        } catch (err) {
+            const data = err.response?.data;
+            if (data?.warning || data?.blocked) {
+                setModerationMessage(data.message);
+                setModerationBlocked(Boolean(data.blocked));
+                setMessages((prev) => [...prev, {
+                    sender: 'bot',
+                    content: data.message,
+                    created_at: new Date().toISOString(),
+                }]);
+            } else {
+                console.error('Lỗi gửi tin nhắn chatbot:', err);
             }
         } finally {
             setLoading(false);
@@ -281,6 +306,9 @@ const ChatbotWidget = () => {
             </div>
 
             <div style={styles.body}>
+                {moderationMessage && (
+                    <div style={styles.moderationBanner}>{moderationMessage}</div>
+                )}
                 {historyDate && (
                     <div style={styles.historyBanner}>
                         Đang xem lại đoạn chat cũ — chỉ xem, không thể nhắn tiếp
@@ -307,7 +335,7 @@ const ChatbotWidget = () => {
                     </div>
                 )}
 
-                {!historyDate && !loading && !suppressOptions && currentNode?.options?.length > 0 && (
+                {!historyDate && !loading && !moderationBlocked && !suppressOptions && currentNode?.options?.length > 0 && (
                     <div style={styles.optionsWrap}>
                         {currentNode.options.map((opt) => (
                             <button key={opt.id} style={styles.optionBtn} onClick={() => handleOptionClick(opt)}>
@@ -317,7 +345,7 @@ const ChatbotWidget = () => {
                     </div>
                 )}
 
-                {!historyDate && !loading && suggestedNav && (
+                {!historyDate && !loading && !moderationBlocked && suggestedNav && (
                     <div style={styles.optionsWrap}>
                         <button
                             style={styles.optionBtn}
@@ -343,9 +371,9 @@ const ChatbotWidget = () => {
                     onChange={(e) => { setInputText(e.target.value); autoResizeTextarea(); }}
                     onKeyDown={handleTextareaKeyDown}
                     placeholder={historyDate ? 'Đang xem đoạn chat cũ...' : 'Nhập tin nhắn...'}
-                    disabled={loading || !!historyDate}
+                    disabled={loading || !!historyDate || moderationBlocked}
                 />
-                <button type="submit" style={styles.sendBtn} disabled={loading || !!historyDate}>
+                <button type="submit" style={styles.sendBtn} disabled={loading || !!historyDate || moderationBlocked}>
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="white">
                         <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
                     </svg>
@@ -412,6 +440,10 @@ const styles = {
     },
     historyBanner: {
         backgroundColor: '#fff3cd', color: '#856404', fontSize: '12px', padding: '6px 10px',
+        borderRadius: '6px', textAlign: 'center', marginBottom: '4px',
+    },
+    moderationBanner: {
+        backgroundColor: '#fff3cd', color: '#856404', fontSize: '12px', padding: '8px 10px',
         borderRadius: '6px', textAlign: 'center', marginBottom: '4px',
     },
     sendBtn: {
