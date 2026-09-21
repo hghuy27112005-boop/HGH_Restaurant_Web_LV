@@ -107,18 +107,6 @@ const AdminDeliveriesPage = () => {
         }
     };
 
-    const handleStartDelivery = async (delivery) => {
-        try {
-            await adminAPI.deliveries.startDelivery(delivery.delivery_id);
-            await fetchDeliveries();
-            await fetchOverallStats();
-            setShowModal(false);
-        } catch (err) {
-            setError('Lỗi bắt đầu giao hàng');
-            console.error(err);
-        }
-    };
-
     const goToPage = () => {
         let page = parseInt(pageInput, 10);
         if (isNaN(page) || page < 1) page = 1;
@@ -127,35 +115,31 @@ const AdminDeliveriesPage = () => {
         setCurrentPage(page);
     };
 
-    const canApproveDelivery = (delivery) => {
-        const now = new Date();
-        const todayOpen = new Date(now);
-        todayOpen.setHours(7, 30, 0, 0);
-        const todayClose = new Date(now);
-        todayClose.setHours(22, 0, 0, 0);
-
-        if (now < todayOpen) return false;
-
+    const getExpectedDeliveryStart = (delivery) => {
         const durationMinutes = (delivery.estimated_duration_minutes ?? 30) + 15;
-        const estimatedFinish = new Date(now.getTime() + durationMinutes * 60000);
+        const paidAt = delivery.approved_at ? new Date(delivery.approved_at) : new Date(delivery.updated_at);
+        if (Number.isNaN(paidAt.getTime())) return null;
 
+        const expectedStart = new Date(paidAt);
+        expectedStart.setSeconds(0, 0);
         if (delivery.preferred_delivery_time) {
             const [hours, minutes] = String(delivery.preferred_delivery_time).split(':').map(Number);
-            const expectedStart = new Date(now);
             expectedStart.setHours(hours, minutes, 0, 0);
             expectedStart.setMinutes(expectedStart.getMinutes() - durationMinutes);
-            if (now < expectedStart) return false;
+        } else {
+            expectedStart.setMinutes(expectedStart.getMinutes() + 15);
         }
 
-        return estimatedFinish <= todayClose;
-    };
+        const opening = new Date(paidAt);
+        opening.setHours(7, 30, 0, 0);
+        const closing = new Date(paidAt);
+        closing.setHours(22, 0, 0, 0);
+        if (expectedStart < opening) expectedStart.setTime(opening.getTime());
+        if (expectedStart > closing || new Date(expectedStart.getTime() + durationMinutes * 60000) > closing) {
+            expectedStart.setDate(expectedStart.getDate() + 1);
+            expectedStart.setHours(7, 30, 0, 0);
+        }
 
-    const getExpectedDeliveryStart = (delivery) => {
-        if (!delivery.preferred_delivery_time) return null;
-        const [hours, minutes] = String(delivery.preferred_delivery_time).split(':').map(Number);
-        const expectedStart = new Date();
-        expectedStart.setHours(hours, minutes, 0, 0);
-        expectedStart.setMinutes(expectedStart.getMinutes() - ((delivery.estimated_duration_minutes ?? 30) + 15));
         return expectedStart;
     };
 
@@ -165,28 +149,21 @@ const AdminDeliveriesPage = () => {
         return `${hours}:${minutes}`;
     };
 
-    const getActionButtons = (delivery) => {
-        switch (delivery.delivery_status) {
-            case 'waiting_approval': {
-                const canApprove = canApproveDelivery(delivery);
-                return (
-                    <button
-                        onClick={() => canApprove && handleStartDelivery(delivery)}
-                        disabled={!canApprove}
-                        title={!canApprove ? 'Chưa tới thời điểm bắt đầu dự kiến, hoặc đơn không thể hoàn tất trước 22:00' : ''}
-                        className={`px-3 py-1 rounded text-xs ${canApprove
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            }`}
-                    >
-                        Bắt đầu giao
-                    </button>
-                );
-            }
-            default:
-                return null;
-        }
+    const getExpectedDeliveryArrival = (delivery) => {
+        const start = getExpectedDeliveryStart(delivery);
+        if (!start) return null;
+        return new Date(start.getTime() + ((delivery.estimated_duration_minutes ?? 30) + 15) * 60000);
     };
+
+    const formatExpectedDateTime = (value) => value
+        ? value.toLocaleString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+        })
+        : '—';
 
     if (loading) return <Loading />;
 
@@ -400,7 +377,7 @@ const AdminDeliveriesPage = () => {
                                     <div className="min-w-0">
                                         <p className="text-xs text-gray-500">Bắt đầu giao hàng (dự kiến)</p>
                                         <p className="text-sm font-semibold">
-                                            {getExpectedDeliveryStart(selectedDelivery)?.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) || 'Theo thời điểm duyệt'}
+                                            {formatExpectedDateTime(getExpectedDeliveryStart(selectedDelivery))}
                                         </p>
                                     </div>
                                     <div className="min-w-0">
@@ -413,7 +390,9 @@ const AdminDeliveriesPage = () => {
                                     </div>
                                     <div className="col-span-2 min-w-0">
                                         <p className="text-xs text-gray-500">Thời điểm hàng tới (dự kiến)</p>
-                                        <p className="text-sm font-semibold">{formatDeliveryTime(selectedDelivery.preferred_delivery_time)}</p>
+                                        <p className="text-sm font-semibold">
+                                            {formatExpectedDateTime(getExpectedDeliveryArrival(selectedDelivery))}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -556,11 +535,6 @@ const AdminDeliveriesPage = () => {
 
                             {/* Action Buttons */}
                             <div className="border-t border-red-600 pt-4 flex gap-2">
-                                {getActionButtons(selectedDelivery) && (
-                                    <>
-                                        {getActionButtons(selectedDelivery)}
-                                    </>
-                                )}
                                 <button
                                     onClick={() => setShowModal(false)}
                                     className="ml-auto px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-sm"

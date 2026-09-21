@@ -120,7 +120,6 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('admin/deliveries/stats', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'stats']);
     Route::get('admin/deliveries/{delivery}', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'show']);
     Route::post('admin/deliveries/{delivery}/approve', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'approve']);
-    Route::post('admin/deliveries/{delivery}/start', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'startDelivery']);
     Route::post('admin/deliveries/{delivery}/cancel', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'cancel']);
 
     // Stock Management

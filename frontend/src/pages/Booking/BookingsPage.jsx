@@ -6,6 +6,11 @@ import { useAuthContext } from '../../context/AuthContext';
 
 const BOOKING_SESSION_KEY = 'booking_checkout_session';
 
+const getTodayDateKey = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
+
 const BookingsPage = () => {
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -33,8 +38,28 @@ const BookingsPage = () => {
     const [currentPoints, setCurrentPoints] = useState(0);
     const [stockErrorItems, setStockErrorItems] = useState(null); // null = ẩn, [...] = danh sách món vượt kho
     const [searchBillId, setSearchBillId] = useState('');
+    const [arrivalDateFilter, setArrivalDateFilter] = useState(getTodayDateKey);
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
+
+    const getDateKey = (value) => {
+        if (!value) return '';
+        const text = String(value);
+        if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const formatDateOnly = (value) => {
+        const dateKey = getDateKey(value);
+        if (!dateKey) return '—';
+        const [year, month, day] = dateKey.split('-');
+        return `${day}/${month}/${year}`;
+    };
 
     // Sale-off event states
     const [saleOffEvent, setSaleOffEvent] = useState(null); // null = không có sự kiện đang diễn ra
@@ -667,7 +692,8 @@ const BookingsPage = () => {
         const booking = bill.booking_table;
         if (!booking || booking.booking_status !== 'completed') return false;
 
-        const bookingDateObj = new Date(booking.booking_date);
+        const bookingDateKey = getDateKey(booking.booking_date);
+        const bookingDateObj = new Date(`${bookingDateKey}T00:00:00`);
         const year = bookingDateObj.getFullYear();
         const month = String(bookingDateObj.getMonth() + 1).padStart(2, '0');
         const day = String(bookingDateObj.getDate()).padStart(2, '0');
@@ -756,7 +782,8 @@ const BookingsPage = () => {
     };
 
     const formatted = bookings.filter(bill =>
-    !searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())
+    (!searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())) &&
+    (!arrivalDateFilter || getDateKey(bill.booking_table?.booking_date) === arrivalDateFilter)
 );
 
     return (
@@ -1311,7 +1338,7 @@ const BookingsPage = () => {
 
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                     <h2 className="text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
                         <input
                             type="text"
@@ -1319,6 +1346,16 @@ const BookingsPage = () => {
                             onChange={e => setSearchBillId(e.target.value)}
                             placeholder="Nhập mã hóa đơn..."
                             className="border rounded px-3 py-2 text-sm w-48 focus:outline-none focus:border-red-600"
+                        />
+                        <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="booking-arrival-date">
+                            Ngày:
+                        </label>
+                        <input
+                            id="booking-arrival-date"
+                            type="date"
+                            value={arrivalDateFilter}
+                            onChange={e => setArrivalDateFilter(e.target.value)}
+                            className="border rounded px-3 py-2 text-sm focus:outline-none focus:border-red-600"
                         />
                     </div>
                 </div>
@@ -1356,7 +1393,7 @@ const BookingsPage = () => {
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-600">Ngày</p>
-                                            <p className="font-semibold">{booking?.booking_date ? new Date(booking.booking_date).toLocaleDateString('vi-VN') : '—'}</p>
+                                            <p className="font-semibold">{formatDateOnly(booking?.booking_date)}</p>
                                         </div>
                                         <div>
                                             <p className="text-sm text-gray-600">Giờ</p>

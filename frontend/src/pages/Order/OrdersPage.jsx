@@ -16,6 +16,11 @@ const DELIVERY_STATUS_FILTERS = [
     { id: 'cancelled', label: 'Đã hủy' },
 ];
 
+const getTodayDateKey = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
+
 const OrdersPage = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -25,6 +30,7 @@ const OrdersPage = () => {
 
     const [detailBill, setDetailBill] = useState(null); // bill đang xem chi tiết (null = đóng modal)
     const [searchBillId, setSearchBillId] = useState('');
+    const [dateFilter, setDateFilter] = useState(getTodayDateKey);
 
     // FIX: chỉ đóng modal khi cả mousedown lẫn mouseup đều rơi đúng trên lớp nền
     // (backdrop), tránh trường hợp bôi đen text trong bảng chi tiết rồi lỡ kéo
@@ -99,7 +105,38 @@ const OrdersPage = () => {
         return t.substring(0, 5);
     };
 
-    const formatDateOnly = (d) => (d ? new Date(d).toLocaleDateString('vi-VN') : '—');
+    const getDateKey = (value) => {
+        if (!value) return '';
+        const text = String(value);
+        if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const formatDateOnly = (value) => {
+        const dateKey = getDateKey(value);
+        if (!dateKey) return '—';
+        const [year, month, day] = dateKey.split('-');
+        return `${day}/${month}/${year}`;
+    };
+
+    const getLocalDate = (value) => {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const getOrderFilterDate = (order) => order.order_type === 'booking_table'
+        ? getDateKey(order.booking_table?.booking_date)
+        : getLocalDate(order.created_at);
 
     const getFilteredOrders = () => {
         let result = orders;
@@ -111,6 +148,9 @@ const OrdersPage = () => {
         }
         if (searchBillId.trim()) {
             result = result.filter(o => String(o.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase()));
+        }
+        if (dateFilter) {
+            result = result.filter(o => getOrderFilterDate(o) === dateFilter);
         }
         return result;
     };
@@ -147,7 +187,7 @@ const OrdersPage = () => {
             <div className="max-w-6xl mx-auto px-4">
                 <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
                     <h1 className="text-4xl font-bold text-red-600">Lịch sử giao dịch</h1>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
                         <input
                             type="text"
@@ -155,6 +195,16 @@ const OrdersPage = () => {
                             onChange={e => setSearchBillId(e.target.value)}
                             placeholder="Nhập mã hóa đơn..."
                             className="border rounded px-3 py-2 text-sm w-48 focus:outline-none focus:border-red-600"
+                        />
+                        <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="order-date-filter">
+                            Ngày:
+                        </label>
+                        <input
+                            id="order-date-filter"
+                            type="date"
+                            value={dateFilter}
+                            onChange={e => setDateFilter(e.target.value)}
+                            className="border rounded px-3 py-2 text-sm focus:outline-none focus:border-red-600"
                         />
                     </div>
                 </div>

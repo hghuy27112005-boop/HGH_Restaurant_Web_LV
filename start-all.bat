@@ -10,8 +10,8 @@ timeout /t 8 /nobreak > nul
 echo Dang khoi chay Frontend (Vite dev)...
 start "Frontend Dev" cmd /k "cd /d %ROOT%frontend && npm run dev"
 
-echo Dang khoi chay Backend (gui mail reminder + Laravel serve)...
-start "Backend Serve" cmd /k "cd /d %ROOT%backend && php artisan serve
+echo Dang khoi chay Backend (Laravel serve + scheduler tu dong giao hang)...
+start "Backend Serve" cmd /k "cd /d %ROOT%backend && php artisan serve"
 
 REM Code chay gui thong bao email
 REM && php artisan bookings:send-daily-reminders && php artisan serve"

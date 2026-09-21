@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 // Mỗi ngày lúc 6h sáng: gửi mail nhắc lịch cho các booking đặt trước (booking_date = hôm nay)
 Schedule::command('bookings:send-daily-reminders')->dailyAt('06:00');
+Schedule::command('deliveries:auto-start')->everyMinute();

@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Mail\OrderNotificationMail;
 use App\Models\Delivery;
 use App\Models\Order;
-use App\Models\Stock;
 use App\Services\OrderCodeGenerator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class Admin_DeliveryController extends Controller
@@ -19,6 +19,7 @@ class Admin_DeliveryController extends Controller
     public function index(Request $request)
     {
         Delivery::autoCompleteExpired();
+        Delivery::autoStartReady();
 
         $query = Delivery::with('order.user', 'order.items.dish', 'order.bill')
             ->whereIn('delivery_status', ['waiting_approval', 'shipping', 'completed', 'cancelled']);
@@ -73,6 +74,7 @@ class Admin_DeliveryController extends Controller
     public function stats(Request $request)
     {
         Delivery::autoCompleteExpired();
+        Delivery::autoStartReady();
 
         $base = Delivery::whereIn('delivery_status', ['waiting_approval', 'shipping', 'completed', 'cancelled']);
 
@@ -106,6 +108,7 @@ class Admin_DeliveryController extends Controller
     public function show(Delivery $delivery)
     {
         Delivery::autoCompleteExpired();
+        Delivery::autoStartReady();
         $delivery->refresh();
 
         return response()->json([
@@ -167,77 +170,13 @@ class Admin_DeliveryController extends Controller
                 $bodyLine = "Hiện tại quý khách đang có đơn hàng đặt ship, mã hóa đơn là <strong>{$bill->bill_id}</strong>, đơn hàng sẽ được giao tới trong vòng 30 phút.";
                 Mail::to($customerEmail)->send(new OrderNotificationMail($bill, $bodyLine));
             } catch (\Exception $e) {
-                \Log::error('Gửi mail thông báo duyệt đơn ship thất bại: ' . $e->getMessage());
+                Log::error('Gửi mail thông báo duyệt đơn ship thất bại: ' . $e->getMessage());
             }
         }
 
         return response()->json([
             'data' => $delivery,
             'message' => 'Delivery approved successfully',
-        ]);
-    }
-
-    /**
-     * Start delivery (shipping) — bắt đầu tính đếm ngược giao hàng, thời gian dự kiến
-     * hoàn thành = thời gian ship ước tính (theo khoảng cách) + 15 phút dự phòng.
-     */
-    public function startDelivery(Request $request, Delivery $delivery)
-    {
-        // Kiểm tra điều kiện để bắt đầu giao hàng
-        if (!in_array($delivery->delivery_status, ['waiting_confirmation', 'waiting_payment', 'waiting_approval'])) {
-            return response()->json([
-                'message' => 'Không thể bắt đầu giao hàng từ trạng thái hiện tại',
-            ], 422);
-        }
-
-        $now = now();
-        $durationMinutes = $delivery->estimated_duration_minutes ?? 30;
-        $estimatedFinish = $now->copy()->addMinutes($durationMinutes + 15);
-
-        if ($delivery->preferred_delivery_time) {
-            $preferredAt = $now->copy()->setTimeFromTimeString((string) $delivery->preferred_delivery_time);
-            $expectedStart = $preferredAt->copy()->subMinutes($durationMinutes + 15);
-            if ($now->lt($expectedStart)) {
-                return response()->json([
-                    'message' => 'Chưa tới thời điểm bắt đầu giao hàng dự kiến cho đơn này.',
-                ], 422);
-            }
-        }
-
-        $todayOpen = $now->copy()->setTime(7, 30, 0);
-        $todayClose = $now->copy()->setTime(22, 0, 0);
-
-        if ($now->lt($todayOpen)) {
-            return response()->json([
-                'message' => 'Chưa tới giờ duyệt đơn giao hàng. Chỉ được duyệt từ 07:30 sáng.',
-            ], 422);
-        }
-
-        if ($estimatedFinish->gt($todayClose)) {
-            return response()->json([
-                'message' => 'Đơn hàng này không thể hoàn tất giao trước 22:00 hôm nay, không thể duyệt lúc này.',
-            ], 422);
-        }
-
-        $startedAt = $now;
-        // Nếu vì lý do nào đó chưa có estimated_duration_minutes (VD: đơn cũ tạo trước
-        // khi có tính năng này), mặc định dự phòng 30 phút để không bị lỗi cộng null.
-        $durationMinutes = $delivery->estimated_duration_minutes ?? 30;
-
-        $delivery->update([
-            'delivery_status' => 'shipping',
-            'delivery_started_at' => $startedAt,
-            'estimated_completion_at' => $startedAt->copy()->addMinutes($durationMinutes + 15),
-        ]);
-
-        if ($delivery->order) {
-            Stock::decrementStockForOrder($delivery->order, now()->format('Y-m-d'));
-            Stock::refillIfLowForOrder($delivery->order, now()->format('Y-m-d'));
-        }
-
-        return response()->json([
-            'data' => $delivery,
-            'message' => 'Delivery started successfully',
         ]);
     }
 

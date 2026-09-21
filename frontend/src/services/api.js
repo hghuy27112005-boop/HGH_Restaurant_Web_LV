@@ -100,8 +100,6 @@ export const deliveryAPI = {
     create: (data) => axiosInstance.post('/deliveries', data),
     getById: (id) => axiosInstance.get(`/deliveries/${id}`),
     approve: (id) => axiosInstance.post(`/deliveries/${id}/approve`),
-    startDelivery: (id) =>
-        axiosInstance.post(`/deliveries/${id}/start`),
     complete: (id) =>
         axiosInstance.post(`/deliveries/${id}/complete`),
     cancelWithPoints: (id) =>
@@ -214,8 +212,6 @@ export const adminAPI = {
             axiosInstance.get(`/admin/deliveries/${id}`),
         approve: (id) =>
             axiosInstance.post(`/admin/deliveries/${id}/approve`),
-        startDelivery: (id) =>
-            axiosInstance.post(`/admin/deliveries/${id}/start`),
         complete: (id) =>
             axiosInstance.post(`/admin/deliveries/${id}/complete`),
         cancel: (id) =>
@@ -310,7 +306,6 @@ export const bookingService = {
 export const deliveryService = {
     getDeliveries: () => myBillsAPI.getAll({ order_type: 'delivery' }),
     approveDelivery: (id) => deliveryAPI.approve(id),
-    startDelivery: (id) => deliveryAPI.startDelivery(id),
     cancelDelivery: (id) => deliveryAPI.cancelWithPoints(id),
 };
 

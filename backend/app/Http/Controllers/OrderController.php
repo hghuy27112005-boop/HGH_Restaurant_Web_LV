@@ -211,16 +211,6 @@ class OrderController extends Controller
                 if ($preferredDeliveryTime) {
                     $preferredAt = \Carbon\Carbon::createFromFormat('H:i', $preferredDeliveryTime)
                         ->setDate(now()->year, now()->month, now()->day);
-                    $minimumPreferred = now()->copy()
-                        ->addMinutes(15 + $shippingResult['duration_minutes'] + 15);
-                    $latestPreferred = now()->copy()->setTime(22, 0, 0);
-
-                    if ($preferredAt->lt($minimumPreferred) || $preferredAt->gt($latestPreferred)) {
-                        DB::rollBack();
-                        return response()->json([
-                            'message' => 'Thời điểm giao hàng mong muốn phải từ 07:30 cộng thời gian giao dự kiến và không muộn hơn 22:00.',
-                        ], 422);
-                    }
                 }
 
                 \App\Models\Delivery::create([
@@ -308,6 +298,7 @@ class OrderController extends Controller
     public function myBillsJson(Request $request)
     {
         \App\Models\Delivery::autoCompleteExpired();
+        \App\Models\Delivery::autoStartReady();
 
         $query = Order::where('user_id', $request->user()->user_id);
 
@@ -324,6 +315,18 @@ class OrderController extends Controller
         $data = $orders->map(function ($order) {
             $bill = $order->bill;
             if (!$bill) return null;
+
+            $delivery = $order->delivery;
+            $automaticStart = null;
+            $automaticArrival = null;
+            if ($delivery) {
+                $durationMinutes = (int) ($delivery->estimated_duration_minutes ?? 30) + 15;
+                $paidAt = $delivery->approved_at?->copy() ?? $delivery->updated_at?->copy();
+                if ($paidAt) {
+                    $automaticStart = $delivery->getAutomaticStartAt($paidAt, $durationMinutes);
+                    $automaticArrival = $automaticStart->copy()->addMinutes($durationMinutes);
+                }
+            }
 
             // All booking rows for this order (one per table)
             $bookingRows = $order->bookings;
@@ -352,13 +355,18 @@ class OrderController extends Controller
                     // All table numbers for this order
                     'table_numbers'    => $bookingRows->pluck('table_number')->sort()->values(),
                 ] : null,
-                'delivery' => $order->delivery ? [
-                    'delivery_id'      => $order->delivery->delivery_id,
-                    'address'          => $order->delivery->address,
-                    'D_payment_status' => $order->delivery->D_payment_status,
-                    'delivery_status'  => $order->delivery->delivery_status,
-                    'delivery_started_at'     => $order->delivery->delivery_started_at,
-                    'estimated_completion_at' => $order->delivery->estimated_completion_at,
+                'delivery' => $delivery ? [
+                    'delivery_id'      => $delivery->delivery_id,
+                    'address'          => $delivery->address,
+                    'D_payment_status' => $delivery->D_payment_status,
+                    'delivery_status'  => $delivery->delivery_status,
+                    'estimated_duration_minutes' => $delivery->estimated_duration_minutes,
+                    'preferred_delivery_time' => $delivery->preferred_delivery_time,
+                    'approved_at'      => $delivery->approved_at,
+                    'automatic_start_at' => $automaticStart,
+                    'automatic_arrival_at' => $automaticArrival,
+                    'delivery_started_at'     => $delivery->delivery_started_at,
+                    'estimated_completion_at' => $delivery->estimated_completion_at,
                 ] : null,
                 'items' => $order->items->map(fn ($item) => [
                     'dish_id'    => $item->dish_id,

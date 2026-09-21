@@ -5,6 +5,11 @@ import { useAuthContext } from '../../context/AuthContext';
 
 const DELIVERY_SESSION_KEY = 'delivery_checkout_session';
 
+const getTodayDateKey = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+};
+
 const DeliveriesPage = () => {
     const [deliveries, setDeliveries] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -27,6 +32,7 @@ const DeliveriesPage = () => {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [showTimeWarningModal, setShowTimeWarningModal] = useState(false);
     const [showPreferredTimeErrorModal, setShowPreferredTimeErrorModal] = useState(false);
+    const [preferredTimeModalType, setPreferredTimeModalType] = useState('too-early');
     const mouseDownOnTimeWarningBackdrop = useRef(false);
 
     // Preview phí ship: chỉ hợp lệ (previewedAddress === address) khi khách chưa sửa
@@ -58,6 +64,7 @@ const DeliveriesPage = () => {
     const [cancelingBill, setCancelingBill] = useState(null);
     const [stockErrorItems, setStockErrorItems] = useState(null); // null = ẩn, [...] = danh sách món vượt kho
     const [searchBillId, setSearchBillId] = useState('');
+    const [createdDateFilter, setCreatedDateFilter] = useState(getTodayDateKey);
 
     // Sale-off event states
     const [saleOffEvent, setSaleOffEvent] = useState(null); // null = không có sự kiện đang diễn ra
@@ -264,11 +271,33 @@ const DeliveriesPage = () => {
         const hour = Number(preferredTimeH);
         const minute = Number(preferredTimeM);
         if (!/^\d{1,2}$/.test(String(preferredTimeH)) || !/^\d{1,2}$/.test(String(preferredTimeM))) return false;
-        const selected = hour * 60 + minute;
+        return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+    };
+
+    const isPreferredTimeAfterClosing = () => {
+        if (!preferredDeliveryEnabled || !preferredTimeH || !preferredTimeM) return false;
+        return Number(preferredTimeH) * 60 + Number(preferredTimeM) > 22 * 60;
+    };
+
+    const isPreferredTimeTooEarly = () => {
+        if (!hasValidPreferredDeliveryTime() || isPreferredTimeAfterClosing()) return false;
+        const selected = Number(preferredTimeH) * 60 + Number(preferredTimeM);
         const earliestArrival = getEarliestArrivalTime();
         if (!earliestArrival) return false;
         const earliestArrivalMinutes = earliestArrival.getHours() * 60 + earliestArrival.getMinutes();
-        return hour >= 0 && hour <= 22 && minute >= 0 && minute <= 59 && selected >= earliestArrivalMinutes && selected <= 22 * 60;
+        return selected < earliestArrivalMinutes;
+    };
+
+    const getNextMorningLabel = () => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const label = tomorrow.toLocaleDateString('vi-VN', {
+            weekday: 'long',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+        });
+        return label.charAt(0).toUpperCase() + label.slice(1);
     };
 
     const handleConfirmInfo = (e) => {
@@ -277,6 +306,19 @@ const DeliveriesPage = () => {
         if (!shippingPreview || previewedAddress !== address.trim()) return;
 
         if (!hasValidPreferredDeliveryTime()) {
+            setPreferredTimeModalType('invalid');
+            setShowPreferredTimeErrorModal(true);
+            return;
+        }
+
+        if (isPreferredTimeAfterClosing()) {
+            setPreferredTimeModalType('after-closing');
+            setShowPreferredTimeErrorModal(true);
+            return;
+        }
+
+        if (isPreferredTimeTooEarly()) {
+            setPreferredTimeModalType('too-early');
             setShowPreferredTimeErrorModal(true);
             return;
         }
@@ -520,6 +562,16 @@ const DeliveriesPage = () => {
         return deliveries.filter(d => d.delivery?.delivery_status === filter);
     };
 
+    const getLocalDate = (value) => {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const getStatusColor = (bill) => {
         const status = bill.delivery?.delivery_status;
         if (status === 'cancelled') return 'danger';
@@ -536,10 +588,27 @@ const DeliveriesPage = () => {
         return '⏳ Đang chờ duyệt';
     };
 
+    const getExpectedDeliveryArrival = (delivery) => {
+        if (delivery?.estimated_completion_at) return new Date(delivery.estimated_completion_at);
+        if (delivery?.automatic_arrival_at) return new Date(delivery.automatic_arrival_at);
+        return null;
+    };
+
+    const formatExpectedDateTime = (value) => value
+        ? value.toLocaleString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+        })
+        : 'Đang tính';
+
     if (loading) return <Loading />;
 
     const filtered = getFilteredDeliveries().filter(bill =>
-    !searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())
+    (!searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())) &&
+    (!createdDateFilter || getLocalDate(bill.created_at) === createdDateFilter)
 );
 
     return (
@@ -703,7 +772,7 @@ const DeliveriesPage = () => {
                                                         <span className="font-bold text-gray-500">:</span>
                                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="30" value={preferredTimeM} onChange={e => setPreferredTimeM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                                     </div>
-                                                    <p className="mt-1 text-xs text-gray-500 whitespace-nowrap">Sớm nhất: {getMinimumPreferredTime()}</p>
+                                                    <p className="mt-1 text-xs text-gray-500 whitespace-nowrap">Sớm nhất: {getMinimumPreferredTime()} — muộn nhất: 22:00</p>
                                                 </div>
                                             )}
                                         </div>
@@ -803,7 +872,7 @@ const DeliveriesPage = () => {
 
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
                     <h2 className="text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
                         <input
                             type="text"
@@ -811,6 +880,16 @@ const DeliveriesPage = () => {
                             onChange={e => setSearchBillId(e.target.value)}
                             placeholder="Nhập mã hóa đơn..."
                             className="border rounded px-3 py-2 text-sm w-48 focus:outline-none focus:border-red-600"
+                        />
+                        <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="delivery-created-date">
+                            Ngày:
+                        </label>
+                        <input
+                            id="delivery-created-date"
+                            type="date"
+                            value={createdDateFilter}
+                            onChange={e => setCreatedDateFilter(e.target.value)}
+                            className="border rounded px-3 py-2 text-sm focus:outline-none focus:border-red-600"
                         />
                     </div>
                 </div>
@@ -831,7 +910,7 @@ const DeliveriesPage = () => {
                                 <p className="text-gray-700 mb-6">
                                     Đơn hàng này được dự kiến là không thể hoàn tất giao trước 10h tối.
                                     <br /><br />
-                                    Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng mai thì chúng tôi mới duyệt được đơn hàng cho quý khách.
+                                    Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng <strong className="text-red-600">{getNextMorningLabel()}</strong> thì chúng tôi mới duyệt được đơn hàng cho quý khách.
                                     <br /><br />
                                     Thời điểm bắt đầu duyệt đơn giao hàng của mỗi ngày là từ 7h30 sáng.
                                 </p>
@@ -871,15 +950,30 @@ const DeliveriesPage = () => {
                                 Thông báo
                             </div>
                             <div className="p-6">
-                                <p className="text-gray-700">
-                                    Chúng tôi có thể duyệt giao hàng cho bạn sớm nhất là <strong className="text-red-600">{formatShortTime(getEarliestApprovalTime())}</strong>, nên hàng của bạn sẽ tới sớm nhất là <strong className="text-red-600">{getMinimumPreferredTime()}</strong>.
-                                </p>
+                                {preferredTimeModalType === 'after-closing' ? (
+                                    <p className="text-gray-700">
+                                        Nhà hàng chúng tôi đóng cửa lúc 22h và không thực hiện giao hàng sau giờ đóng cửa. Quý khách vẫn có thể tiếp tục đặt hàng, nhà hàng sẽ tự động duyệt giao hàng cho quý khách vào 7h30 sáng <strong className="text-red-600">{getNextMorningLabel()}</strong>.
+                                    </p>
+                                ) : preferredTimeModalType === 'invalid' ? (
+                                    <p className="text-gray-700">
+                                        Vui lòng nhập thời gian giao hàng hợp lệ trong khoảng từ 00:00 đến 23:59.
+                                    </p>
+                                ) : (
+                                    <p className="text-gray-700">
+                                        Chúng tôi có thể duyệt giao hàng cho bạn sớm nhất là <strong className="text-red-600">{formatShortTime(getEarliestApprovalTime())}</strong>, nên hàng của bạn sẽ tới sớm nhất là <strong className="text-red-600">{getMinimumPreferredTime()}</strong>.
+                                    </p>
+                                )}
                                 <div className="flex justify-end mt-6">
                                     <button
-                                        onClick={() => setShowPreferredTimeErrorModal(false)}
+                                        onClick={() => {
+                                            setShowPreferredTimeErrorModal(false);
+                                            if (preferredTimeModalType === 'after-closing') {
+                                                setIsConfirmModalOpen(true);
+                                            }
+                                        }}
                                         className="px-5 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
                                     >
-                                        Đóng
+                                        {preferredTimeModalType === 'after-closing' ? 'Tiếp tục' : 'Đóng'}
                                     </button>
                                 </div>
                             </div>
@@ -1062,6 +1156,22 @@ const DeliveriesPage = () => {
                                         <p className="text-sm text-gray-600">Phương thức thanh toán</p>
                                         <p className="font-bold text-red-600">
                                             {bill.payment_method === 'Points' ? 'Điểm' : bill.payment_method === 'vnpay' ? 'VNPay' : (bill.payment_method || '—')}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Bắt đầu giao (dự kiến)</p>
+                                        <p className="font-semibold">
+                                            {formatExpectedDateTime(
+                                                bill.delivery?.delivery_started_at || bill.delivery?.automatic_start_at
+                                                    ? new Date(bill.delivery.delivery_started_at || bill.delivery.automatic_start_at)
+                                                    : null
+                                            )}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-gray-600">Hàng tới (dự kiến)</p>
+                                        <p className="font-semibold">
+                                            {formatExpectedDateTime(getExpectedDeliveryArrival(bill.delivery))}
                                         </p>
                                     </div>
                                 </div>
