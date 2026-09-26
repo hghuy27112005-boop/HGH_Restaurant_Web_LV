@@ -14,6 +14,7 @@ return new class extends Migration
             $table->foreignId('session_id')->constrained('chat_sessions', 'session_id')->onDelete('cascade');
             $table->enum('sender', ['user', 'bot']);
             $table->text('content');
+            $table->string('image_path')->nullable();
             $table->timestamp('created_at')->useCurrent();
         });
 

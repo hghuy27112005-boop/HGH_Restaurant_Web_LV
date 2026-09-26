@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('order_item_id')->constrained('order_items', 'order_item_id')->onDelete('cascade');
             $table->unsignedTinyInteger('rating');
             $table->text('comment')->nullable();
+            $table->text('ai_response')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
             $table->unique('order_item_id', 'uq_review_per_order_item');

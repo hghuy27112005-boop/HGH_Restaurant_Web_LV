@@ -12,12 +12,13 @@ return new class extends Migration
             $table->id('dish_customization_id');
             $table->foreignId('user_id')->constrained('users', 'user_id')->cascadeOnDelete();
             $table->foreignId('dish_id')->constrained('dishes', 'dish_id')->cascadeOnDelete();
+            $table->string('recipe_name', 255)->default('Công thức thay thế 1');
             $table->text('ingredients');
             $table->text('recipe_instructions');
             $table->json('removed_ingredients')->nullable();
             $table->json('replacements')->nullable();
             $table->timestamps();
-            $table->unique(['user_id', 'dish_id'], 'uq_dish_customization_user_dish');
+            $table->unique(['user_id', 'dish_id', 'recipe_name'], 'uq_dish_customization_user_dish_name');
         });
     }
 

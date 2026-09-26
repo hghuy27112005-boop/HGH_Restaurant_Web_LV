@@ -15,6 +15,7 @@ return new class extends Migration
             $table->text('address');
             $table->decimal('distance_km', 8, 2)->nullable();
             $table->integer('estimated_duration_minutes')->nullable();
+            $table->time('preferred_delivery_time')->nullable();
             $table->integer('shipping_fee')->nullable();
             $table->decimal('destination_lat', 10, 7)->nullable();
             $table->decimal('destination_lng', 10, 7)->nullable();
