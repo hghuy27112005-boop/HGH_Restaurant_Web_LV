@@ -38,7 +38,7 @@ const chatbotCustomerScripts = {
 
   recommend_food: {
     intentSummary:
-      "Đã đưa khách tới trang thực đơn với mục Đề xuất cho bạn. Cho khách biết nếu đây là lần đầu, sẽ có 1 bảng cho khách chọn vài món yêu thích, sau đó hệ thống sẽ gợi ý thêm các món có khẩu vị tương đồng.",
+      "Đã đưa bạn tới mục Đề xuất cho bạn trên trang thực đơn.",
     options: [
       { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
@@ -47,7 +47,7 @@ const chatbotCustomerScripts = {
   // ===================== LUỒNG ĐẶT MÓN =====================
   order_food: {
     intentSummary:
-      "Khách muốn đặt món nhưng chưa nói rõ hình thức. Cần hỏi khách muốn đặt bàn tại quán hay đặt ship, giải thích nhà hàng có 2 hình thức đó.",
+      "Khách muốn đặt món nhưng chưa nói rõ hình thức. Cần hỏi khách muốn đặt bàn tại quán hay đặt ship, giải thích nhà hàng có 2 hình thức đó. Khách có thể chọn món nhanh ngay trên trang Menu, hoặc mở trang chi tiết món để xem thông tin cụ thể trước khi đặt. Tại trang chi tiết món, khách cũng có thể tạo và lưu một công thức mới để dùng lại trong những lần đặt sau.",
     options: [
       { id: "order_food.booking", label: "Đặt bàn tại quán", intent: "Khách muốn đặt bàn ăn tại quán" },
       { id: "order_food.delivery", label: "Đặt ship đồ ăn", intent: "Khách muốn đặt đồ ăn giao tận nơi, không tới quán" },
@@ -58,7 +58,7 @@ const chatbotCustomerScripts = {
   // ----------- Nhánh: Đặt bàn tại quán -----------
   "order_food.booking": {
     intentSummary:
-      "Xác nhận khách chọn đặt bàn tại quán. Cho biết sẽ hướng dẫn lần lượt 2 bước: (1) qua trang menu để chọn món, (2) qua trang đặt bàn để hoàn tất.",
+      "Xác nhận khách chọn đặt bàn tại quán. Cho biết sẽ hướng dẫn lần lượt 2 bước: (1) qua trang menu để chọn món, (2) qua trang đặt bàn để hoàn tất. Khi chọn món, khách có thể bỏ các nguyên liệu không thích và lưu thành công thức thay thế để dùng lại ở những lần đặt sau.",
     autoNext: "order_food.booking.ask_menu_done",
   },
 
@@ -83,7 +83,7 @@ const chatbotCustomerScripts = {
 
   "order_food.booking.goto_menu": {
     intentSummary:
-      "Khách chưa đặt món. Mời khách qua trang menu để chọn món, sau khi xong quay lại chat để tiếp tục hướng dẫn đặt bàn.",
+      "Khách chưa đặt món. Mời khách qua trang Menu để chọn món nhanh hoặc mở trang chi tiết từng món để xem thông tin cụ thể. Tại trang chi tiết, khách có thể tạo và lưu công thức mới cho món để dùng lại ở những lần đặt sau. Sau khi chọn món xong, khách quay lại chat để tiếp tục hướng dẫn đặt bàn.",
     options: [
       {
         id: "order_food.booking.goto_table",
@@ -113,7 +113,7 @@ const chatbotCustomerScripts = {
   // ----------- Nhánh: Đặt ship -----------
   "order_food.delivery": {
     intentSummary:
-      "Xác nhận khách chọn đặt ship đồ ăn. Cho biết sẽ hướng dẫn lần lượt 2 bước: (1) qua trang menu để chọn món, (2) qua trang đặt ship để hoàn tất.",
+      "Xác nhận khách chọn đặt ship đồ ăn. Cho biết sẽ hướng dẫn lần lượt 2 bước: (1) qua trang menu để chọn món, (2) qua trang đặt ship để hoàn tất. Khi chọn món, khách có thể bỏ các nguyên liệu không thích và lưu thành công thức thay thế để dùng lại ở những lần đặt sau.",
     autoNext: "order_food.delivery.ask_menu_done",
   },
 
@@ -138,7 +138,7 @@ const chatbotCustomerScripts = {
 
   "order_food.delivery.goto_menu": {
     intentSummary:
-      "Khách chưa đặt món. Mời khách qua trang menu để chọn món, sau khi xong quay lại chat để tiếp tục hướng dẫn đặt ship.",
+      "Khách chưa đặt món. Mời khách qua trang Menu để chọn món nhanh hoặc mở trang chi tiết từng món để xem thông tin cụ thể. Tại trang chi tiết, khách có thể tạo và lưu công thức mới cho món để dùng lại ở những lần đặt sau. Sau khi chọn món xong, khách quay lại chat để tiếp tục hướng dẫn đặt ship.",
     options: [
       {
         id: "order_food.delivery.goto_delivery",
@@ -151,14 +151,15 @@ const chatbotCustomerScripts = {
 
   "order_food.delivery.goto_delivery": {
     intentSummary:
-      "Xác nhận khách đã chọn món xong, đã đưa khách tới trang đặt ship. Cho biết các bước tiếp theo sẽ được liệt kê ngay dưới đây.",
+      "Xác nhận khách đã chọn món xong, đã đưa khách tới trang đặt ship. Liệt kê lần lượt các bước.",
     stepsList: [
       "Chỉnh sửa số lượng của mỗi món nếu cần",
       "Nhập địa chỉ giao hàng",
+      "Chọn giờ hàng tới nếu muốn (giờ sau 22:00 sẽ được chuyển sang duyệt lúc 07:30 sáng hôm sau)",
       "Xác nhận thông tin đặt hàng",
       "Thanh toán",
     ],
-    afterNote: "Sau khi thanh toán xong, bạn có thể hủy đơn hàng, hoặc chờ nhà hàng duyệt và giao hàng đến.",
+    afterNote: "Nhà hàng sẽ bắt đầu giao hàng cho bạn sau khi chuẩn bị xong món ăn.",
     options: [
       { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],

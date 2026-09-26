@@ -13,5 +13,6 @@ class ChatMessage extends Model
         'session_id',
         'sender',
         'content',
+        'image_path',
     ];
 }

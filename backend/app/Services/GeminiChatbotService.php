@@ -29,13 +29,37 @@ QUY TẮC BẮT BUỘC:
 - CHỈ diễn đạt lại đúng nội dung được cho dưới đây, KHÔNG được bịa thêm bất kỳ chi tiết, hành động, hay khả năng nào không có trong nội dung gốc.
 - KHÔNG được tự nhận là đã "ghi lại", "lưu", "kiểm tra" hay "xử lý" bất cứ dữ liệu cụ thể nào (món ăn, đơn hàng...) nếu nội dung gốc không nói rõ điều đó.
 - Nếu nội dung gốc là một câu hỏi, hãy viết lại thành câu hỏi. Nếu là thông báo, viết lại thành thông báo. Không tự đổi loại câu.
+- Ưu tiên câu trả lời thật ngắn: tối đa 1 câu, chỉ giữ ý chính của nội dung gốc.
+- Chỉ viết 1 câu ngắn, tối đa 18 từ và khoảng 100 ký tự. Không liệt kê, không giải thích thêm, không dùng dấu ba chấm.
 
 Nội dung gốc cần truyền đạt cho khách: "{$targetIntentSummary}"
 
-Hãy viết MỘT câu trả lời hoàn chỉnh, tự nhiên, bám sát đúng nội dung gốc, không thêm bớt ý. Chỉ trả về câu trả lời, không thêm giải thích.
+Hãy viết MỘT câu trả lời hoàn chỉnh, tự nhiên, bám sát đúng nội dung gốc. Chỉ viết 1 câu ngắn, tối đa 18 từ và khoảng 100 ký tự. Chỉ trả về câu trả lời, không thêm giải thích.
 PROMPT;
 
-        return $this->callGemini($prompt, false)['text'] ?? $targetIntentSummary;
+        $response = $this->callGemini($prompt, false)['text'] ?? '';
+
+        return $this->compactChatReply($response !== '' ? $response : $targetIntentSummary);
+    }
+
+    private function compactChatReply(string $text): string
+    {
+        $text = trim((string) preg_replace('/\s+/u', ' ', strip_tags($text)));
+        if ($text === '') {
+            return self::UNCLEAR_FALLBACK;
+        }
+
+        $sentences = preg_split('/(?<=[.!?。！？])\s+/u', $text, 2);
+        $text = trim($sentences[0] ?? $text);
+
+        if (mb_strlen($text, 'UTF-8') <= 140) {
+            return $text;
+        }
+
+        $text = mb_substr($text, 0, 137, 'UTF-8');
+        $lastSpace = mb_strrpos($text, ' ', 0, 'UTF-8');
+
+        return rtrim(mb_substr($text, 0, $lastSpace ?: 137, 'UTF-8'), ' ,;:') . '...';
     }
 
     public function generateRatingResponse(int $rating, ?string $comment): string

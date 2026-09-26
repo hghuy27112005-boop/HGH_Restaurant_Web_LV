@@ -211,6 +211,18 @@ class OrderController extends Controller
                 if ($preferredDeliveryTime) {
                     $preferredAt = \Carbon\Carbon::createFromFormat('H:i', $preferredDeliveryTime)
                         ->setDate(now()->year, now()->month, now()->day);
+
+                    // Giờ hẹn trong ngày phải còn đủ 15 phút chuẩn bị và thời gian
+                    // giao thực tế. Giờ sau 22:00 vẫn được lưu để giao sáng hôm sau.
+                    $latestSameDayArrival = now()->copy()
+                        ->addMinutes(15 + $shippingResult['duration_minutes']);
+                    $closingTime = now()->copy()->setTime(22, 0, 0);
+                    if ($preferredAt->lte($closingTime) && $preferredAt->lt($latestSameDayArrival)) {
+                        DB::rollBack();
+                        return response()->json([
+                            'message' => 'Thời điểm giao hàng mong muốn chưa đủ 15 phút chuẩn bị và thời gian giao thực tế.',
+                        ], 422);
+                    }
                 }
 
                 \App\Models\Delivery::create([
@@ -320,7 +332,7 @@ class OrderController extends Controller
             $automaticStart = null;
             $automaticArrival = null;
             if ($delivery) {
-                $durationMinutes = (int) ($delivery->estimated_duration_minutes ?? 30) + 15;
+                $durationMinutes = (int) ($delivery->estimated_duration_minutes ?? 30);
                 $paidAt = $delivery->approved_at?->copy() ?? $delivery->updated_at?->copy();
                 if ($paidAt) {
                     $automaticStart = $delivery->getAutomaticStartAt($paidAt, $durationMinutes);

@@ -89,8 +89,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     //Chatbot
     Route::get('/chatbot/session', [ChatbotController::class, 'getSession']);
     Route::post('/chatbot/interact', [ChatbotController::class, 'interact']);
+    Route::post('/chatbot/images', [ChatbotController::class, 'uploadImage']);
+    Route::get('/chatbot/images', [ChatbotController::class, 'imagesByDate']);
     Route::get('/chatbot/chat-days', [ChatbotController::class, 'chatDays']);
     Route::get('/chatbot/messages-by-date', [ChatbotController::class, 'messagesByDate']);
+    Route::delete('/chatbot/messages-by-date', [ChatbotController::class, 'deleteMessagesByDate']);
     Route::get('/chatbot/moderation-status', [ChatbotController::class, 'moderationStatus']);
 
     // Ratings (đánh giá dịch vụ)

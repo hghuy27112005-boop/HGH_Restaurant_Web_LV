@@ -100,7 +100,7 @@ class Delivery extends Model
             ->with('order')
             ->get()
             ->each(function (self $delivery) use ($now): void {
-                $durationMinutes = (int) ($delivery->estimated_duration_minutes ?? 30) + 15;
+                $durationMinutes = (int) ($delivery->estimated_duration_minutes ?? 30);
                 $paidAt = $delivery->approved_at?->copy() ?? $delivery->updated_at?->copy() ?? $now->copy();
                 $startAt = $delivery->getAutomaticStartAt($paidAt, $durationMinutes);
 
@@ -138,17 +138,18 @@ class Delivery extends Model
     {
         $opening = $paidAt->copy()->setTime(7, 30, 0);
         $closing = $paidAt->copy()->setTime(22, 0, 0);
+        $earliestApproval = $paidAt->copy()->addMinutes(15);
 
         if ($this->preferred_delivery_time && Carbon::parse($this->preferred_delivery_time)->format('H:i') <= '22:00') {
             $preferredAt = $paidAt->copy()->setTimeFromTimeString((string) $this->preferred_delivery_time);
-            $startAt = $preferredAt->copy()->subMinutes($durationMinutes);
-            if ($startAt->lte($paidAt)) {
-                $startAt = $opening->copy()->addDay();
-            }
+            $startAt = $preferredAt->copy()->subMinutes($durationMinutes + 15);
+            // Nếu giờ khách chọn quá gần, vẫn giao trong ngày từ thời điểm sớm
+            // nhất có thể duyệt; thời điểm tới thực tế sẽ muộn hơn giờ khách chọn.
+            $startAt = $startAt->max($earliestApproval);
         } elseif ($this->preferred_delivery_time) {
             $startAt = $opening->copy()->addDay();
         } else {
-            $startAt = $paidAt->copy()->addMinutes(15);
+            $startAt = $earliestApproval;
         }
 
         $startAt = $startAt->max($opening);

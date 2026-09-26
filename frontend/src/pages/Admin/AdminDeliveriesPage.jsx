@@ -116,18 +116,20 @@ const AdminDeliveriesPage = () => {
     };
 
     const getExpectedDeliveryStart = (delivery) => {
-        const durationMinutes = (delivery.estimated_duration_minutes ?? 30) + 15;
+        const durationMinutes = delivery.estimated_duration_minutes ?? 30;
         const paidAt = delivery.approved_at ? new Date(delivery.approved_at) : new Date(delivery.updated_at);
         if (Number.isNaN(paidAt.getTime())) return null;
 
         const expectedStart = new Date(paidAt);
         expectedStart.setSeconds(0, 0);
+        const earliestApproval = new Date(paidAt.getTime() + 15 * 60000);
         if (delivery.preferred_delivery_time) {
             const [hours, minutes] = String(delivery.preferred_delivery_time).split(':').map(Number);
             expectedStart.setHours(hours, minutes, 0, 0);
-            expectedStart.setMinutes(expectedStart.getMinutes() - durationMinutes);
+            expectedStart.setMinutes(expectedStart.getMinutes() - durationMinutes - 15);
+            if (expectedStart < earliestApproval) expectedStart.setTime(earliestApproval.getTime());
         } else {
-            expectedStart.setMinutes(expectedStart.getMinutes() + 15);
+            expectedStart.setTime(earliestApproval.getTime());
         }
 
         const opening = new Date(paidAt);
@@ -152,7 +154,7 @@ const AdminDeliveriesPage = () => {
     const getExpectedDeliveryArrival = (delivery) => {
         const start = getExpectedDeliveryStart(delivery);
         if (!start) return null;
-        return new Date(start.getTime() + ((delivery.estimated_duration_minutes ?? 30) + 15) * 60000);
+        return new Date(start.getTime() + (delivery.estimated_duration_minutes ?? 30) * 60000);
     };
 
     const formatExpectedDateTime = (value) => value
@@ -384,7 +386,7 @@ const AdminDeliveriesPage = () => {
                                         <p className="text-xs text-gray-500">Thời gian giao hàng dự kiến</p>
                                         <p className="text-sm font-semibold">
                                             {selectedDelivery.estimated_duration_minutes != null
-                                                ? `${selectedDelivery.estimated_duration_minutes + 15} phút (Đã gồm 15 phút lấy hàng để giao)`
+                                                ? `${selectedDelivery.estimated_duration_minutes} phút`
                                                 : '—'}
                                         </p>
                                     </div>

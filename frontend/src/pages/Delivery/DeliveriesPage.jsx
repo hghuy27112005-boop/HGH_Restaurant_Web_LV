@@ -238,7 +238,7 @@ const DeliveriesPage = () => {
         const now = new Date();
         const todayClose = new Date(now);
         todayClose.setHours(22, 0, 0, 0);
-        const durationMinutes = (shippingPreview.duration_minutes ?? 0) + 15;
+        const durationMinutes = shippingPreview.duration_minutes ?? 0;
         const estimatedFinish = new Date(now.getTime() + durationMinutes * 60000);
         return estimatedFinish > todayClose;
     };
@@ -254,7 +254,7 @@ const DeliveriesPage = () => {
 
     const getEarliestArrivalTime = () => {
         if (!shippingPreview) return null;
-        const totalDurationMinutes = Number(shippingPreview.duration_minutes ?? 0) + 15;
+        const totalDurationMinutes = Number(shippingPreview.duration_minutes ?? 0);
         return new Date(Math.ceil((getEarliestApprovalTime().getTime() + totalDurationMinutes * 60000) / 60000) * 60000);
     };
 
@@ -741,7 +741,7 @@ const DeliveriesPage = () => {
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Thời gian giao dự kiến:</span>
-                                                    <span className="font-semibold">{shippingPreview.duration_minutes + 15} phút</span>
+                                                    <span className="font-semibold">{shippingPreview.duration_minutes} phút</span>
                                                 </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Phí ship (thu riêng khi nhận hàng):</span>

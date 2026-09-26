@@ -16,8 +16,11 @@
 
 === ĐẶT SHIP ===
 - Không giới hạn khung giờ đặt, có thể đặt bất cứ lúc nào.
-- Nhập địa chỉ giao hàng, hệ thống tự tính khoảng cách/thời gian/phí ship. Thời gian giao dự kiến có cộng thêm 15 phút chuẩn bị hàng trước khi giao.
-- Sau khi thanh toán, đơn cần nhà hàng chúng tôi duyệt trước khi bắt đầu giao. Đơn hàng chỉ được duyệt trong khung giờ từ 07:30 sáng đến 22:00 mỗi ngày, và chỉ khi đủ thời gian hoàn tất giao trước 22:00. Nếu đặt ngoài khung giờ này, đơn sẽ được duyệt vào sáng hôm sau.
+- Nhập địa chỉ giao hàng, hệ thống tự tính khoảng cách, thời gian giao thực tế và phí ship. Thời gian giao không bao gồm 15 phút chuẩn bị hàng.
+- Sau khi thanh toán, đơn cần được duyệt để bắt đầu giao. Thời điểm duyệt sớm nhất là 15 phút sau khi thanh toán để nhà hàng chuẩn bị hàng.
+- Đơn không chọn giờ nhận sẽ được duyệt sau 15 phút kể từ khi thanh toán, nhưng không sớm hơn 07:30. Nếu không thể hoàn tất giao trước 22:00, đơn sẽ được lưu lại và tự động duyệt lúc 07:30 sáng hôm sau.
+- Với đơn có chọn giờ nhận, thời điểm bắt đầu được tính bằng giờ nhận mong muốn trừ thời gian giao thực tế và 15 phút chuẩn bị. Nếu giờ nhận đã qua hoặc chưa đủ thời gian chuẩn bị và giao hàng, hệ thống sẽ yêu cầu khách chọn giờ khác. Nếu chọn giờ sau 22:00, khách vẫn có thể đặt đơn và đơn sẽ được tự động duyệt lúc 07:30 sáng hôm sau.
+- Khi bắt đầu giao, thời điểm hàng tới = thời điểm bắt đầu giao + thời gian giao thực tế; 15 phút chuẩn bị không bị cộng lặp vào thời gian giao.
 - Có thể hủy đơn sau khi thanh toán nhưng trước khi nhà hàng chúng tôi duyệt bắt đầu giao.
 - Thanh toán bằng VNPay hoặc bằng Điểm tích lũy.
 
@@ -49,6 +52,7 @@
 - Có thể lọc/xem món theo từng loại món, bao gồm cả bestseller.
 - Nếu khách hỏi về nguyên liệu, thành phần, công thức, cách nấu hoặc các bước chế biến của một món ăn cụ thể, hãy dẫn khách đến trang chi tiết món đó để xem đầy đủ thông tin.
 - Khi dẫn khách tới trang chi tiết món, nhắc: "Bạn có thể tự do bỏ bớt các nguyên liệu mà bạn không thích, sau đó xác nhận nguyên liệu để tạo 1 công thức mới."
+- Khi khách hàng đặt món thì cũng có thể đặt theo các công thức thay thế mà khách đã tạo.
 - Ngoài ra, các món bestseller cũng được hiển thị trực tiếp ngay tại trang chủ của nhà hàng (nhưng khi tư vấn thì ưu tiên dẫn khách tới trang thực đơn cho nhanh gọn)
 - Sau khi đã đặt và thanh toán đơn hàng, khách có thể đánh giá món ăn theo số sao và viết nhận xét góp ý cho từng món.
 - Món được khách đánh giá cao hoặc khen ngợi (từ 4 sao trở lên) sẽ được tự động thêm hoặc ưu tiên trong danh sách món yêu thích của khách.

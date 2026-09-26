@@ -45,7 +45,12 @@ class ChatbotController extends Controller
         $messages = ChatMessage::where('session_id', $session->session_id)
             ->whereBetween('created_at', [$todayStart, $todayEnd])
             ->orderBy('created_at')
-            ->get(['sender', 'content', 'created_at']);
+            ->get(['sender', 'content', 'image_path', 'created_at']);
+
+        $messages->transform(function ($message) {
+            $message->image_url = $message->image_path ? asset($message->image_path) : null;
+            return $message;
+        });
 
         return response()->json([
             'success' => true,
@@ -383,8 +388,156 @@ class ChatbotController extends Controller
         $messages = ChatMessage::where('session_id', $session->session_id)
             ->whereBetween('created_at', [$date->copy()->startOfDay(), $date->copy()->endOfDay()])
             ->orderBy('created_at')
-            ->get(['sender', 'content', 'created_at']);
+            ->get(['sender', 'content', 'image_path', 'created_at']);
+
+        $messages->transform(function ($message) {
+            $message->image_url = $message->image_path ? asset($message->image_path) : null;
+            return $message;
+        });
 
         return response()->json(['success' => true, 'messages' => $messages]);
+    }
+
+    public function uploadImage(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpeg,jpg,png,gif,webp,bmp,tif,tiff,avif,heic,heif,svg|max:10240',
+        ], [
+            'image.required' => 'Vui lòng chọn ảnh.',
+            'image.image' => 'File phải là ảnh.',
+            'image.mimes' => 'File phải là định dạng hình ảnh được hỗ trợ.',
+            'image.max' => 'Ảnh không được vượt quá 10MB.',
+        ]);
+
+        $user = Auth::user();
+        $session = ChatSession::firstOrCreate(
+            ['user_id' => $user->user_id],
+            ['current_node_id' => 'root', 'context_data' => []]
+        );
+
+        $userFolder = $user->user_id . '_pics';
+        $dateFolder = $userFolder . '_' . now()->format('d-m-y');
+        $relativeDir = 'chat_pictures/' . $userFolder . '/' . $dateFolder;
+        $dir = public_path($relativeDir);
+
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $file = $request->file('image');
+        $sequence = 0;
+        $existingImageFiles = glob(public_path('chat_pictures/' . $userFolder . '/*/*')) ?: [];
+        foreach ($existingImageFiles as $existingImageFile) {
+            if (preg_match('/^' . preg_quote((string) $user->user_id, '/') . '_(\d+)_\d{2}-\d{2}-\d{2}\./', basename($existingImageFile), $matches)) {
+                $sequence = max($sequence, (int) $matches[1]);
+            }
+        }
+
+        $sequence++;
+        $sequenceText = str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
+        $dateText = now()->format('d-m-y');
+        $filename = $user->user_id . '_' . $sequenceText . '_' . $dateText . '.' . strtolower($file->getClientOriginalExtension() ?: 'jpg');
+        $file->move($dir, $filename);
+
+        $imagePath = $relativeDir . '/' . $filename;
+        $message = ChatMessage::create([
+            'session_id' => $session->session_id,
+            'sender' => 'user',
+            'content' => '[Hình ảnh]',
+            'image_path' => $imagePath,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => [
+                'message_id' => $message->message_id,
+                'sender' => $message->sender,
+                'content' => $message->content,
+                'image_path' => $imagePath,
+                'image_url' => asset($imagePath),
+                'created_at' => $message->created_at,
+            ],
+        ]);
+    }
+
+    public function imagesByDate()
+    {
+        $user = Auth::user();
+        $userFolder = $user->user_id . '_pics';
+        $root = public_path('chat_pictures/' . $userFolder);
+        $today = now()->startOfDay();
+        $imagesByDate = [];
+
+        if (!is_dir($root)) {
+            return response()->json(['success' => true, 'images' => []]);
+        }
+
+        foreach (glob($root . '/' . $userFolder . '_*', GLOB_ONLYDIR) ?: [] as $dateDirectory) {
+            $dateFolder = basename($dateDirectory);
+            if (!preg_match('/^' . preg_quote($userFolder, '/') . '_(\d{2})-(\d{2})-(\d{2})$/', $dateFolder, $dateMatches)) {
+                continue;
+            }
+
+            $date = \Carbon\Carbon::createFromFormat('d-m-y', $dateMatches[1] . '-' . $dateMatches[2] . '-' . $dateMatches[3])->startOfDay();
+            if ($date->lt($today->copy()->subDays(6)) || $date->gt($today)) {
+                continue;
+            }
+
+            $dateKey = $date->format('Y-m-d');
+            $items = [];
+            foreach (glob($dateDirectory . '/*.*') ?: [] as $imageFile) {
+                $filename = basename($imageFile);
+                if (!preg_match('/^' . preg_quote((string) $user->user_id, '/') . '_(\d+)_\d{2}-\d{2}-\d{2}\.[^.]+$/', $filename, $fileMatches)) {
+                    continue;
+                }
+
+                $relativePath = 'chat_pictures/' . $userFolder . '/' . $dateFolder . '/' . $filename;
+                $items[] = [
+                    'sequence' => (int) $fileMatches[1],
+                    'filename' => $filename,
+                    'image_path' => $relativePath,
+                    'image_url' => asset($relativePath),
+                ];
+            }
+
+            usort($items, fn ($first, $second) => $second['sequence'] <=> $first['sequence']);
+            if ($items !== []) {
+                $imagesByDate[$dateKey] = [
+                    'date' => $dateKey,
+                    'label' => $dateKey === $today->format('Y-m-d')
+                        ? 'Hình ảnh hôm nay'
+                        : 'Hình ảnh ngày ' . $date->format('d/m/Y'),
+                    'images' => $items,
+                ];
+            }
+        }
+
+        krsort($imagesByDate);
+
+        return response()->json(['success' => true, 'images' => array_values($imagesByDate)]);
+    }
+
+    public function deleteMessagesByDate(Request $request)
+    {
+        $request->validate(['date' => 'required|date_format:Y-m-d']);
+
+        $user = Auth::user();
+        $session = ChatSession::where('user_id', $user->user_id)->first();
+
+        if (!$session) {
+            return response()->json(['success' => true]);
+        }
+
+        $date = \Carbon\Carbon::createFromFormat('Y-m-d', $request->date);
+
+        ChatMessage::where('session_id', $session->session_id)
+            ->whereBetween('created_at', [$date->copy()->startOfDay(), $date->copy()->endOfDay()])
+            ->delete();
+
+        if ($request->date === now()->format('Y-m-d')) {
+            $session->update(['current_node_id' => 'root']);
+        }
+
+        return response()->json(['success' => true]);
     }
 }
