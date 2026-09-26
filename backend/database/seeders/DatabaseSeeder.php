@@ -90,6 +90,11 @@ class DatabaseSeeder extends Seeder
         }
         File::makeDirectory($avatarsPath, 0755, true);
 
+        $chatPicturesPath = public_path('chat_pictures');
+        if (File::exists($chatPicturesPath)) {
+            File::cleanDirectory($chatPicturesPath);
+        }
+
         // 3. Seed Users
         DB::table('users')->insert([
             [
