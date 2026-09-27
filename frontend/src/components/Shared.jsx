@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export const Loading = () => (
     <div className="flex justify-center items-center min-h-screen">
@@ -61,13 +61,52 @@ export const WarningMessage = ({ message, onClose }) => (
     </div>
 );
 
-export const Modal = ({ isOpen, title, titleClassName = '', className = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng', onSecondary, secondaryText = 'Quay lại', secondaryClassName = '', onTertiary, tertiaryText = 'Quay lại', tertiaryClassName = '' }) => {
+let modalOpenCount = 0;
+
+export const Modal = ({ isOpen, title, titleClassName = '', className = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng', onSecondary, secondaryText = 'Quay lại', secondaryClassName = '', onTertiary, tertiaryText = 'Quay lại', tertiaryClassName = '', showHeaderClose = false, showFooterClose = true }) => {
+    const [zIndex, setZIndex] = useState(50);
+    const mouseDownOnBackdrop = useRef(false);
+
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        modalOpenCount += 1;
+        setZIndex(50 + modalOpenCount);
+        return () => {
+            modalOpenCount -= 1;
+        };
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
+    // Chỉ đóng khi cả mousedown và mouseup đều rơi đúng trên backdrop —
+    // tránh đóng nhầm khi kéo chuột bôi đen text trong modal rồi thả ra ngoài.
+    const handleBackdropMouseDown = (e) => {
+        mouseDownOnBackdrop.current = e.target === e.currentTarget;
+    };
+
+    const handleBackdropMouseUp = (e) => {
+        if (mouseDownOnBackdrop.current && e.target === e.currentTarget) {
+            onClose?.();
+        }
+        mouseDownOnBackdrop.current = false;
+    };
+
     return (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
+        <div
+            className="fixed inset-0 flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex }}
+            onMouseDown={handleBackdropMouseDown}
+            onMouseUp={handleBackdropMouseUp}
+        >
             <div className={`bg-white rounded-lg shadow-lg p-6 w-full mx-4 ${className || 'max-w-md'}`}>
-                <h2 className={`-mx-6 -mt-6 mb-4 rounded-t-lg bg-red-600 px-6 py-4 text-xl font-bold ${titleClassName} text-white`}>{title}</h2>
+                <h2 className={`-mx-6 -mt-6 mb-4 flex items-center justify-between gap-4 rounded-t-lg bg-red-600 px-6 py-4 text-xl font-bold ${titleClassName} text-white`}>
+                    <span>{title}</span>
+                    {showHeaderClose && (
+                        <button type="button" onClick={onClose} aria-label="Đóng" className="text-2xl leading-none text-white hover:text-red-100">
+                            ×
+                        </button>
+                    )}
+                </h2>
                 <div className="mb-6">{children}</div>
                 <div className="flex gap-2 justify-end">
                     {onSecondary && (
@@ -86,12 +125,14 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                             {tertiaryText}
                         </button>
                     )}
-                    <button
-                        onClick={onClose}
-                        className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-                    >
-                        {cancelText}
-                    </button>
+                    {showFooterClose && (
+                        <button
+                            onClick={onClose}
+                            className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+                        >
+                            {cancelText}
+                        </button>
+                    )}
                     {onConfirm && (
                         <button
                             onClick={onConfirm}

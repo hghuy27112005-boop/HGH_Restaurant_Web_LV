@@ -62,6 +62,7 @@ const DeliveriesPage = () => {
     const [currentPoints, setCurrentPoints] = useState(0);
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
+    const [cancelErrorMessage, setCancelErrorMessage] = useState(null);
     const [stockErrorItems, setStockErrorItems] = useState(null); // null = ẩn, [...] = danh sách món vượt kho
     const [searchBillId, setSearchBillId] = useState('');
     const [createdDateFilter, setCreatedDateFilter] = useState(getTodayDateKey);
@@ -280,7 +281,7 @@ const DeliveriesPage = () => {
     };
 
     const isPreferredTimeTooEarly = () => {
-        if (!hasValidPreferredDeliveryTime() || isPreferredTimeAfterClosing()) return false;
+        if (!preferredDeliveryEnabled || !hasValidPreferredDeliveryTime() || isPreferredTimeAfterClosing()) return false;
         const selected = Number(preferredTimeH) * 60 + Number(preferredTimeM);
         const earliestArrival = getEarliestArrivalTime();
         if (!earliestArrival) return false;
@@ -502,10 +503,10 @@ const DeliveriesPage = () => {
                 const res = await vnpayService.createRefundUrl({ order_id: cancelingBill.order_id });
                 window.location.href = res.data.payment_url;
             } else {
-                alert('Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.');
+                setCancelErrorMessage('Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.');
             }
         } catch (err) {
-            alert('Lỗi hủy đơn: ' + (err.response?.data?.message || err.message));
+            setCancelErrorMessage('Lỗi hủy đơn: ' + (err.response?.data?.message || err.message));
         } finally {
             setCancelModalOpen(false);
             setCancelingBill(null);
@@ -760,7 +761,7 @@ const DeliveriesPage = () => {
                                                         className={`relative inline-flex items-center w-14 h-7 rounded-full border-2 border-white shadow-inner transition-colors duration-200 flex-shrink-0 ${preferredDeliveryEnabled ? 'bg-green-500' : 'bg-gray-400'}`}
                                                         aria-label="Bật thời điểm giao hàng mong muốn"
                                                     >
-                                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${preferredDeliveryEnabled ? 'translate-x-1' : 'translate-x-8'}`} />
+                                                        <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${preferredDeliveryEnabled ? 'translate-x-8' : 'translate-x-1'}`} />
                                                     </button>
                                                 </div>
                                                 <p className="mt-1 text-xs text-gray-500">Bạn muốn hàng được giao tới lúc mấy giờ?</p>
@@ -1090,6 +1091,16 @@ const DeliveriesPage = () => {
                         </div>
                     </div>
                 )}
+
+                {/* Cancel Order Error Modal - dùng chung component Modal */}
+                <Modal
+                    isOpen={!!cancelErrorMessage}
+                    title="Lỗi hủy đơn"
+                    onClose={() => setCancelErrorMessage(null)}
+                    cancelText="Đóng"
+                >
+                    <p className="text-gray-700">{cancelErrorMessage}</p>
+                </Modal>
 
                 {/* Filter Buttons */}
                 <div className="flex gap-2 mb-8 overflow-x-auto">

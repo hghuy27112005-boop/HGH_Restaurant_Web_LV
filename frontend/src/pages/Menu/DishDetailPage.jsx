@@ -249,99 +249,12 @@ const getDishData = (response) => response.data?.data || response.data || [];
 
 const splitIngredients = (value = '') => value.split(',').map((item) => item.trim()).filter(Boolean);
 
+const normalizeIngredientSet = (list = []) => [...new Set(list.map((item) => item.trim().toLowerCase()))].sort().join('|');
+
 const splitInstructions = (instructions = '') => instructions
     .split(/(?<=[.!?])\s+/)
     .map((step) => step.trim().replace(/[.]$/, ''))
     .filter(Boolean);
-
-const ingredientPattern = (ingredient) => {
-    const escaped = ingredient.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?:s)?(?![\\p{L}\\p{N}])`, 'iu');
-};
-
-const ingredientLabelVariants = (ingredient) => {
-    const labels = new Set();
-    const addLabel = (label) => {
-        const normalized = label.trim();
-        if (normalized) labels.add(normalized);
-    };
-
-    addLabel(ingredient);
-    addLabel(translateIngredients(ingredient));
-
-    // Recipes often omit descriptive words from the ingredient list:
-    // "fresh ginger" appears as just "ginger", and "gừng tươi" as "gừng".
-    const englishBase = ingredient
-        .replace(/^(?:fresh|dried|ground|chopped|sliced|diced|crushed|cooked|raw|boneless|skinless|plain|whole|long|green|white|black|sweet|red|heavy|hot|cold)\s+/gi, '')
-        .replace(/\s+(?:halves?|fillets?|leaves?|cloves?|ribs?|pieces?)$/i, '')
-        .trim();
-    addLabel(englishBase);
-
-    const vietnameseLabel = translateIngredients(ingredient);
-    const vietnameseBase = vietnameseLabel
-        .replace(/^(?:hỗn hợp|miếng|tép|cọng|lá|hạt)\s+/iu, '')
-        .replace(/\s+(?:tươi|khô|xay|băm|thái nhỏ|thái hạt lựu|đã nấu|đã nấu chín)$/iu, '')
-        .trim();
-    addLabel(vietnameseBase);
-
-    return [...labels].sort((left, right) => right.length - left.length);
-};
-
-const removeIngredientFromInstructions = (instructions = '', removedIngredients = []) => {
-    const labels = removedIngredients
-        .flatMap(ingredientLabelVariants)
-        .flatMap((ingredient) => [
-            ingredient,
-            ingredient.replace(/\s+cheese$/i, ''),
-            ingredient.replace(/^phô mai\s+/i, ''),
-        ])
-        .filter(Boolean)
-        .sort((left, right) => right.length - left.length);
-    const removedCheeseTypes = labels.filter((label) => /(?:mozzarella|parmesan|phô mai)/i.test(label));
-    const allKnownCheeseRemoved = removedCheeseTypes.some((label) => /mozzarella/i.test(label))
-        && removedCheeseTypes.some((label) => /parmesan/i.test(label));
-
-    return splitInstructions(instructions)
-        .map((step) => {
-            let clauses = step.split(/\s*;\s*|\s*,\s*/);
-            let changed = false;
-            labels.forEach((label) => {
-                const pattern = ingredientPattern(label);
-                clauses = clauses
-                    .map((clause) => {
-                        if (!pattern.test(clause)) {
-                            return clause;
-                        }
-
-                        changed = true;
-
-                        const escaped = label.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        return clause
-                            .replace(new RegExp(`(?:in|with|together with|trong|với|cùng|add|cho|thêm|xếp|rắc)\\s+${escaped}`, 'iu'), '')
-                            .replace(pattern, '')
-                            .replace(/\s{2,}/g, ' ')
-                            .trim();
-                    })
-                    .filter(Boolean);
-            });
-            return clauses
-                .map((clause) => clause.trim())
-                .filter((clause) => !/^(?:put|place|add|cho|xếp|rắc)\s+(?:in|into|on|vào|lên|trên)\s*(?:the\s+)?(?:pan|chảo|top|trên)?\b.*$/i.test(clause))
-                .join(', ')
-                .replace(allKnownCheeseRemoved ? /\s*(?:and|và)?\s*cook(?:ing)?\s+until\s+the\s+cheese\s+melted?/gi : /(?!)/, '')
-                .replace(allKnownCheeseRemoved ? /\s*(?:và\s+)?nấu đến khi phô mai tan/gi : /(?!)/, '')
-                .replace(changed ? /\s+(?:and|then|rồi|và)\s+/gi : /(?!)/, ' ')
-                .replace(/\s+(?:and|then|rồi|và)\s*(?=,|$)/gi, '')
-                .replace(/,\s*(?:and|then|rồi|và)\s+/gi, ', ')
-                .replace(/\b(?:in|with|and|then|rồi|và)\s+(?=,|$)/gi, '')
-                .replace(/\s+,/g, ',')
-                .replace(/,\s*,/g, ',')
-                .replace(/\s{2,}/g, ' ')
-                .trim();
-        })
-        .filter(Boolean)
-        .join('. ');
-};
 
 const DishDetailPage = () => {
     const { id } = useParams();
@@ -351,6 +264,8 @@ const DishDetailPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+    const [alertMessage, setAlertMessage] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [orderType, setOrderType] = useState('mang-ve');
     const [recipeModalOpen, setRecipeModalOpen] = useState(false);
@@ -360,6 +275,7 @@ const DishDetailPage = () => {
     const [selectedIngredients, setSelectedIngredients] = useState([]);
     const [draftRecipe, setDraftRecipe] = useState(null);
     const [savingRecipe, setSavingRecipe] = useState(false);
+    const [generatingPreview, setGeneratingPreview] = useState(false);
     const [selectedCustomization, setSelectedCustomization] = useState(null);
 
     useEffect(() => {
@@ -389,7 +305,7 @@ const DishDetailPage = () => {
 
     const openOrderModal = (type) => {
         if (!isAuthenticated) {
-            alert('Vui lòng đăng nhập để thực hiện thao tác này');
+            setAlertMessage('Vui lòng đăng nhập để thực hiện thao tác này');
             navigate('/login?tab=register');
             return;
         }
@@ -397,13 +313,6 @@ const DishDetailPage = () => {
         setOrderType(type);
         setSelectedCustomization(null);
         setIsModalOpen(true);
-    };
-
-    const recipeInstructionsInVietnamese = (recipe) => {
-        const baseInstructions = recipeTranslations[selectedDish.dish_name] || '';
-        return recipe.removed_ingredients?.length
-            ? removeIngredientFromInstructions(baseInstructions, recipe.removed_ingredients.map(translateIngredients))
-            : baseInstructions;
     };
 
     const handleDecreaseQty = () => {
@@ -432,12 +341,12 @@ const DishDetailPage = () => {
         const maxQty = selectedDish?.quantity_left ?? 10;
 
         if (Number.isNaN(qty) || qty < 1) {
-            alert('Vui lòng nhập số lượng hợp lệ!');
+            setAlertMessage('Vui lòng nhập số lượng hợp lệ!');
             return;
         }
 
         if (qty > maxQty) {
-            alert('Đặt hàng quá số lượng còn lại');
+            setAlertMessage('Đặt hàng quá số lượng còn lại');
             return;
         }
 
@@ -459,7 +368,7 @@ const DishDetailPage = () => {
         });
         localStorage.setItem(cartKey, JSON.stringify(cart));
         setIsModalOpen(false);
-        alert(`Thành công! Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'giao hàng' : 'đặt bàn'}.`);
+        setSuccessMessage(`Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'Giao hàng' : 'Đặt bàn'}.`);
     };
 
     const customRecipes = selectedDish?.custom_recipes || [];
@@ -492,22 +401,48 @@ const DishDetailPage = () => {
             : [...current, ingredient]);
     };
 
-    const confirmRecipeIngredients = () => {
+    const confirmRecipeIngredients = async () => {
         const removed = originalIngredients.filter((ingredient) => !selectedIngredients.includes(ingredient));
-        const baseInstructions = selectedDish.recipe_instructions || '';
-        const englishInstructions = removeIngredientFromInstructions(baseInstructions, removed);
-        const vietnameseInstructions = removeIngredientFromInstructions(
-            recipeTranslations[selectedDish.dish_name] || '',
-            removed.map(translateIngredients),
-        );
-        setDraftRecipe({
-            ...(draftRecipe || {}),
-            ingredients: selectedIngredients.join(', '),
-            recipe_instructions: englishInstructions,
-            removed_ingredients: removed,
-            previewInstructions: vietnameseInstructions,
+
+        if (removed.length === 0) {
+            setAlertMessage('Vui lòng bỏ ít nhất một nguyên liệu để tạo công thức mới.');
+            return;
+        }
+
+        const newSetKey = normalizeIngredientSet(selectedIngredients);
+        const duplicate = customRecipes.find((recipe) => {
+            if (draftRecipe?.dish_customization_id && recipe.dish_customization_id === draftRecipe.dish_customization_id) {
+                return false;
+            }
+            return normalizeIngredientSet(splitIngredients(recipe.ingredients)) === newSetKey;
         });
-        setRecipeModalView('preview');
+
+        if (duplicate) {
+            setAlertMessage(`Trùng lặp nguyên liệu với công thức: "${duplicate.recipe_name}".`);
+            return;
+        }
+
+        setGeneratingPreview(true);
+        try {
+            const response = await dishCustomizationAPI.preview(selectedDish.dish_id, {
+                original_instructions_vi: recipeTranslations[selectedDish.dish_name] || '',
+                removed_ingredients_vi: removed.map(translateIngredients),
+            });
+            const revisedInstructions = response.data.revised_instructions;
+
+            setDraftRecipe({
+                ...(draftRecipe || {}),
+                ingredients: selectedIngredients.join(', '),
+                recipe_instructions: revisedInstructions,
+                removed_ingredients: removed,
+                previewInstructions: revisedInstructions,
+            });
+            setRecipeModalView('preview');
+        } catch (previewError) {
+            setAlertMessage('Không thể tạo công thức mới lúc này. Vui lòng thử lại.');
+        } finally {
+            setGeneratingPreview(false);
+        }
     };
 
     const handleRecipeBack = () => {
@@ -519,11 +454,8 @@ const DishDetailPage = () => {
     };
 
     const saveRecipe = async () => {
-        const removed = originalIngredients.filter((ingredient) => !selectedIngredients.includes(ingredient));
-        const baseInstructions = selectedDish.recipe_instructions || '';
-        const englishInstructions = removeIngredientFromInstructions(baseInstructions, removed);
-        if (!recipeName.trim() || selectedIngredients.length === originalIngredients.length) {
-            alert('Vui lòng nhập tên và bỏ ít nhất một nguyên liệu.');
+        if (!recipeName.trim() || !draftRecipe?.recipe_instructions) {
+            setAlertMessage('Vui lòng nhập tên công thức.');
             return;
         }
 
@@ -532,9 +464,9 @@ const DishDetailPage = () => {
             const response = await dishCustomizationAPI.save(selectedDish.dish_id, {
                 customization_id: draftRecipe?.dish_customization_id,
                 recipe_name: recipeName.trim(),
-                ingredients: selectedIngredients.join(', '),
-                recipe_instructions: englishInstructions,
-                removed_ingredients: removed,
+                ingredients: draftRecipe.ingredients,
+                recipe_instructions: draftRecipe.recipe_instructions,
+                removed_ingredients: draftRecipe.removed_ingredients,
                 replacements: [],
             });
             const saved = response.data.custom_recipe;
@@ -545,7 +477,7 @@ const DishDetailPage = () => {
             setSelectedRecipe(null);
             setDraftRecipe(null);
         } catch (saveError) {
-            alert('Không thể lưu công thức thay thế. Vui lòng thử lại.');
+            setAlertMessage('Không thể lưu công thức thay thế. Vui lòng thử lại.');
         } finally {
             setSavingRecipe(false);
         }
@@ -664,12 +596,30 @@ const DishDetailPage = () => {
                 </div>
             </Modal>
             <Modal
+                isOpen={Boolean(successMessage)}
+                title="Đặt món thành công"
+                showHeaderClose
+                showFooterClose={false}
+                onClose={() => setSuccessMessage('')}
+            >
+                <p className="text-gray-700">{successMessage}</p>
+            </Modal>
+            <Modal
+                isOpen={Boolean(alertMessage)}
+                title="Thông báo"
+                showHeaderClose
+                showFooterClose={false}
+                onClose={() => setAlertMessage('')}
+            >
+                <p className="text-gray-700">{alertMessage}</p>
+            </Modal>
+            <Modal
                 isOpen={recipeModalOpen}
                 className="max-w-3xl max-h-[90vh] overflow-y-auto"
                 title={recipeModalView === 'list' ? 'Công thức thay thế' : recipeModalView === 'detail' ? selectedRecipe?.recipe_name : recipeModalView === 'preview' ? 'Công thức mới' : draftRecipe ? 'Chỉnh sửa công thức' : 'Tạo công thức'}
                 onClose={() => setRecipeModalOpen(false)}
                 onSecondary={recipeModalView === 'detail' ? () => startEditRecipe(selectedRecipe) : recipeModalView === 'ingredients' || recipeModalView === 'preview' ? handleRecipeBack : undefined}
-                secondaryText="Quay lại"
+                secondaryText={recipeModalView === 'detail' ? 'Chỉnh sửa' : 'Quay lại'}
                 secondaryClassName={recipeModalView === 'detail' ? 'font-semibold !border-amber-600 !text-amber-700 hover:!bg-amber-50' : ''}
                 onTertiary={recipeModalView === 'detail' ? () => setRecipeModalView('list') : undefined}
                 tertiaryText="Quay lại"
@@ -704,7 +654,7 @@ const DishDetailPage = () => {
                         <div>
                             <h4 className="font-semibold text-red-600">Công thức nấu</h4>
                             <ol className="mt-1 list-decimal list-inside space-y-1 text-gray-700">
-                                {splitInstructions(recipeInstructionsInVietnamese(selectedRecipe)).map((step, index) => <li key={index}>{step}.</li>)}
+                                {splitInstructions(selectedRecipe.recipe_instructions).map((step, index) => <li key={index}>{step}.</li>)}
                             </ol>
                         </div>
                     </div>
@@ -726,8 +676,8 @@ const DishDetailPage = () => {
                             </div>
                             <p className="mt-3 text-sm text-gray-600">Quý khách vui lòng nhấn chọn nguyên liệu muốn bỏ ra</p>
                         </div>
-                        <button type="button" onClick={confirmRecipeIngredients} className="rounded bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700">
-                            Xác nhận nguyên liệu
+                        <button type="button" onClick={confirmRecipeIngredients} disabled={generatingPreview} className="rounded bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-60">
+                            {generatingPreview ? 'Đang tạo công thức...' : 'Xác nhận nguyên liệu'}
                         </button>
                     </div>
                 )}

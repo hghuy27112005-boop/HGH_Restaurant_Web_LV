@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { billService, extractListData } from '../../services/api';
-import { Loading, ErrorMessage, Card, Badge, EmptyState } from '../../components/Shared';
+import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal } from '../../components/Shared';
 
 const TYPE_FILTERS = [
     { id: 'all', label: 'Tất cả' },
@@ -29,13 +29,9 @@ const OrdersPage = () => {
     const [statusFilter, setStatusFilter] = useState('all');
 
     const [detailBill, setDetailBill] = useState(null); // bill đang xem chi tiết (null = đóng modal)
+    const [errorMessage, setErrorMessage] = useState(null);
     const [searchBillId, setSearchBillId] = useState('');
     const [dateFilter, setDateFilter] = useState(getTodayDateKey);
-
-    // FIX: chỉ đóng modal khi cả mousedown lẫn mouseup đều rơi đúng trên lớp nền
-    // (backdrop), tránh trường hợp bôi đen text trong bảng chi tiết rồi lỡ kéo
-    // chuột vọt ra ngoài mới thả tay làm modal tự đóng oan.
-    const mouseDownOnBackdrop = useRef(false);
 
     useEffect(() => {
         fetchOrders();
@@ -162,20 +158,9 @@ const OrdersPage = () => {
             const url = window.URL.createObjectURL(blob);
             window.open(url, '_blank');
         } catch (err) {
-            alert('Không thể xuất hóa đơn PDF. Vui lòng thử lại.');
+            setErrorMessage('Không thể xuất hóa đơn PDF. Vui lòng thử lại.');
             console.error(err);
         }
-    };
-
-    const handleBackdropMouseDown = (e) => {
-        mouseDownOnBackdrop.current = e.target === e.currentTarget;
-    };
-
-    const handleBackdropMouseUp = (e) => {
-        if (mouseDownOnBackdrop.current && e.target === e.currentTarget) {
-            setDetailBill(null);
-        }
-        mouseDownOnBackdrop.current = false;
     };
 
     if (loading) return <Loading />;
@@ -360,114 +345,107 @@ const OrdersPage = () => {
                 </div>
             </div>
 
-            {/* Modal chi tiết hóa đơn */}
+            {/* Modal chi tiết hóa đơn - dùng chung component Modal (đã có sẵn chống đóng nhầm khi kéo chuột) */}
             {detailBill && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-                    onMouseDown={handleBackdropMouseDown}
-                    onMouseUp={handleBackdropMouseUp}
+                <Modal
+                    isOpen={true}
+                    title={`Chi tiết đơn hàng ${detailBill.bill_id || detailBill.order_id}`}
+                    onClose={() => setDetailBill(null)}
+                    showHeaderClose
+                    className="max-w-lg max-h-[90vh] overflow-y-auto"
                 >
-                    <div className="bg-white rounded-lg border-t-4 border-red-600 w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-xl font-bold text-red-600">
-                                Chi tiết đơn hàng {detailBill.bill_id || detailBill.order_id}
-                            </h3>
-                            <button onClick={() => setDetailBill(null)} className="text-gray-400 hover:text-red-600 text-2xl leading-none">&times;</button>
+                    {detailBill.order_type === 'booking_table' && detailBill.booking_table && (
+                        <div className="bg-gray-50 rounded p-3 mb-4 text-sm space-y-1">
+                            <div className="font-bold text-gray-800 mb-2 border-b pb-1">Đặt bàn</div>
+                            <div><span className="text-gray-600">Bàn:</span> <span className="font-semibold">{detailBill.booking_table.table_numbers?.join(', ') || '—'}</span></div>
+                            <div><span className="text-gray-600">Ngày:</span> <span className="font-semibold">{formatDateOnly(detailBill.booking_table.booking_date)}</span></div>
+                            <div><span className="text-gray-600">Giờ:</span> <span className="font-semibold">{formatTime(detailBill.booking_table.start_time)} - {formatTime(detailBill.booking_table.end_time)}</span></div>
                         </div>
+                    )}
 
-                        {detailBill.order_type === 'booking_table' && detailBill.booking_table && (
-                            <div className="bg-gray-50 rounded p-3 mb-4 text-sm space-y-1">
-                                <div className="font-bold text-gray-800 mb-2 border-b pb-1">Đặt bàn</div>
-                                <div><span className="text-gray-600">Bàn:</span> <span className="font-semibold">{detailBill.booking_table.table_numbers?.join(', ') || '—'}</span></div>
-                                <div><span className="text-gray-600">Ngày:</span> <span className="font-semibold">{formatDateOnly(detailBill.booking_table.booking_date)}</span></div>
-                                <div><span className="text-gray-600">Giờ:</span> <span className="font-semibold">{formatTime(detailBill.booking_table.start_time)} - {formatTime(detailBill.booking_table.end_time)}</span></div>
-                            </div>
-                        )}
-
-                        {detailBill.order_type === 'delivery' && detailBill.delivery && (
-                            <div className="bg-gray-50 rounded p-3 mb-4 text-sm space-y-1">
-                                <div className="font-bold text-gray-800 mb-2 border-b pb-1">Đặt ship</div>
-                                <div><span className="text-gray-600">Địa chỉ giao:</span> <span className="font-semibold">{detailBill.delivery.address || '—'}</span></div>
-                            </div>
-                        )}
-
-                        <table className="w-full text-sm bg-white border border-black border-t-4 border-t-red-600">
-                            <thead>
-                                <tr>
-                                    <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">Món</th>
-                                    <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-black">SL</th>
-                                    <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-black">Thành tiền</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {(detailBill.items || []).map((item, i) => (
-                                    <tr key={i}>
-                                        <td className="py-2 px-3 border border-black">
-                                            <div>{item.dish_name}</div>
-                                            {item.customization_name && (
-                                                <div className="mt-1 text-xs text-gray-500">Công thức thay thế: {item.customization_name}</div>
-                                            )}
-                                        </td>
-                                        <td className="py-2 px-3 text-center border border-black">{item.quantity}</td>
-                                        <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                            {(Number(item.unit_price) * item.quantity).toLocaleString('vi-VN')}đ
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                            <tfoot>
-                                <tr>
-                                    <td colSpan={2} className="py-2 px-3 font-bold border border-black">Tổng cộng:</td>
-                                    <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                        {Number(detailBill.subtotal_price || detailBill.total_price || 0).toLocaleString('vi-VN')}đ
-                                    </td>
-                                </tr>
-                                {detailBill.sale_off_percentage != null && (
-                                    <tr>
-                                        <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">Giảm giá sự kiện:</td>
-                                        <td className="py-2 px-3 text-right font-bold text-orange-500 border border-black">
-                                            {Number(detailBill.sale_off_percentage)}%
-                                        </td>
-                                    </tr>
-                                )}
-                                {detailBill.payment_method === 'vnpay' && detailBill.sale_off_percentage == null && (Number(detailBill.subtotal_price || 0) > Number(detailBill.total_price)) && (
-                                    <tr>
-                                        <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">Giảm giá VNPay:</td>
-                                        <td className="py-2 px-3 text-right font-bold text-orange-500 border border-black">
-                                            -{Number((detailBill.subtotal_price || 0) - (detailBill.total_price || 0)).toLocaleString('vi-VN')}đ
-                                        </td>
-                                    </tr>
-                                )}
-                                {detailBill.payment_method === 'Points' && (
-                                    <tr>
-                                        <td colSpan={2} className="py-2 px-3 font-bold border border-black text-green-600">Đã thanh toán bằng điểm:</td>
-                                        <td className="py-2 px-3 text-right font-bold text-green-600 border border-black">
-                                            -{Math.floor((detailBill.sale_off_total_price ?? detailBill.subtotal_price) / 100).toLocaleString('vi-VN')} điểm
-                                        </td>
-                                    </tr>
-                                )}
-                                <tr>
-                                    <td colSpan={2} className="py-2 px-3 font-bold border border-black text-red-600">
-                                        {detailBill.payment_method === 'vnpay' ? 'Số tiền đã trả:' : 'Số tiền cần trả:'}
-                                    </td>
-                                    <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                        {Number(detailBill.total_price || 0).toLocaleString('vi-VN')}đ
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        </table>
-
-                        <div className="flex justify-end mt-4">
-                            <button
-                                onClick={() => setDetailBill(null)}
-                                className="px-4 py-2 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
-                            >
-                                Đóng
-                            </button>
+                    {detailBill.order_type === 'delivery' && detailBill.delivery && (
+                        <div className="bg-gray-50 rounded p-3 mb-4 text-sm space-y-1">
+                            <div className="font-bold text-gray-800 mb-2 border-b pb-1">Đặt ship</div>
+                            <div><span className="text-gray-600">Địa chỉ giao:</span> <span className="font-semibold">{detailBill.delivery.address || '—'}</span></div>
                         </div>
-                    </div>
-                </div>
+                    )}
+
+                    <table className="w-full text-sm bg-white border border-black border-t-4 border-t-red-600">
+                        <thead>
+                            <tr>
+                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">Món</th>
+                                <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-black">SL</th>
+                                <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-black">Thành tiền</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(detailBill.items || []).map((item, i) => (
+                                <tr key={i}>
+                                    <td className="py-2 px-3 border border-black">
+                                        <div>{item.dish_name}</div>
+                                        {item.customization_name && (
+                                            <div className="mt-1 text-xs text-gray-500">Công thức thay thế: {item.customization_name}</div>
+                                        )}
+                                    </td>
+                                    <td className="py-2 px-3 text-center border border-black">{item.quantity}</td>
+                                    <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
+                                        {(Number(item.unit_price) * item.quantity).toLocaleString('vi-VN')}đ
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colSpan={2} className="py-2 px-3 font-bold border border-black">Tổng cộng:</td>
+                                <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
+                                    {Number(detailBill.subtotal_price || detailBill.total_price || 0).toLocaleString('vi-VN')}đ
+                                </td>
+                            </tr>
+                            {detailBill.sale_off_percentage != null && (
+                                <tr>
+                                    <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">Giảm giá sự kiện:</td>
+                                    <td className="py-2 px-3 text-right font-bold text-orange-500 border border-black">
+                                        {Number(detailBill.sale_off_percentage)}%
+                                    </td>
+                                </tr>
+                            )}
+                            {detailBill.payment_method === 'vnpay' && detailBill.sale_off_percentage == null && (Number(detailBill.subtotal_price || 0) > Number(detailBill.total_price)) && (
+                                <tr>
+                                    <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">Giảm giá VNPay:</td>
+                                    <td className="py-2 px-3 text-right font-bold text-orange-500 border border-black">
+                                        -{Number((detailBill.subtotal_price || 0) - (detailBill.total_price || 0)).toLocaleString('vi-VN')}đ
+                                    </td>
+                                </tr>
+                            )}
+                            {detailBill.payment_method === 'Points' && (
+                                <tr>
+                                    <td colSpan={2} className="py-2 px-3 font-bold border border-black text-green-600">Đã thanh toán bằng điểm:</td>
+                                    <td className="py-2 px-3 text-right font-bold text-green-600 border border-black">
+                                        -{Math.floor((detailBill.sale_off_total_price ?? detailBill.subtotal_price) / 100).toLocaleString('vi-VN')} điểm
+                                    </td>
+                                </tr>
+                            )}
+                            <tr>
+                                <td colSpan={2} className="py-2 px-3 font-bold border border-black text-red-600">
+                                    {detailBill.payment_method === 'vnpay' ? 'Số tiền đã trả:' : 'Số tiền cần trả:'}
+                                </td>
+                                <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
+                                    {Number(detailBill.total_price || 0).toLocaleString('vi-VN')}đ
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </Modal>
             )}
+
+            <Modal
+                isOpen={!!errorMessage}
+                title="Thông báo"
+                onClose={() => setErrorMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{errorMessage}</p>
+            </Modal>
         </div>
     );
 };

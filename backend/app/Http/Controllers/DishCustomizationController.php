@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Dish;
 use App\Services\DishCustomizationService;
+use App\Services\GeminiChatbotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -26,6 +27,24 @@ class DishCustomizationController extends Controller
             'success' => true,
             'custom_recipes' => $customization,
         ]);
+    }
+
+    public function preview(Request $request, $dishId, GeminiChatbotService $gemini)
+    {
+        $data = $request->validate([
+            'original_instructions_vi' => 'required|string',
+            'removed_ingredients_vi' => 'sometimes|array',
+            'removed_ingredients_vi.*' => 'string|max:255',
+        ]);
+
+        Dish::findOrFail($dishId);
+
+        $revised = $gemini->reviseRecipeWithoutIngredients(
+            $data['original_instructions_vi'],
+            $data['removed_ingredients_vi'] ?? []
+        );
+
+        return response()->json(['success' => true, 'revised_instructions' => $revised]);
     }
 
     public function store(Request $request, $dishId, DishCustomizationService $service)

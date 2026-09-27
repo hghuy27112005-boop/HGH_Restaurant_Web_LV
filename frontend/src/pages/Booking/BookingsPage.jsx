@@ -42,6 +42,10 @@ const BookingsPage = () => {
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
 
+    // Thông báo / xác nhận dạng modal (thay cho alert / window.confirm)
+    const [alertMessage, setAlertMessage] = useState('');
+    const [confirmState, setConfirmState] = useState(null); // { message, onConfirm } | null
+
     const getDateKey = (value) => {
         if (!value) return '';
         const text = String(value);
@@ -270,24 +274,24 @@ const BookingsPage = () => {
     const handleNextStep = async () => {
         if (wizardStep === 1) {
             if (!bookingDate || !startH || !startM || !endH || !endM) {
-                alert('Vui lòng chọn ngày và nhập đầy đủ giờ đến, giờ về.');
+                setAlertMessage('Vui lòng chọn ngày và nhập đầy đủ giờ đến, giờ về.');
                 return;
             }
 
             // Kiểm tra ngày đặt: không được ở quá khứ, không vượt quá 60 ngày tới (khớp giới hạn backend)
             if (bookingDate < minBookingDateStr) {
-                alert('Không thể đặt bàn cho ngày trong quá khứ.');
+                setAlertMessage('Không thể đặt bàn cho ngày trong quá khứ.');
                 return;
             }
             if (bookingDate > maxBookingDateStr) {
-                alert('Bạn chỉ có thể đặt bàn trong vòng 60 ngày tới.');
+                setAlertMessage('Bạn chỉ có thể đặt bàn trong vòng 60 ngày tới.');
                 return;
             }
 
             const hrRegex = /^([0-1]?[0-9]|2[0-3])$/;
             const minRegex = /^[0-5]?[0-9]$/;
             if (!hrRegex.test(startH) || !minRegex.test(startM) || !hrRegex.test(endH) || !minRegex.test(endM)) {
-                alert('Định dạng giờ không hợp lệ.');
+                setAlertMessage('Định dạng giờ không hợp lệ.');
                 return;
             }
 
@@ -300,19 +304,19 @@ const BookingsPage = () => {
             const endMinutes = eH * 60 + eM;
 
             if (startMinutes < 7 * 60) {
-                alert('Giờ mở cửa là từ 07:00 sáng. Vui lòng chọn giờ khác.');
+                setAlertMessage('Giờ mở cửa là từ 07:00 sáng. Vui lòng chọn giờ khác.');
                 return;
             }
             if (endMinutes > 22 * 60) {
-                alert('Giờ đóng cửa là 22:00. Vui lòng nhập giờ về không quá 22:00.');
+                setAlertMessage('Giờ đóng cửa là 22:00. Vui lòng nhập giờ về không quá 22:00.');
                 return;
             }
             if (endMinutes <= startMinutes) {
-                alert('Giờ về phải sau giờ đến.');
+                setAlertMessage('Giờ về phải sau giờ đến.');
                 return;
             }
             if (endMinutes - startMinutes > 90) {
-                alert('Chỉ được đặt bàn tối đa 90 phút. Vui lòng chỉnh lại thời gian.');
+                setAlertMessage('Chỉ được đặt bàn tối đa 90 phút. Vui lòng chỉnh lại thời gian.');
                 return;
             }
 
@@ -320,7 +324,7 @@ const BookingsPage = () => {
             const bookingDateTime = new Date(`${bookingDate}T${String(sH).padStart(2, '0')}:${String(sM).padStart(2, '0')}:00`);
             const minAllowedDateTime = new Date(getServerNow().getTime() + 60 * 60000);
             if (bookingDateTime < minAllowedDateTime) {
-                alert('Giờ đến phải cách thời điểm hiện tại ít nhất 60 phút.');
+                setAlertMessage('Giờ đến phải sau thời điểm hiện tại ít nhất 60 phút.');
                 return;
             }
 
@@ -330,13 +334,13 @@ const BookingsPage = () => {
         } else if (wizardStep === 3) {
             const currentTotal = tableTypes.type5 + tableTypes.type10 + tableTypes.type15;
             if (currentTotal !== totalTables) {
-                alert(`Vui lòng chọn đúng ${totalTables} bàn. Bạn đang chọn ${currentTotal} bàn.`);
+                setAlertMessage(`Vui lòng chọn đúng ${totalTables} bàn. Bạn đang chọn ${currentTotal} bàn.`);
                 return;
             }
             setWizardStep(4);
         } else if (wizardStep === 4) {
             if (selectedTables.length !== totalTables) {
-                alert(`Vui lòng chọn đủ ${totalTables} bàn.`);
+                setAlertMessage(`Vui lòng chọn đủ ${totalTables} bàn.`);
                 return;
             }
             setWizardStep(5);
@@ -350,7 +354,7 @@ const BookingsPage = () => {
                     tables: selectedTables
                 });
             } catch (conflictErr) {
-                alert(conflictErr.response?.data?.message || 'Bàn bạn chọn đã bị chiếm dụng. Vui lòng đặt lại.');
+                setAlertMessage(conflictErr.response?.data?.message || 'Bàn bạn chọn đã bị chiếm dụng. Vui lòng đặt lại.');
                 return;
             }
 
@@ -641,7 +645,7 @@ const BookingsPage = () => {
                     order_id: createdOrderId
                 });
             } catch (conflictErr) {
-                alert(conflictErr.response?.data?.message || 'Bàn bạn chọn đã bị chiếm dụng. Vui lòng đặt lại.');
+                setAlertMessage(conflictErr.response?.data?.message || 'Bàn bạn chọn đã bị chiếm dụng. Vui lòng đặt lại.');
 
                 // Bàn đã bị người khác lấy → order cũ không còn dùng được, xóa luôn
                 // (cascade xóa Bill + BookingTable liên quan)
@@ -706,7 +710,37 @@ const BookingsPage = () => {
 
         return getServerNow() < deadline;
     };
-        
+
+    const handleDeleteOrderClick = () => {
+        setConfirmState({
+            message: 'Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món, đơn và thông tin đặt bàn.',
+            onConfirm: async () => {
+                setConfirmState(null);
+
+                // Nếu đã tạo order trên server, xóa order (cascades booking_table, order_items, bills)
+                if (createdOrderId) {
+                    try {
+                        await orderService.deleteOrder(createdOrderId);
+                    } catch (err) {
+                        setError(err.response?.data?.message || 'Lỗi khi xóa đơn hàng');
+                        return;
+                    }
+                }
+
+                // Dọn local state/session
+                localStorage.removeItem('booking_cart');
+                clearCheckoutSession();
+                setBookingCart([]);
+                setCreatedOrderId(null);
+                setCreatedBillId(null);
+                setSelectedTables([]);
+                setTotalTables(1);
+                setTableTypes({ type5: 1, type10: 0, type15: 0 });
+                setWizardStep(1);
+            },
+        });
+    };
+
     const confirmCancelOrder = async () => {
         if (!cancelingBill) return;
         try {
@@ -718,10 +752,10 @@ const BookingsPage = () => {
                 const res = await vnpayService.createRefundUrl({ order_id: cancelingBill.order_id });
                 window.location.href = res.data.payment_url;
             } else {
-                alert('Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.');
+                setAlertMessage('Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.');
             }
         } catch (err) {
-            alert('Lỗi hủy đơn: ' + (err.response?.data?.message || err.message));
+            setAlertMessage('Lỗi hủy đơn: ' + (err.response?.data?.message || err.message));
         } finally {
             setCancelModalOpen(false);
             setCancelingBill(null);
@@ -851,31 +885,7 @@ const BookingsPage = () => {
                                     </tfoot>
                                 </table>
                                 <button
-                                    onClick={async () => {
-                                        const ok = window.confirm('Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món, đơn và thông tin đặt bàn.');
-                                        if (!ok) return;
-
-                                        // Nếu đã tạo order trên server, xóa order (cascades booking_table, order_items, bills)
-                                        if (createdOrderId) {
-                                            try {
-                                                await orderService.deleteOrder(createdOrderId);
-                                            } catch (err) {
-                                                setError(err.response?.data?.message || 'Lỗi khi xóa đơn hàng');
-                                                return;
-                                            }
-                                        }
-
-                                        // Dọn local state/session
-                                        localStorage.removeItem('booking_cart');
-                                        clearCheckoutSession();
-                                        setBookingCart([]);
-                                        setCreatedOrderId(null);
-                                        setCreatedBillId(null);
-                                        setSelectedTables([]);
-                                        setTotalTables(1);
-                                        setTableTypes({ type5: 1, type10: 0, type15: 0 });
-                                        setWizardStep(1);
-                                    }}
+                                    onClick={handleDeleteOrderClick}
                                     className="mt-4 px-4 py-2 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
                                 >
                                     Xóa đơn hàng
@@ -1522,6 +1532,27 @@ const BookingsPage = () => {
                     </div>
                 </div>
             )}
+
+            <Modal
+                isOpen={Boolean(alertMessage)}
+                title="Thông báo"
+                showHeaderClose
+                showFooterClose={false}
+                onClose={() => setAlertMessage('')}
+            >
+                <p className="text-gray-700">{alertMessage}</p>
+            </Modal>
+
+            <Modal
+                isOpen={Boolean(confirmState)}
+                title="Xác nhận"
+                onClose={() => setConfirmState(null)}
+                onConfirm={confirmState?.onConfirm}
+                confirmText="Xác nhận"
+                cancelText="Hủy"
+            >
+                <p className="text-gray-700">{confirmState?.message}</p>
+            </Modal>
         </div>
     );
 };

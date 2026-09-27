@@ -20,6 +20,11 @@ const chatbotCustomerScripts = {
         action: { type: "navigate", path: "/menu", state: { filter: "recommended" } },
       },
       {
+        id: "modify_dish",
+        label: "Sửa đổi món ăn",
+        intent: "Khách muốn biết cách bỏ bớt nguyên liệu không thích để tạo công thức riêng cho món ăn",
+      },
+      {
         id: "view_history",
         label: "Xem lịch sử giao dịch",
         intent: "Khách muốn xem lại lịch sử các đơn hàng đã đặt, hoặc xem/xuất hóa đơn",
@@ -39,6 +44,28 @@ const chatbotCustomerScripts = {
   recommend_food: {
     intentSummary:
       "Đã đưa bạn tới mục Đề xuất cho bạn trên trang thực đơn.",
+    options: [
+      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+    ],
+  },
+
+  modify_dish: {
+    intentSummary:
+      "Giải thích cho khách: tại trang chi tiết mỗi món ăn, khách có thể bỏ những nguyên liệu không thích để tạo một công thức riêng cho món đó, đặt tên và lưu lại. Công thức đã lưu có thể chọn dùng lại ở những lần đặt món sau mà không cần chỉnh lại từ đầu.",
+    options: [
+      {
+        id: "modify_dish.goto_menu",
+        label: "Đi tới thực đơn để thử",
+        intent: "Khách muốn qua trang menu để bắt đầu tạo công thức riêng",
+        action: { type: "navigate", path: "/menu" },
+      },
+      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+    ],
+  },
+
+  "modify_dish.goto_menu": {
+    intentSummary:
+      "Đã đưa khách tới trang thực đơn. Hướng dẫn khách chọn một món bất kỳ, mở trang chi tiết món đó, sau đó nhấn vào mục xem công thức thay thế để bắt đầu bỏ nguyên liệu và lưu công thức riêng.",
     options: [
       { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],

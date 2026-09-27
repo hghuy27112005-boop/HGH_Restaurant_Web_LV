@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ratingAPI } from '../../services/api';
-import { Loading, ErrorMessage, Card, EmptyState } from '../../components/Shared';
+import { Loading, ErrorMessage, Card, EmptyState, Modal } from '../../components/Shared';
 
 const StarPicker = ({ value, onChange }) => {
     return (
@@ -32,6 +32,7 @@ const RatingPage = () => {
     const [aiResponses, setAiResponses] = useState({});
     const [moderationBlocked, setModerationBlocked] = useState(false);
     const [moderationMessage, setModerationMessage] = useState('');
+    const [errorMessage, setErrorMessage] = useState(null);
 
     useEffect(() => {
         fetchRatableItems();
@@ -83,7 +84,7 @@ const RatingPage = () => {
     const handleSubmit = async (orderItemId) => {
         const draft = drafts[orderItemId];
         if (!draft || !draft.rating) {
-            alert('Vui lòng chọn số sao trước khi gửi đánh giá.');
+            setErrorMessage('Vui lòng chọn số sao trước khi gửi đánh giá.');
             return;
         }
 
@@ -108,7 +109,7 @@ const RatingPage = () => {
                 setModerationMessage(data.message);
                 setModerationBlocked(Boolean(data.blocked));
             } else {
-                alert('Lỗi khi gửi đánh giá, vui lòng thử lại.');
+                setErrorMessage('Lỗi khi gửi đánh giá, vui lòng thử lại.');
                 console.error(err);
             }
         } finally {
@@ -209,6 +210,15 @@ const RatingPage = () => {
                     </div>
                 )}
             </div>
+
+            <Modal
+                isOpen={!!errorMessage}
+                title="Thông báo"
+                onClose={() => setErrorMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{errorMessage}</p>
+            </Modal>
         </div>
     );
 };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { adminAPI, billAPI } from '../../services/api';
-import { Loading, ErrorMessage, Card, Badge } from '../../components/Shared';
+import { Loading, ErrorMessage, Card, Badge, Modal } from '../../components/Shared';
 
 const AdminOrderManagement = () => {
     const [bills, setBills] = useState([]);
@@ -19,6 +19,7 @@ const AdminOrderManagement = () => {
     const [tempBillId, setTempBillId] = useState('');
     const [tempOrderType, setTempOrderType] = useState('');
     const [detailBill, setDetailBill] = useState(null);
+    const [alertMessage, setAlertMessage] = useState('');
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
     const filterModalRef = useRef(null);
 
@@ -102,7 +103,7 @@ const AdminOrderManagement = () => {
             window.open(blobUrl, '_blank');
         } catch (error) {
             console.error('Error exporting PDF', error);
-            alert('Không thể xuất hóa đơn. Vui lòng thử lại.');
+            setAlertMessage('Không thể xuất hóa đơn. Vui lòng thử lại.');
         }
     };
 
@@ -469,6 +470,16 @@ const AdminOrderManagement = () => {
                     </div>
                 </div>
             )}
+
+            <Modal
+                isOpen={Boolean(alertMessage)}
+                title="Thông báo"
+                showHeaderClose
+                showFooterClose={false}
+                onClose={() => setAlertMessage('')}
+            >
+                <p className="text-gray-700">{alertMessage}</p>
+            </Modal>
         </div>
     );
 };

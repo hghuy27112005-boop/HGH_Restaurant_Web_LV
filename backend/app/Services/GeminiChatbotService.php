@@ -239,23 +239,57 @@ PROMPT;
         ])->values()->toJson(JSON_UNESCAPED_UNICODE);
 
         $prompt = <<<PROMPT
-Bạn xử lý yêu cầu thay đổi công thức món ăn cho nhà hàng. Câu khách nói: "{$userInput}"
+        Bạn xử lý yêu cầu thay đổi công thức món ăn cho nhà hàng. Câu khách nói: "{$userInput}"
 
-Danh sách món ăn và dữ liệu gốc đáng tin cậy:
-{$catalog}
+        Danh sách món ăn và dữ liệu gốc đáng tin cậy:
+        {$catalog}
 
-Chỉ xử lý khi câu khách xác định rõ một món trong danh sách và nêu rõ nguyên liệu cần bỏ hoặc thay thế.
-Không được thêm nguyên liệu khách không yêu cầu. Công thức mới phải bám sát công thức gốc, chỉ sửa các bước bị ảnh hưởng bởi nguyên liệu đã bỏ/thay.
-Nếu khách chỉ hỏi chung chung hoặc không xác định được món/nguyên liệu, trả về {"matched":false}.
+        Chỉ xử lý khi câu khách xác định rõ một món trong danh sách và nêu rõ nguyên liệu cần bỏ hoặc thay thế.
+        Không được thêm nguyên liệu khách không yêu cầu. Công thức mới phải bám sát công thức gốc, chỉ sửa các bước bị ảnh hưởng bởi nguyên liệu đã bỏ/thay.
+        Nếu khách chỉ hỏi chung chung hoặc không xác định được món/nguyên liệu, trả về {"matched":false}.
 
-Trả về JSON chính xác. removed_ingredients phải dùng đúng tên trong dữ liệu gốc; removed_ingredient_labels phải là tiếng Việt để trả lời khách:
-{"matched":true,"recipe_name":"Công thức bỏ ...","dish_id":0,"removed_ingredients":["..."],"removed_ingredient_labels":["..."],"replacements":[{"from":"...","to":"..."}],"ingredients":"...","recipe_instructions":"..."}
-Hoặc:
-{"matched":false}
-PROMPT;
+        Trả về JSON chính xác. removed_ingredients phải dùng đúng tên trong dữ liệu gốc; removed_ingredient_labels phải là tiếng Việt để trả lời khách:
+        {"matched":true,"recipe_name":"Công thức bỏ ...","dish_id":0,"removed_ingredients":["..."],"removed_ingredient_labels":["..."],"replacements":[{"from":"...","to":"..."}],"ingredients":"...","recipe_instructions":"..."}
+        Hoặc:
+        {"matched":false}
+        PROMPT;
 
         $result = $this->callGemini($prompt, true);
 
         return is_array($result) ? $result : ['matched' => false];
+    }
+
+    public function reviseRecipeWithoutIngredients(string $originalInstructionsVi, array $removedIngredientLabelsVi): string
+    {
+        if (empty($removedIngredientLabelsVi)) {
+            return $originalInstructionsVi;
+        }
+
+        $removedText = implode(', ', $removedIngredientLabelsVi);
+
+        $prompt = <<<PROMPT
+        Bạn chỉnh sửa công thức nấu ăn tiếng Việt cho nhà hàng.
+
+        Công thức gốc:
+        """
+        {$originalInstructionsVi}
+        """
+
+        Nguyên liệu cần loại bỏ khỏi công thức: {$removedText}
+
+        QUY TẮC BẮT BUỘC:
+        - Chỉ sửa những câu/bước có liên quan trực tiếp đến nguyên liệu bị loại bỏ (bỏ hành động thêm/nêm/rắc nguyên liệu đó, bỏ luôn bước nếu bước đó chỉ xoay quanh nguyên liệu này).
+        - Các câu/bước KHÔNG liên quan tới nguyên liệu bị loại bỏ PHẢI giữ NGUYÊN VĂN, không diễn đạt lại, không đổi từ ngữ, không đổi thứ tự các câu.
+        - Không thêm nguyên liệu, dụng cụ hay bước nấu nào không có trong công thức gốc.
+        - Nếu câu sau khi bỏ nguyên liệu bị cụt/thiếu chủ ngữ, chỉnh lại câu đó cho trọn nghĩa nhưng vẫn giữ đúng phong cách hành văn gốc.
+        - Không thêm lời giải thích, không thêm tiêu đề.
+
+        Trả về CHÍNH XÁC định dạng JSON sau, không thêm gì khác:
+        {"revised_instructions": "..."}
+        PROMPT;
+
+        $result = $this->callGemini($prompt, true);
+
+        return $result['revised_instructions'] ?? $originalInstructionsVi;
     }
 }

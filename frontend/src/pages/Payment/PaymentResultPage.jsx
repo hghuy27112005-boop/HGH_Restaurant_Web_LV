@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { myBillsAPI, orderService } from '../../services/api';
 import { domToPng } from 'modern-screenshot';
+import { Modal } from '../../components/Shared';
 
 const MAX_POLL_ATTEMPTS = 5;
 const POLL_INTERVAL_MS = 1500;
@@ -27,6 +28,7 @@ const PaymentResultPage = () => {
     const [verifying, setVerifying] = useState(true);
     const [orderType, setOrderType] = useState('delivery');
     const [saving, setSaving] = useState(false);
+    const [errorMessage, setErrorMessage] = useState(null);
     const pollCountRef = useRef(0);
     const captureRef = useRef(null);
 
@@ -43,6 +45,7 @@ const PaymentResultPage = () => {
             success: status === 'success',
             code,
             billId,
+            bill: null,
             confirmed: false,
         });
 
@@ -90,8 +93,12 @@ const PaymentResultPage = () => {
                 bill?.booking_table?.B_payment_status ??
                 null;
 
+            if (bill) {
+                setResult(prev => ({ ...prev, billId, bill }));
+            }
+
             if (paymentStatus === 'paid' || bill?.is_paid) {
-                setResult(prev => ({ ...prev, billId, confirmed: true }));
+                setResult(prev => ({ ...prev, billId, bill, confirmed: true }));
                 setVerifying(false);
                 return;
             }
@@ -119,7 +126,7 @@ const PaymentResultPage = () => {
             const bill = Array.isArray(list) ? list.find(b => String(b.order_id) === String(orderId)) : null;
 
             if (bill) {
-                setResult(prev => ({ ...prev, billId: bill.bill_id }));
+                setResult(prev => ({ ...prev, billId: bill.bill_id, bill }));
                 return verifyBillStatus(bill.bill_id);
             }
 
@@ -154,7 +161,7 @@ const PaymentResultPage = () => {
             document.body.removeChild(link);
         } catch (err) {
             console.error('Lỗi khi lưu ảnh:', err);
-            alert('Không thể lưu ảnh. Vui lòng thử chụp màn hình thủ công.');
+            setErrorMessage('Không thể lưu ảnh. Vui lòng thử chụp màn hình thủ công.');
         } finally {
             setSaving(false);
         }
@@ -191,6 +198,83 @@ const PaymentResultPage = () => {
                                     : <>Đơn hàng đã được ghi nhận.</>}
                             </p>
 
+                            <div className="mt-4 mb-4 text-left">
+                                <h2 className="font-semibold text-gray-800 mb-2">Chi tiết đơn hàng</h2>
+                                {result.bill?.items?.length > 0 ? (
+                                    <table className="w-full text-sm border border-gray-300">
+                                        <thead>
+                                            <tr className="bg-gray-50">
+                                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">Món</th>
+                                                <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-gray-300">SL</th>
+                                                <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">Thành tiền</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {result.bill.items.map((item, index) => (
+                                                <tr key={`${item.dish_id || item.dish_name}-${index}`}>
+                                                    <td className="py-2 px-3 border border-gray-300">
+                                                        <div>{item.dish_name}</div>
+                                                        {item.customization_name && (
+                                                            <div className="mt-1 text-xs text-gray-500">
+                                                                Công thức thay thế: {item.customization_name}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2 px-3 text-center border border-gray-300">{item.quantity}</td>
+                                                    <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
+                                                        {(Number(item.unit_price) * Number(item.quantity)).toLocaleString('vi-VN')}đ
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300">Tổng cộng:</td>
+                                                <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
+                                                    {Number(result.bill.subtotal_price || result.bill.total_price || 0).toLocaleString('vi-VN')}đ
+                                                </td>
+                                            </tr>
+                                            {result.bill.sale_off_percentage != null && (
+                                                <tr>
+                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-orange-500">Giảm giá sự kiện:</td>
+                                                    <td className="py-2 px-3 text-right font-bold text-orange-500 border border-gray-300">
+                                                        {Number(result.bill.sale_off_percentage)}%
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            {result.bill.payment_method === 'vnpay' && result.bill.sale_off_percentage == null && Number(result.bill.subtotal_price || 0) > Number(result.bill.total_price) && (
+                                                <tr>
+                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-orange-500">Giảm giá VNPay:</td>
+                                                    <td className="py-2 px-3 text-right font-bold text-orange-500 border border-gray-300">
+                                                        -{Number((result.bill.subtotal_price || 0) - (result.bill.total_price || 0)).toLocaleString('vi-VN')}đ
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            {result.bill.payment_method === 'Points' && (
+                                                <tr>
+                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-green-600">Đã thanh toán bằng điểm:</td>
+                                                    <td className="py-2 px-3 text-right font-bold text-green-600 border border-gray-300">
+                                                        -{Math.floor((result.bill.sale_off_total_price ?? result.bill.subtotal_price) / 100).toLocaleString('vi-VN')} điểm
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            <tr>
+                                                <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-red-600">
+                                                    {result.bill.payment_method === 'vnpay' ? 'Số tiền đã trả:' : 'Số tiền cần trả:'}
+                                                </td>
+                                                <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
+                                                    {Number(result.bill.total_price || 0).toLocaleString('vi-VN')}đ
+                                                </td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                ) : (
+                                    <p className="text-sm text-gray-500">
+                                        {verifying ? 'Đang tải chi tiết món...' : 'Chưa có thông tin chi tiết món.'}
+                                    </p>
+                                )}
+                            </div>
+
                             {!result.confirmed && (
                                 <p className="text-yellow-600 text-sm mb-4">
                                     Hệ thống đang xử lý xác nhận thanh toán, vui lòng kiểm tra lại
@@ -215,7 +299,7 @@ const PaymentResultPage = () => {
                 {result.success && result.billId && (
                     <button
                         onClick={handleSaveImage}
-                        disabled={saving}
+                        disabled={saving || (verifying && !result.bill)}
                         className="mt-2 mb-4 w-full flex items-center justify-center gap-2 px-5 py-2 rounded border-2 border-green-600 text-green-600 font-semibold hover:bg-green-600 hover:text-white transition disabled:opacity-50"
                     >
                         {saving ? (
@@ -241,6 +325,15 @@ const PaymentResultPage = () => {
                     </Link>
                 </div>
             </div>
+
+            <Modal
+                isOpen={!!errorMessage}
+                title="Thông báo"
+                onClose={() => setErrorMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{errorMessage}</p>
+            </Modal>
         </div>
     );
 };

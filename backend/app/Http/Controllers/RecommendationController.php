@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\Dish;
 use App\Models\FavoriteDish;
 use App\Models\DishSimilarity;
+use App\Models\IngredientStock;
 use App\Models\RecommendationExclusion;
 
 class RecommendationController extends Controller
@@ -73,7 +74,23 @@ class RecommendationController extends Controller
         arsort($scores);
         $topIds = array_slice(array_keys($scores), 0, 6);
 
-        $result = collect($topIds)->map(fn($id) => $allDishes[$id])->values();
+        $stockDate = now()->toDateString();
+        $result = collect($topIds)->map(function ($id) use ($allDishes, $stockDate) {
+            $dish = $allDishes[$id];
+            $ingredients = collect(explode(',', (string) $dish->ingredients))
+                ->map(fn ($ingredient) => trim($ingredient))
+                ->filter()
+                ->unique(fn ($ingredient) => IngredientStock::keyFor($ingredient));
+
+            $quantityLeft = $ingredients->isEmpty()
+                ? 10
+                : $ingredients
+                    ->map(fn ($ingredient) => (int) IngredientStock::getOrCreateForDate($ingredient, $stockDate)->quantity_left)
+                    ->min();
+
+            $dish->setAttribute('quantity_left', $quantityLeft);
+            return $dish;
+        })->values();
 
         return response()->json(['data' => $result]);
     }

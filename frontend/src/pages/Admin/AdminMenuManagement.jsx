@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { adminAPI, dishAPI } from '../../services/api';
-import { Loading, ErrorMessage, Card, Badge } from '../../components/Shared';
+import { Loading, ErrorMessage, Card, Badge, Modal } from '../../components/Shared';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:8000';
 
@@ -28,6 +28,10 @@ const AdminMenuManagement = () => {
     const [editMode, setEditMode] = useState(false);
     const [selectedDishId, setSelectedDishId] = useState(null);
     const [busy, setBusy] = useState(false);
+
+    // Thông báo / xác nhận dạng modal (thay cho alert / window.confirm)
+    const [alertMessage, setAlertMessage] = useState('');
+    const [confirmState, setConfirmState] = useState(null); // { message, onConfirm } | null
 
     // Form state
     const [formData, setFormData] = useState({
@@ -102,7 +106,7 @@ const AdminMenuManagement = () => {
         if (!file) return;
 
         if (!file.type.startsWith("image/")) {
-            alert("Vui lòng chọn một file ảnh hợp lệ!");
+            setAlertMessage("Vui lòng chọn một file ảnh hợp lệ!");
             e.target.value = "";
             return;
         }
@@ -119,7 +123,7 @@ const AdminMenuManagement = () => {
         e.preventDefault();
 
         if (!editMode && !selectedImage) {
-            alert("Vui lòng tải lên một hình ảnh!");
+            setAlertMessage("Vui lòng tải lên một hình ảnh!");
             return;
         }
 
@@ -142,43 +146,53 @@ const AdminMenuManagement = () => {
 
             if (editMode) {
                 await adminAPI.dishes.update(selectedDishId, data);
-                alert("Cập nhật món ăn thành công!");
+                setAlertMessage("Cập nhật món ăn thành công!");
             } else {
                 await adminAPI.dishes.create(data);
-                alert("Thêm món ăn thành công!");
+                setAlertMessage("Thêm món ăn thành công!");
             }
             setIsModalOpen(false);
             fetchData();
         } catch (err) {
-            alert("Đã xảy ra lỗi: " + (err.response?.data?.message || err.message));
+            setAlertMessage("Đã xảy ra lỗi: " + (err.response?.data?.message || err.message));
         } finally {
             setBusy(false);
         }
     };
 
-    const handleToggleStatus = async (dish) => {
+    const handleToggleStatus = (dish) => {
         const action = dish.is_active ? 'ẩn' : 'hiện lại';
-        if (!window.confirm(`Bạn có chắc muốn ${action} món "${dish.dish_name}" không?`)) return;
-        try {
-            const res = await adminAPI.dishes.toggleStatus(dish.dish_id);
-            alert(res.data.message);
-            fetchData();
-        } catch (err) {
-            alert("Lỗi: " + (err.response?.data?.message || err.message));
-        }
+        setConfirmState({
+            message: `Bạn có chắc muốn ${action} món "${dish.dish_name}" không?`,
+            onConfirm: async () => {
+                setConfirmState(null);
+                try {
+                    const res = await adminAPI.dishes.toggleStatus(dish.dish_id);
+                    setAlertMessage(res.data.message);
+                    fetchData();
+                } catch (err) {
+                    setAlertMessage("Lỗi: " + (err.response?.data?.message || err.message));
+                }
+            },
+        });
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm("Xóa vĩnh viễn món này khỏi hệ thống?")) return;
-        try {
-            await adminAPI.dishes.delete(id);
-            alert("Đã xóa món ăn thành công!");
-            fetchData();
-        } catch (err) {
-            // Log chi tiết để xác định nguyên nhân thật (vd: sai method/route giữa frontend và backend)
-            console.error('Delete dish error:', err.response?.status, err.response?.data || err.message);
-            alert(err.response?.data?.message || ("Lỗi khi xóa món ăn: " + err.message));
-        }
+    const handleDelete = (id) => {
+        setConfirmState({
+            message: "Xóa vĩnh viễn món này khỏi hệ thống?",
+            onConfirm: async () => {
+                setConfirmState(null);
+                try {
+                    await adminAPI.dishes.delete(id);
+                    setAlertMessage("Đã xóa món ăn thành công!");
+                    fetchData();
+                } catch (err) {
+                    // Log chi tiết để xác định nguyên nhân thật (vd: sai method/route giữa frontend và backend)
+                    console.error('Delete dish error:', err.response?.status, err.response?.data || err.message);
+                    setAlertMessage(err.response?.data?.message || ("Lỗi khi xóa món ăn: " + err.message));
+                }
+            },
+        });
     };
 
     const handleBackdropMouseDown = (e) => {
@@ -283,7 +297,7 @@ const AdminMenuManagement = () => {
                 </Card>
             </div>
 
-            {/* Modal */}
+            {/* Modal thêm/sửa món */}
             {isModalOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -387,6 +401,29 @@ const AdminMenuManagement = () => {
                     </div>
                 </div>
             )}
+
+            {/* Modal thông báo (thay cho alert) */}
+            <Modal
+                isOpen={Boolean(alertMessage)}
+                title="Thông báo"
+                showHeaderClose
+                showFooterClose={false}
+                onClose={() => setAlertMessage('')}
+            >
+                <p className="text-gray-700">{alertMessage}</p>
+            </Modal>
+
+            {/* Modal xác nhận (thay cho window.confirm) */}
+            <Modal
+                isOpen={Boolean(confirmState)}
+                title="Xác nhận"
+                onClose={() => setConfirmState(null)}
+                onConfirm={confirmState?.onConfirm}
+                confirmText="Xác nhận"
+                cancelText="Hủy"
+            >
+                <p className="text-gray-700">{confirmState?.message}</p>
+            </Modal>
         </div>
     );
 };

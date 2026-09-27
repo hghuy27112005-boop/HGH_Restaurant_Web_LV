@@ -133,6 +133,7 @@ export const dishCustomizationAPI = {
     getByDish: (dishId) => axiosInstance.get(`/dish-customizations/${dishId}`),
     save: (dishId, data) => axiosInstance.put(`/dish-customizations/${dishId}`, data),
     remove: (dishId, customizationId) => axiosInstance.delete(`/dish-customizations/${dishId}/${customizationId}`),
+    preview: (dishId, data) => axiosInstance.post(`/dish-customizations/${dishId}/preview`, data),
 };
 
 // Recommendations API (AI gợi ý món dựa trên món yêu thích đã chọn)

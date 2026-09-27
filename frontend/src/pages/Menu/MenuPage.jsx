@@ -24,6 +24,8 @@ const MenuPage = () => {
 
     // Modal states
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [successMessage, setSuccessMessage] = useState('');
+    const [errorMessage, setErrorMessage] = useState(null);
     const [selectedDish, setSelectedDish] = useState(null);
     const [quantity, setQuantity] = useState(1);
     const [orderType, setOrderType] = useState('mang-ve');
@@ -106,7 +108,7 @@ const MenuPage = () => {
                 return prev.filter(id => id !== dishId);
             }
             if (prev.length >= 8) {
-                alert('Chỉ được chọn tối đa 8 món');
+                setErrorMessage('Chỉ được chọn tối đa 8 món');
                 return prev;
             }
             return [...prev, dishId];
@@ -129,7 +131,7 @@ const MenuPage = () => {
             setIsRecommendModalOpen(false);
             loadRecommendations();
         } catch (err) {
-            alert('Lỗi khi lưu món yêu thích, vui lòng thử lại');
+            setErrorMessage('Lỗi khi lưu món yêu thích, vui lòng thử lại');
             console.error(err);
         }
     };
@@ -214,7 +216,6 @@ const MenuPage = () => {
 
     const handleAddToCart = (dish, type) => {
         if (!isAuthenticated) {
-            alert('Vui lòng đăng nhập để thực hiện thao tác này');
             navigate('/login?tab=register');
             return;
         }
@@ -272,12 +273,12 @@ const MenuPage = () => {
         const maxQty = selectedDish?.quantity_left ?? 10;
 
         if (isNaN(qty) || qty < 1) {
-            alert('Vui lòng nhập số lượng hợp lệ!');
+            setErrorMessage('Vui lòng nhập số lượng hợp lệ!');
             return;
         }
 
         if (qty > maxQty) {
-            alert('Đặt hàng quá số lượng còn lại');
+            setErrorMessage('Đặt hàng quá số lượng còn lại');
             return;
         }
 
@@ -305,8 +306,7 @@ const MenuPage = () => {
 
         localStorage.setItem(cartKey, JSON.stringify(currentCart));
         setIsModalOpen(false);
-
-        alert(`Thành công! Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'giao hàng' : 'đặt bàn'}.`);
+        setSuccessMessage(`Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'Giao hàng' : 'Đặt bàn'}.`);
     };
 
     if (loading) return <Loading />;
@@ -678,6 +678,26 @@ const MenuPage = () => {
                         </div>
                     </div>
                 </div>
+            </Modal>
+
+            <Modal
+                isOpen={Boolean(successMessage)}
+                title="Đặt món thành công"
+                showHeaderClose
+                showFooterClose={false}
+                onClose={() => setSuccessMessage('')}
+            >
+                <p className="text-gray-700">{successMessage}</p>
+            </Modal>
+
+            {/* Thông báo lỗi chung - dùng chung component Modal */}
+            <Modal
+                isOpen={!!errorMessage}
+                title="Thông báo"
+                onClose={() => setErrorMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{errorMessage}</p>
             </Modal>
 
             {/* Recommendation Selection Modal */}

@@ -43,6 +43,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/dish-customizations', [\App\Http\Controllers\DishCustomizationController::class, 'index']);
     Route::get('/dish-customizations/{dishId}', [\App\Http\Controllers\DishCustomizationController::class, 'show']);
     Route::put('/dish-customizations/{dishId}', [\App\Http\Controllers\DishCustomizationController::class, 'store']);
+    Route::post('/dish-customizations/{dishId}/preview', [\App\Http\Controllers\DishCustomizationController::class, 'preview']);
     Route::delete('/dish-customizations/{dishId}/{customizationId}', [\App\Http\Controllers\DishCustomizationController::class, 'destroy']);
 
     // User Profile
