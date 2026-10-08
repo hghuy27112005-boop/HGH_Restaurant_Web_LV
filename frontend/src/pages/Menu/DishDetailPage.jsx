@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { dishAPI, dishCustomizationAPI } from '../../services/api';
+import { dishAPI, dishCustomizationAPI, cartAPI } from '../../services/api';
 import { ErrorMessage, Loading, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
+import IngredientLimitModal from '../../components/IngredientLimitModal';
+
+// Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
+const MAX_ORDER_QTY = 50;
 
 const recipeTranslations = {
     'Gà Parmesan': 'Đập mỏng thịt gà, nêm muối và tiêu. Nhúng gà qua trứng rồi phủ bột chiên xù. Chiên trong bơ nóng, trở mặt và chiên khoảng 10 phút hoặc đến khi gà chín, sau đó lấy gà ra. Cho sốt mì Ý vào chảo và đun nóng kỹ. Cho gà trở lại chảo, xếp phô mai mozzarella lên trên, rắc phô mai Parmesan, đậy nắp và nấu đến khi phô mai tan. Dùng kèm mì Ý, có thể rắc rau mùi tây băm nhỏ và thêm Parmesan khi dùng.',
@@ -235,7 +239,7 @@ const ingredientTranslations = {
     'coriander seeds': 'hạt mùi',
 };
 
-const translateIngredients = (value = '') => value.split(',').map((item) => {
+const translateIngredients = (value) => (value || '').split(',').map((item) => {
     const trimmed = item.trim();
     const key = trimmed.toLowerCase();
     const translated = ingredientTranslations[key]
@@ -247,11 +251,11 @@ const translateIngredients = (value = '') => value.split(',').map((item) => {
 
 const getDishData = (response) => response.data?.data || response.data || [];
 
-const splitIngredients = (value = '') => value.split(',').map((item) => item.trim()).filter(Boolean);
+const splitIngredients = (value) => (value || '').split(',').map((item) => item.trim()).filter(Boolean);
 
 const normalizeIngredientSet = (list = []) => [...new Set(list.map((item) => item.trim().toLowerCase()))].sort().join('|');
 
-const splitInstructions = (instructions = '') => instructions
+const splitInstructions = (instructions) => (instructions || '')
     .split(/(?<=[.!?])\s+/)
     .map((step) => step.trim().replace(/[.]$/, ''))
     .filter(Boolean);
@@ -266,6 +270,7 @@ const DishDetailPage = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [alertMessage, setAlertMessage] = useState('');
+    const [ingredientError, setIngredientError] = useState(null); // { message, overLimit } khi giỏ vượt 50 nguyên liệu
     const [quantity, setQuantity] = useState(1);
     const [orderType, setOrderType] = useState('mang-ve');
     const [recipeModalOpen, setRecipeModalOpen] = useState(false);
@@ -320,7 +325,7 @@ const DishDetailPage = () => {
     };
 
     const handleIncreaseQty = () => {
-        const max = selectedDish?.quantity_left ?? 10;
+        const max = MAX_ORDER_QTY;
         setQuantity((previous) => Math.min(max, (parseInt(previous, 10) || 1) + 1));
     };
 
@@ -329,16 +334,16 @@ const DishDetailPage = () => {
     };
 
     const handleIncrease10Qty = () => {
-        const max = selectedDish?.quantity_left ?? 10;
+        const max = MAX_ORDER_QTY;
         setQuantity((previous) => Math.min(max, (parseInt(previous, 10) || 1) + 10));
     };
 
     const handleSetMinQty = () => setQuantity(1);
-    const handleSetMaxQty = () => setQuantity(selectedDish?.quantity_left ?? 10);
+    const handleSetMaxQty = () => setQuantity(MAX_ORDER_QTY);
 
-    const confirmAddToCart = () => {
+    const confirmAddToCart = async () => {
         const qty = parseInt(quantity, 10);
-        const maxQty = selectedDish?.quantity_left ?? 10;
+        const maxQty = MAX_ORDER_QTY;
 
         if (Number.isNaN(qty) || qty < 1) {
             setAlertMessage('Vui lòng nhập số lượng hợp lệ!');
@@ -346,7 +351,7 @@ const DishDetailPage = () => {
         }
 
         if (qty > maxQty) {
-            setAlertMessage('Đặt hàng quá số lượng còn lại');
+            setAlertMessage('Mỗi lần chỉ được đặt tối đa 50 phần cho một món.');
             return;
         }
 
@@ -366,6 +371,25 @@ const DishDetailPage = () => {
             ingredients: selectedCustomization?.ingredients ?? null,
             removed_ingredients: selectedCustomization?.removed_ingredients ?? [],
         });
+        // Kiểm tra nguyên liệu cộng dồn của cả giỏ (backend là nguồn luật duy nhất).
+        try {
+            await cartAPI.checkIngredients(cart.map((item) => ({
+                dish_id: item.dish_id,
+                customization_id: item.customization_id ?? null,
+                ingredients: item.ingredients ?? null,
+                quantity: item.quantity,
+            })));
+        } catch (err) {
+            const data = err.response?.data;
+            if (err.response?.status === 422 && data?.over_limit) {
+                setIsModalOpen(false);
+                setIngredientError({ message: data.message, overLimit: data.over_limit });
+            } else {
+                setAlertMessage(data?.message || 'Không thể kiểm tra nguyên liệu lúc này. Vui lòng thử lại.');
+            }
+            return;
+        }
+
         localStorage.setItem(cartKey, JSON.stringify(cart));
         setIsModalOpen(false);
         setSuccessMessage(`Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'Giao hàng' : 'Đặt bàn'}.`);
@@ -502,7 +526,7 @@ const DishDetailPage = () => {
                             <h2 className="text-3xl font-bold text-gray-900 mb-4">{selectedDish.dish_name}</h2>
                             <p className="text-red-600 text-2xl font-bold mb-5">{Number(selectedDish.price).toLocaleString('vi-VN')}đ</p>
                             <h3 className="font-semibold text-lg mb-2">Nguyên liệu nấu</h3>
-                            <p className="text-gray-700 leading-7">{translateIngredients(displayedIngredients)}</p>
+                            <p className="text-gray-700 leading-7">{displayedIngredients ? translateIngredients(displayedIngredients) : 'Món này chưa có thông tin nguyên liệu.'}</p>
                             <div className="grid grid-cols-2 gap-3 mt-6">
                                 <button onClick={() => openOrderModal('mang-ve')} className="py-2 px-3 rounded border border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition">Đặt Ship</button>
                                 <button onClick={() => openOrderModal('dat-ban')} className="py-2 px-3 rounded border border-gray-800 text-gray-800 font-semibold hover:bg-gray-800 hover:text-white transition">Đặt Bàn</button>
@@ -511,9 +535,13 @@ const DishDetailPage = () => {
                     </div>
                     <section className="mt-8 border-t pt-6">
                         <h3 className="text-xl font-bold text-red-600 mb-4">Công thức nấu</h3>
-                        <ol className="list-decimal list-inside space-y-3 text-gray-700 leading-7">
-                            {steps.map((step, index) => <li key={`${selectedDish.dish_id}-${index}`}>{step.trim().replace(/[.]$/, '')}.</li>)}
-                        </ol>
+                        {steps.length === 0 ? (
+                            <p className="text-gray-500">Món này chưa có công thức.</p>
+                        ) : (
+                            <ol className="list-decimal list-inside space-y-3 text-gray-700 leading-7">
+                                {steps.map((step, index) => <li key={`${selectedDish.dish_id}-${index}`}>{step.trim().replace(/[.]$/, '')}.</li>)}
+                            </ol>
+                        )}
                         <button onClick={openRecipeModal} className="mt-5 rounded border border-amber-600 px-4 py-2 font-semibold text-amber-700 hover:bg-amber-50">
                             Xem công thức thay thế
                         </button>
@@ -542,13 +570,9 @@ const DishDetailPage = () => {
                 confirmText="Xác nhận thêm vào giỏ hàng"
             >
                 <div className="flex flex-col gap-4">
-                    {selectedDish.quantity_left !== undefined && (
-                        <div>
-                            <span className={`text-sm font-semibold ${selectedDish.quantity_left <= 15 ? 'text-red-600' : 'text-green-700'}`}>
-                                Còn lại {selectedDish.quantity_left} phần
-                            </span>
-                        </div>
-                    )}
+                    <div>
+                        <span className="text-sm font-semibold text-green-700">Tối đa 50 phần mỗi món</span>
+                    </div>
 
                     <div>
                         <label className="block font-semibold mb-2 text-gray-700">Chọn công thức thay thế</label>
@@ -604,6 +628,13 @@ const DishDetailPage = () => {
             >
                 <p className="text-gray-700">{successMessage}</p>
             </Modal>
+            <IngredientLimitModal
+                isOpen={ingredientError !== null}
+                onClose={() => setIngredientError(null)}
+                message={ingredientError?.message}
+                overLimit={ingredientError?.overLimit}
+                formatIngredient={translateIngredients}
+            />
             <Modal
                 isOpen={Boolean(alertMessage)}
                 title="Thông báo"

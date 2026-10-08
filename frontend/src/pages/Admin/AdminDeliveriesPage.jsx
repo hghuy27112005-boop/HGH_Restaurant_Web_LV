@@ -17,15 +17,14 @@ const AdminDeliveriesPage = () => {
     const [overallStats, setOverallStats] = useState({ total: 0, pending: 0, shipping: 0, completed: 0, cancelled: 0 });
     const [, setClock] = useState(Date.now());
 
-    // Delivery status constants
+    // 6 trạng thái của đơn ship (khớp enum delivery_status ở backend)
     const DELIVERY_STATUS = {
-        'waiting_info': { label: 'Chờ thông tin', color: 'info', bgColor: 'bg-blue-50' },
-        'waiting_confirmation': { label: 'Chờ duyệt', color: 'warning', bgColor: 'bg-yellow-50' },
-        'waiting_payment': { label: 'Chờ thanh toán', color: 'warning', bgColor: 'bg-yellow-50' },
-        'waiting_approval': { label: 'Chờ duyệt', color: 'warning', bgColor: 'bg-yellow-50' },
-        'shipping': { label: 'Đang giao', color: 'info', bgColor: 'bg-blue-50' },
-        'completed': { label: 'Đã giao hàng', color: 'success', bgColor: 'bg-green-50' },
-        'cancelled': { label: 'Đã hủy', color: 'danger', bgColor: 'bg-red-50' },
+        'waiting_payment': { label: 'Chờ thanh toán', color: 'warning' },
+        'scheduled': { label: 'Đã lên lịch', color: 'info' },
+        'preparing': { label: 'Đang chuẩn bị', color: 'info' },
+        'shipping': { label: 'Đang giao hàng', color: 'info' },
+        'completed': { label: 'Đã giao hàng', color: 'success' },
+        'cancelled': { label: 'Đã hủy', color: 'danger' },
     };
 
     const PAYMENT_STATUS = {
@@ -77,7 +76,7 @@ const AdminDeliveriesPage = () => {
             const { dateFrom, dateTo } = getDateRange();
             const filters = {
                 search: search || undefined,
-                delivery_status: filter === 'all' ? undefined : (filter === 'waiting_confirmation' ? 'waiting_confirmation,waiting_approval' : filter),
+                delivery_status: filter === 'all' ? undefined : filter,
                 date_from: dateFrom,
                 date_to: dateTo,
                 page: currentPage,
@@ -95,18 +94,6 @@ const AdminDeliveriesPage = () => {
         }
     };
 
-    const handleApprove = async (delivery) => {
-        try {
-            await adminAPI.deliveries.approve(delivery.delivery_id);
-            await fetchDeliveries();
-            await fetchOverallStats();
-            setShowModal(false);
-        } catch (err) {
-            setError('Lỗi xác nhận giao hàng');
-            console.error(err);
-        }
-    };
-
     const goToPage = () => {
         let page = parseInt(pageInput, 10);
         if (isNaN(page) || page < 1) page = 1;
@@ -115,46 +102,13 @@ const AdminDeliveriesPage = () => {
         setCurrentPage(page);
     };
 
-    const getExpectedDeliveryStart = (delivery) => {
-        const durationMinutes = delivery.estimated_duration_minutes ?? 30;
-        const paidAt = delivery.approved_at ? new Date(delivery.approved_at) : new Date(delivery.updated_at);
-        if (Number.isNaN(paidAt.getTime())) return null;
-
-        const expectedStart = new Date(paidAt);
-        expectedStart.setSeconds(0, 0);
-        const earliestApproval = new Date(paidAt.getTime() + 15 * 60000);
-        if (delivery.preferred_delivery_time) {
-            const [hours, minutes] = String(delivery.preferred_delivery_time).split(':').map(Number);
-            expectedStart.setHours(hours, minutes, 0, 0);
-            expectedStart.setMinutes(expectedStart.getMinutes() - durationMinutes - 15);
-            if (expectedStart < earliestApproval) expectedStart.setTime(earliestApproval.getTime());
-        } else {
-            expectedStart.setTime(earliestApproval.getTime());
-        }
-
-        const opening = new Date(paidAt);
-        opening.setHours(7, 30, 0, 0);
-        const closing = new Date(paidAt);
-        closing.setHours(22, 0, 0, 0);
-        if (expectedStart < opening) expectedStart.setTime(opening.getTime());
-        if (expectedStart > closing || new Date(expectedStart.getTime() + durationMinutes * 60000) > closing) {
-            expectedStart.setDate(expectedStart.getDate() + 1);
-            expectedStart.setHours(7, 30, 0, 0);
-        }
-
-        return expectedStart;
-    };
+    // Lịch nấu/giao do backend tính và lưu (cooking_at, ship_at, estimated_completion_at); đơn chưa thanh toán thì chưa có.
+    const toDate = (value) => (value ? new Date(value) : null);
 
     const formatDeliveryTime = (value) => {
         if (!value) return '—';
         const [hours, minutes] = String(value).split(':');
         return `${hours}:${minutes}`;
-    };
-
-    const getExpectedDeliveryArrival = (delivery) => {
-        const start = getExpectedDeliveryStart(delivery);
-        if (!start) return null;
-        return new Date(start.getTime() + (delivery.estimated_duration_minutes ?? 30) * 60000);
     };
 
     const formatExpectedDateTime = (value) => value
@@ -186,38 +140,46 @@ const AdminDeliveriesPage = () => {
                     })()}
                 </p>
 
-                {/* Stats */}
-                <div className="grid md:grid-cols-5 gap-4 mb-8">
-                    <Card>
+                {/* Stats: Tổng + 6 trạng thái (mỗi hàng 3 thẻ) */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                    <Card className="md:col-span-3">
                         <p className="text-sm text-gray-600">Tổng giao hàng</p>
-                        <p className="text-3xl font-bold text-red-600">{stats.total}</p>
+                        <p className="text-3xl font-bold text-red-600">{stats.total ?? 0}</p>
+                    </Card>
+                    <Card className="bg-yellow-50">
+                        <p className="text-sm text-gray-600">Chờ thanh toán</p>
+                        <p className="text-3xl font-bold text-yellow-600">{stats.waiting_payment ?? 0}</p>
                     </Card>
                     <Card className="bg-blue-50">
-                        <p className="text-sm text-gray-600">Chờ duyệt</p>
-                        <p className="text-3xl font-bold text-blue-600">{stats.pending}</p>
+                        <p className="text-sm text-gray-600">Đã lên lịch</p>
+                        <p className="text-3xl font-bold text-blue-600">{stats.scheduled ?? 0}</p>
+                    </Card>
+                    <Card className="bg-orange-50">
+                        <p className="text-sm text-gray-600">Đang chuẩn bị</p>
+                        <p className="text-3xl font-bold text-orange-600">{stats.preparing ?? 0}</p>
                     </Card>
                     <Card className="bg-purple-50">
-                        <p className="text-sm text-gray-600">Đang giao</p>
-                        <p className="text-3xl font-bold text-purple-600">{stats.shipping}</p>
+                        <p className="text-sm text-gray-600">Đang giao hàng</p>
+                        <p className="text-3xl font-bold text-purple-600">{stats.shipping ?? 0}</p>
                     </Card>
                     <Card className="bg-green-50">
                         <p className="text-sm text-gray-600">Đã giao hàng</p>
-                        <p className="text-3xl font-bold text-green-600">{stats.completed}</p>
+                        <p className="text-3xl font-bold text-green-600">{stats.completed ?? 0}</p>
                     </Card>
                     <Card className="bg-red-50">
                         <p className="text-sm text-gray-600">Đã hủy</p>
-                        <p className="text-3xl font-bold text-red-400">{stats.cancelled}</p>
+                        <p className="text-3xl font-bold text-red-400">{stats.cancelled ?? 0}</p>
                     </Card>
                 </div>
 
                 {/* Search and Filter */}
                 <div className="mb-6 space-y-4">
-                    <div className="flex gap-2 flex-wrap">
-                        {['all', 'waiting_confirmation', 'shipping', 'completed', 'cancelled'].map(status => (
+                    <div className="flex gap-2 overflow-x-auto">
+                        {['all', ...Object.keys(DELIVERY_STATUS)].map(status => (
                             <button
                                 key={status}
                                 onClick={() => { setFilter(status); setCurrentPage(1); }}
-                                className={`px-4 py-2 rounded text-sm font-medium transition ${filter === status
+                                className={`whitespace-nowrap px-3 py-2 rounded text-sm font-medium transition ${filter === status
                                     ? 'bg-red-600 text-white'
                                     : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
                                     }`}
@@ -377,9 +339,19 @@ const AdminDeliveriesPage = () => {
                                         <p className="text-sm break-words">{selectedDelivery.address}</p>
                                     </div>
                                     <div className="min-w-0">
+                                        <p className="text-xs text-gray-500">Giờ hàng tới khách chọn</p>
+                                        <p className="text-sm font-semibold">{formatDeliveryTime(selectedDelivery.preferred_delivery_time)}</p>
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs text-gray-500">Bắt đầu nấu (dự kiến)</p>
+                                        <p className="text-sm font-semibold">
+                                            {formatExpectedDateTime(toDate(selectedDelivery.cooking_at))}
+                                        </p>
+                                    </div>
+                                    <div className="min-w-0">
                                         <p className="text-xs text-gray-500">Bắt đầu giao hàng (dự kiến)</p>
                                         <p className="text-sm font-semibold">
-                                            {formatExpectedDateTime(getExpectedDeliveryStart(selectedDelivery))}
+                                            {formatExpectedDateTime(toDate(selectedDelivery.ship_at))}
                                         </p>
                                     </div>
                                     <div className="min-w-0">
@@ -393,7 +365,7 @@ const AdminDeliveriesPage = () => {
                                     <div className="col-span-2 min-w-0">
                                         <p className="text-xs text-gray-500">Thời điểm hàng tới (dự kiến)</p>
                                         <p className="text-sm font-semibold">
-                                            {formatExpectedDateTime(getExpectedDeliveryArrival(selectedDelivery))}
+                                            {formatExpectedDateTime(toDate(selectedDelivery.estimated_completion_at))}
                                         </p>
                                     </div>
                                 </div>
@@ -520,10 +492,10 @@ const AdminDeliveriesPage = () => {
                                         <span>Tạo lúc:</span>
                                         <span>{new Date(selectedDelivery.created_at).toLocaleString('vi-VN')}</span>
                                     </div>
-                                    {selectedDelivery.approved_at && (
+                                    {selectedDelivery.paid_at && (
                                         <div className="flex justify-between">
-                                            <span>Xác nhận lúc:</span>
-                                            <span>{new Date(selectedDelivery.approved_at).toLocaleString('vi-VN')}</span>
+                                            <span>Thanh toán lúc:</span>
+                                            <span>{new Date(selectedDelivery.paid_at).toLocaleString('vi-VN')}</span>
                                         </div>
                                     )}
                                     {selectedDelivery.delivered_at && (

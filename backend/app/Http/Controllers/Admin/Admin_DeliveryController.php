@@ -3,16 +3,14 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Mail\OrderNotificationMail;
 use App\Models\Delivery;
-use App\Models\Order;
-use App\Services\OrderCodeGenerator;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class Admin_DeliveryController extends Controller
 {
+    /** 6 trạng thái của đơn ship (khớp enum delivery_status). */
+    private const STATUSES = ['waiting_payment', 'scheduled', 'preparing', 'shipping', 'completed', 'cancelled'];
+
     /**
      * Get all deliveries (admin view)
      */
@@ -22,11 +20,11 @@ class Admin_DeliveryController extends Controller
         Delivery::autoStartReady();
 
         $query = Delivery::with('order.user', 'order.items.dish', 'order.bill')
-            ->whereIn('delivery_status', ['waiting_approval', 'shipping', 'completed', 'cancelled']);
+            ->whereIn('delivery_status', self::STATUSES);
 
-        // Filter by delivery status (thu hẹp thêm trong phạm vi 4 trạng thái cho phép ở trên)
+        // Filter by delivery status (thu hẹp thêm trong phạm vi 6 trạng thái cho phép ở trên)
         if ($request->has('delivery_status')) {
-            $statuses = explode(',', $request->delivery_status);
+            $statuses = array_intersect(explode(',', $request->delivery_status), self::STATUSES);
             $query->whereIn('delivery_status', $statuses);
         }
 
@@ -69,14 +67,14 @@ class Admin_DeliveryController extends Controller
     }
 
     /**
-     * Thống kê tổng số lượng theo từng trạng thái (dùng COUNT, không load toàn bộ record)
+     * Thống kê tổng số lượng theo từng trạng thái (1 câu COUNT ... GROUP BY, không load toàn bộ record)
      */
     public function stats(Request $request)
     {
         Delivery::autoCompleteExpired();
         Delivery::autoStartReady();
 
-        $base = Delivery::whereIn('delivery_status', ['waiting_approval', 'shipping', 'completed', 'cancelled']);
+        $base = Delivery::whereIn('delivery_status', self::STATUSES);
 
         if ($request->has('date_from')) {
             $base->whereDate('created_at', '>=', $request->date_from);
@@ -85,21 +83,17 @@ class Admin_DeliveryController extends Controller
             $base->whereDate('created_at', '<=', $request->date_to);
         }
 
-        $total = (clone $base)->count();
-        $pending = (clone $base)->whereIn('delivery_status', ['waiting_info', 'waiting_confirmation', 'waiting_approval'])->count();
-        $shipping = (clone $base)->where('delivery_status', 'shipping')->count();
-        $completed = (clone $base)->where('delivery_status', 'completed')->count();
-        $cancelled = (clone $base)->where('delivery_status', 'cancelled')->count();
+        $counts = $base
+            ->selectRaw('delivery_status, COUNT(*) as total')
+            ->groupBy('delivery_status')
+            ->pluck('total', 'delivery_status');
 
-        return response()->json([
-            'data' => [
-                'total' => $total,
-                'pending' => $pending,
-                'shipping' => $shipping,
-                'completed' => $completed,
-                'cancelled' => $cancelled,
-            ],
-        ]);
+        $data = ['total' => (int) $counts->sum()];
+        foreach (self::STATUSES as $status) {
+            $data[$status] = (int) ($counts[$status] ?? 0);
+        }
+
+        return response()->json(['data' => $data]);
     }
 
     /**
@@ -113,91 +107,6 @@ class Admin_DeliveryController extends Controller
 
         return response()->json([
             'data' => $delivery->load('order.user'),
-        ]);
-    }
-
-    /**
-     * Create delivery (store)
-     */
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'order_id' => 'required|string|exists:orders,order_id',
-            'address' => 'required|string',
-        ]);
-
-        $generator = new OrderCodeGenerator();
-        $sequence = Delivery::whereDate('created_at', today())->count() + 1;
-        $deliveryId = $generator->generateDeliveryId(today()->toDateString(), $sequence);
-
-        $delivery = Delivery::create([
-            'delivery_id' => $deliveryId,
-            'order_id' => $validated['order_id'],
-            'address' => $validated['address'],
-            'D_payment_status' => 'unpaid',
-            'delivery_status' => 'waiting_info',
-        ]);
-
-        return response()->json([
-            'data' => $delivery->load('order.user'),
-            'message' => 'Delivery created successfully',
-        ], 201);
-    }
-
-    /**
-     * Approve delivery (confirm delivery info)
-     */
-    public function approve(Request $request, Delivery $delivery)
-    {
-        if ($delivery->delivery_status !== 'waiting_info') {
-            return response()->json([
-                'message' => 'Chỉ có thể xác nhận giao hàng ở trạng thái "Chờ thông tin"',
-            ], 422);
-        }
-
-        $delivery->update([
-            'delivery_status' => 'waiting_confirmation',
-            'approved_at' => now(),
-        ]);
-
-        // Gửi mail thông báo cho khách khi đơn ship được admin duyệt
-        $delivery->load('order.bill', 'order.user');
-        $bill = $delivery->order?->bill;
-        $customerEmail = $delivery->order?->user?->email;
-
-        if ($bill && $customerEmail) {
-            try {
-                $bodyLine = "Hiện tại quý khách đang có đơn hàng đặt ship, mã hóa đơn là <strong>{$bill->bill_id}</strong>, đơn hàng sẽ được giao tới trong vòng 30 phút.";
-                Mail::to($customerEmail)->send(new OrderNotificationMail($bill, $bodyLine));
-            } catch (\Exception $e) {
-                Log::error('Gửi mail thông báo duyệt đơn ship thất bại: ' . $e->getMessage());
-            }
-        }
-
-        return response()->json([
-            'data' => $delivery,
-            'message' => 'Delivery approved successfully',
-        ]);
-    }
-
-    /**
-     * Cancel delivery
-     */
-    public function cancel(Request $request, Delivery $delivery)
-    {
-        if ($delivery->delivery_status === 'completed' || $delivery->delivery_status === 'cancelled') {
-            return response()->json([
-                'message' => 'Không thể hủy giao hàng đã hoàn thành hoặc đã hủy',
-            ], 422);
-        }
-
-        $delivery->update([
-            'delivery_status' => 'cancelled',
-        ]);
-
-        return response()->json([
-            'data' => $delivery,
-            'message' => 'Delivery cancelled successfully',
         ]);
     }
 }

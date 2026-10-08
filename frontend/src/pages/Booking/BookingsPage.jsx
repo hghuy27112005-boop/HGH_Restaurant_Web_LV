@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { bookingService, billService, vnpayService, extractListData, userAPI, orderService, stockAPI, serverTimeAPI, promotionAPI } from '../../services/api';
+import { bookingService, billService, vnpayService, extractListData, userAPI, orderService, serverTimeAPI, promotionAPI } from '../../services/api';
 import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
+import IngredientLimitModal from '../../components/IngredientLimitModal';
+import { translateIngredients } from '../Menu/DishDetailPage';
 
 
 const BOOKING_SESSION_KEY = 'booking_checkout_session';
+const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
 
 const getTodayDateKey = () => {
     const today = new Date();
@@ -36,7 +39,8 @@ const BookingsPage = () => {
     const [pointsModalType, setPointsModalType] = useState(null); // 'insufficient' | 'confirm' | null
     const [pointsNeeded, setPointsNeeded] = useState(0);
     const [currentPoints, setCurrentPoints] = useState(0);
-    const [stockErrorItems, setStockErrorItems] = useState(null); // null = ẩn, [...] = danh sách món vượt kho
+    const [pointsErrorMessage, setPointsErrorMessage] = useState(null); // lỗi thanh toán bằng điểm (hiện trong modal, không tự ẩn)
+    const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit, shortage } = hiện modal lỗi nguyên liệu
     const [searchBillId, setSearchBillId] = useState('');
     const [arrivalDateFilter, setArrivalDateFilter] = useState(getTodayDateKey);
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -49,7 +53,7 @@ const BookingsPage = () => {
     const getDateKey = (value) => {
         if (!value) return '';
         const text = String(value);
-        if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return '';
         const year = date.getFullYear();
@@ -375,19 +379,6 @@ const BookingsPage = () => {
         setBookingConfirmError(null);
 
         try {
-            // Kiểm tra số lượng kho trước
-            const stockDate = bookingDate || new Date().toISOString().slice(0, 10);
-            const items = bookingCart.map(item => ({ dish_id: item.dish_id, quantity: item.quantity }));
-            try {
-                await stockAPI.check(items, stockDate);
-            } catch (stockErr) {
-                if (stockErr.response?.status === 422) {
-                    setStockErrorItems(stockErr.response.data.exceeded || []);
-                    setBookingConfirming(false);
-                    return;
-                }
-            }
-
             // Kiểm tra overlap một lần nữa ngay trước khi tạo bill để tránh race-condition
             try {
                 await bookingService.checkOverlap({
@@ -442,7 +433,20 @@ const BookingsPage = () => {
 
             setBookingConfirmModalStep(2);
         } catch (err) {
-            setBookingConfirmError(err.response?.data?.message || 'Lỗi xác nhận đặt bàn. Vui lòng thử lại.');
+            const data = err.response?.data;
+            if (err.response?.status === 422 && (data?.over_limit || data?.exceeded)) {
+                // Lỗi nguyên liệu: đóng modal xác nhận, hiện modal chi tiết.
+                // Đơn chưa được tạo (backend chặn trước khi tạo) nên không cần dọn gì.
+                handleCloseBookingConfirmModal();
+                setIngredientError({
+                    message: data.message,
+                    overLimit: data.over_limit || [],
+                    shortage: data.exceeded || [],
+                });
+                return;
+            }
+
+            setBookingConfirmError(data?.message || 'Lỗi xác nhận đặt bàn. Vui lòng thử lại.');
             setBookingErrorCountdown(5);
         } finally {
             setBookingConfirming(false);
@@ -573,7 +577,7 @@ const BookingsPage = () => {
         const updated = bookingCart
             .map((item, i) => {
                 if (i !== idx) return item;
-                const newQty = item.quantity + amount;
+                const newQty = Math.min(MAX_ITEM_QUANTITY, item.quantity + amount);
                 if (newQty < 0) return item;
                 return { ...item, quantity: newQty };
             })
@@ -686,7 +690,7 @@ const BookingsPage = () => {
             if (fetchUser) fetchUser(); // update user points
             window.location.href = `/payment-result?status=success&code=00&order_type=booking_table&bill_id=${billId}`;
         } catch (err) {
-            setError('Lỗi thanh toán bằng điểm: ' + (err.response?.data?.message || err.message));
+            setPointsErrorMessage(err.response?.data?.message || err.message || 'Không thể thanh toán bằng điểm. Vui lòng thử lại.');
             setPointsModalType(null);
             setPayingWith(null);
         }
@@ -863,6 +867,9 @@ const BookingsPage = () => {
                                                         <span className="w-6 text-center font-semibold">{item.quantity}</span>
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, 1)}
+                                                            disabled={item.quantity >= MAX_ITEM_QUANTITY}
+                                                            title={item.quantity >= MAX_ITEM_QUANTITY ? 'Tối đa 50 phần mỗi món' : undefined}
+                                                            style={item.quantity >= MAX_ITEM_QUANTITY ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
                                                             className="w-6 h-6 rounded-full border border-red-600 text-red-600 font-bold flex items-center justify-center hover:bg-red-600 hover:text-white transition"
                                                         >
                                                             +
@@ -1443,7 +1450,7 @@ const BookingsPage = () => {
                                                         </span>
                                                     </div>
                                                     <div className="flex justify-between font-bold text-gray-800">
-                                                        <span>Số tiền đã trả:</span>
+                                                        <span>Số tiền cần trả:</span>
                                                         <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}đ</span>
                                                     </div>
                                                 </>
@@ -1495,43 +1502,25 @@ const BookingsPage = () => {
                 )}
             </div>
 
-            {/* Stock Error Modal */}
-            {stockErrorItems !== null && (
-                <div className="fixed inset-0 bg-gray-400/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full">
-                        <div className="bg-red-600 text-white px-6 py-4 rounded-t-lg">
-                            <h2 className="text-xl font-bold">Báo lỗi</h2>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-gray-700 mb-4">Các món sau đang thiếu nguyên liệu:</p>
-                            <table className="w-full text-sm border border-gray-200 rounded">
-                                <thead className="bg-red-600 text-white">
-                                    <tr>
-                                        <th className="px-3 py-2 text-left">Món ăn</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {stockErrorItems
-                                        .filter((item, index, items) => items.findIndex(other => other.dish_id === item.dish_id) === index)
-                                        .map((item) => (
-                                        <tr key={item.dish_id} className="border-t">
-                                            <td className="px-3 py-2">{item.dish_name}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            <div className="mt-6 flex justify-end">
-                                <button
-                                    onClick={() => setStockErrorItems(null)}
-                                    className="px-5 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
-                                >
-                                    Đóng
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Lỗi thanh toán bằng điểm: modal có nút Đóng, không tự ẩn */}
+            <Modal
+                isOpen={!!pointsErrorMessage}
+                title="Lỗi thanh toán bằng điểm"
+                onClose={() => setPointsErrorMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{pointsErrorMessage}</p>
+            </Modal>
+
+            {/* Lỗi nguyên liệu (vượt 50 / kho đang bổ sung) */}
+            <IngredientLimitModal
+                isOpen={ingredientError !== null}
+                onClose={() => setIngredientError(null)}
+                message={ingredientError?.message}
+                overLimit={ingredientError?.overLimit}
+                shortage={ingredientError?.shortage}
+                formatIngredient={translateIngredients}
+            />
 
             <Modal
                 isOpen={Boolean(alertMessage)}

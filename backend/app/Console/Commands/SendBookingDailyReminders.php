@@ -25,10 +25,11 @@ class SendBookingDailyReminders extends Command
         $today = today()->toDateString();
 
         // Chỉ lấy booking: đặt cho hôm nay, đặt TỪ TRƯỚC (created_at ngày < booking_date),
-        // chưa bị hủy. Trường hợp đặt ngay trong hôm nay đã được gửi mail lúc tạo bill rồi
+        // đã thanh toán (completed + paid, nên không gồm đơn bị hủy). Trường hợp đặt ngay trong hôm nay đã được gửi mail lúc thanh toán rồi
         // nên loại trừ ở đây để tránh gửi trùng.
         $bookings = BookingTable::where('booking_date', $today)
-            ->where('booking_status', '!=', 'cancelled')
+            ->where('booking_status', 'completed')
+            ->where('B_payment_status', 'paid')
             ->whereRaw('DATE(created_at) < booking_date')
             ->with('order.bill', 'order.user')
             ->get();

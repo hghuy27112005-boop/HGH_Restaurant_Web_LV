@@ -17,10 +17,15 @@ class DeliveryController extends Controller
     {
         $request->validate([
             'address' => 'required|string|max:500',
+            'preferred_delivery_time' => 'nullable|date_format:H:i',
         ]);
 
         try {
             $result = $distanceService->calculateForAddress($request->address);
+            $result['schedule'] = Delivery::previewSchedule(
+                (int) $result['duration_minutes'],
+                $request->input('preferred_delivery_time')
+            );
 
             return response()->json([
                 'data' => $result,
@@ -41,10 +46,15 @@ class DeliveryController extends Controller
         $request->validate([
             'lat' => 'required|numeric|between:-90,90',
             'lng' => 'required|numeric|between:-180,180',
+            'preferred_delivery_time' => 'nullable|date_format:H:i',
         ]);
 
         try {
             $result = $distanceService->calculateForCoordinates((float) $request->lat, (float) $request->lng);
+            $result['schedule'] = Delivery::previewSchedule(
+                (int) $result['duration_minutes'],
+                $request->input('preferred_delivery_time')
+            );
 
             return response()->json([
                 'data' => $result,
@@ -67,8 +77,8 @@ class DeliveryController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        if (!in_array($delivery->delivery_status, ['waiting_info', 'waiting_confirmation', 'waiting_approval'])) {
-            return response()->json(['message' => 'Không thể hủy đơn hàng ở trạng thái này'], 400);
+        if (!in_array($delivery->delivery_status, ['waiting_payment', 'scheduled'])) {
+            return response()->json(['message' => 'Đơn hàng đang được chuẩn bị, không thể hủy'], 400);
         }
 
         $bill = Bill::where('order_id', $order->order_id)->first();
@@ -85,26 +95,15 @@ class DeliveryController extends Controller
             $delivery->delivery_status = 'cancelled';
             $delivery->D_payment_status = 'refunded';
             $delivery->save();
+
+            \App\Models\Stock::restoreForOrder($order);
             
             // Thu hồi điểm tích lũy/thưởng đã nhận khi thanh toán
-            $subtotal = $order->subtotal_price ?? $bill->total_price;
-            $total = $bill->total_price;
-            $basePoints = floor($total / 1000);
-            $bonusPoints = 0;
-            if ($user && $subtotal >= 100000 && $user->role !== 'admin' && $user->membership !== 'administrator') {
-                $bonusMap = [
-                    'bronze' => 10,
-                    'silver' => 20,
-                    'gold' => 30,
-                    'platinum' => 40,
-                    'diamond' => 50,
-                ];
-                $bonusPoints = $bonusMap[$user->membership] ?? 0;
-            }
-            $pointsToRevoke = $basePoints + $bonusPoints;
-            if ($pointsToRevoke > 0) {
-                $user->points -= $pointsToRevoke;
-            }
+            // Thu hồi đúng số điểm đã ghi nhận lúc thanh toán (undo), không tính lại
+            $pointsRecord = \App\Models\Points::where('bill_id', $bill->bill_id)
+                ->orderBy('created_at')
+                ->first();
+            $pointsToRevoke = $pointsRecord ? (int) $pointsRecord->points_earned : 0;
 
             // Hoàn điểm đúng bằng số điểm đã bị trừ lúc thanh toán — nếu lúc đó
             // có áp dụng giảm giá sự kiện (sale_off_total_price), phải hoàn theo
@@ -113,11 +112,12 @@ class DeliveryController extends Controller
                 ? (float) $bill->sale_off_total_price
                 : (float) $order->subtotal_price;
             $refundPoints = (int) floor($amount / 100);
+
+            $user->points = max(0, $user->points - $pointsToRevoke + $refundPoints);
+            $user->updateMembership();
+            $user->save();
             
             if ($refundPoints > 0) {
-                $user->points += $refundPoints;
-                if ($user->points < 0) $user->points = 0; // Đảm bảo không âm điểm
-                $user->save();
                 
                 \App\Models\Points::create([
                     'user_id' => $user->user_id,

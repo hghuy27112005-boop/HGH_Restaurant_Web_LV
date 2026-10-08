@@ -49,10 +49,4 @@ class OrderCodeGenerator
 
         return $datePart . '1' . str_pad($sequence, 3, '0', STR_PAD_LEFT);
     }
-
-    public function generateStockId($dishId, ?string $date = null): string
-    {
-        $datePart = Carbon::parse($date ?? now())->format('dmy');
-        return $datePart . str_pad($dishId, 3, '0', STR_PAD_LEFT);
-    }
 }

@@ -64,7 +64,6 @@ class DatabaseSeeder extends Seeder
             'dish_similarities',
             'ingredient_stock_transactions',
             'ingredient_stocks',
-            'stocks',
             'order_items',
             'deliveries',
             'booking_tables',
@@ -188,9 +187,9 @@ class DatabaseSeeder extends Seeder
 
         // 4. Seed Table
         DB::table('table_types')->insert([
-            ['table_type_name' => 'Bàn 5 người', 'capacity' => 2],
-            ['table_type_name' => 'Bàn 10 người', 'capacity' => 4],
-            ['table_type_name' => 'Bàn 15 người', 'capacity' => 8],
+            ['table_type_name' => 'Bàn 5 người', 'capacity' => 5],
+            ['table_type_name' => 'Bàn 10 người', 'capacity' => 10],
+            ['table_type_name' => 'Bàn 15 người', 'capacity' => 15],
         ]);
 
         $tableTypeIds = DB::table('table_types')
@@ -742,19 +741,6 @@ class DatabaseSeeder extends Seeder
                 'refill_count' => 0,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
-        }
-
-        // 8. Seed dish stocks
-        $generator = new \App\Services\OrderCodeGenerator();
-        foreach ($dishes as $dish) {
-            DB::table('stocks')->insert([
-                'stock_id' => $generator->generateStockId($dish->dish_id, $today),
-                'dish_id' => $dish->dish_id,
-                'quantity_start' => 50,
-                'quantity_left' => 50,  
-                'updated_at' => now(),
-                'created_at' => now(),
             ]);
         }
 

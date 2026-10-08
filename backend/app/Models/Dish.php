@@ -51,11 +51,6 @@ class Dish extends Model
         return $this->hasMany(OrderItem::class, 'dish_id', 'dish_id');
     }
 
-    public function stock()
-    {
-        return $this->hasOne(Stock::class, 'dish_id', 'dish_id');
-    }
-
     public function customizations()
     {
         return $this->hasMany(DishCustomization::class, 'dish_id', 'dish_id');
@@ -117,46 +112,6 @@ class Dish extends Model
     public function applyDiscount($discountPercent)
     {
         return $this->price * (1 - $discountPercent / 100);
-    }
-
-    /**
-     * Get current stock quantity
-     */
-    public function getCurrentStock()
-    {
-        $generator = new OrderCodeGenerator();
-        $stockId = $generator->generateStockId($this->dish_id, now()->format('Y-m-d'));
-        $stock = Stock::find($stockId);
-
-        if (!$stock) {
-            $stock = Stock::getOrCreateForDishAndDate($this->dish_id, now()->format('Y-m-d'));
-        }
-
-        return (int) ($stock ? $stock->quantity_left : 0);
-    }
-
-    /**
-     * Get stock status
-     */
-    public function getStockStatus()
-    {
-        $quantity = $this->getCurrentStock();
-
-        if ($quantity <= 0) {
-            return 'out_of_stock';
-        } elseif ($quantity <= 15) {
-            return 'low_stock';
-        }
-
-        return 'in_stock';
-    }
-
-    /**
-     * Check if available
-     */
-    public function isAvailable()
-    {
-        return $this->getStockStatus() !== 'out_of_stock';
     }
 
     /**

@@ -62,11 +62,6 @@ export const billAPI = {
     getById: (id) => axiosInstance.get(`/bills/${id}`),
     update: (id, data) => axiosInstance.put(`/bills/${id}`, data),
     delete: (id) => axiosInstance.delete(`/bills/${id}`),
-    calculateTotal: (id) => axiosInstance.post(`/bills/${id}/calculate-total`),
-    processPayment: (id, paymentData) =>
-        axiosInstance.post(`/bills/${id}/payment`, paymentData),
-    payWithPoints: (id) =>
-        axiosInstance.post(`/bills/${id}/pay-with-points`),
     exportPdf: (billId) =>
         axiosInstance.get(`/bills/${billId}/export-pdf`, { responseType: 'blob' }),
 };
@@ -96,27 +91,8 @@ export const orderAPI = {
 
 // Deliveries API
 export const deliveryAPI = {
-    getAll: (filters = {}) => axiosInstance.get('/deliveries', { params: filters }),
-    create: (data) => axiosInstance.post('/deliveries', data),
-    getById: (id) => axiosInstance.get(`/deliveries/${id}`),
-    approve: (id) => axiosInstance.post(`/deliveries/${id}/approve`),
-    complete: (id) =>
-        axiosInstance.post(`/deliveries/${id}/complete`),
     cancelWithPoints: (id) =>
         axiosInstance.post(`/deliveries/${id}/cancel-points`),
-};
-
-// Booking Tables API
-export const bookingTableAPI = {
-    getAll: () => axiosInstance.get('/booking-tables'),
-    create: (data) => axiosInstance.post('/booking-tables', data),
-    getById: (id) => axiosInstance.get(`/booking-tables/${id}`),
-    update: (id, data) => axiosInstance.put(`/booking-tables/${id}`, data),
-    delete: (id) => axiosInstance.delete(`/booking-tables/${id}`),
-    getAvailable: (date, time) =>
-        axiosInstance.get('/booking-tables/available', {
-            params: { date, time },
-        }),
 };
 
 // Dishes API (public - chỉ trả về món đang bán, is_active = true)
@@ -156,16 +132,6 @@ export const serverTimeAPI = {
     get: () => axiosInstance.get('/server-time'),
 };
 
-// Points API
-export const pointsAPI = {
-    getUserPoints: () => axiosInstance.get('/points'),
-};
-
-// Statistics API
-export const statisticsAPI = {
-    getUserStats: () => axiosInstance.get('/statistics/user'),
-};
-
 // Promotions API
 export const promotionAPI = {
     getAll: () => axiosInstance.get('/sale-off-events'),
@@ -182,15 +148,15 @@ export const adminSaleOffAPI = {
     delete: (id) => axiosInstance.delete(`/admin/sale-off-events/${id}`),
 };
 
-// Stock API (public check endpoint)
-export const stockAPI = {
-    check: (items, date) => axiosInstance.post('/stocks/check', { items, date }),
+// Cart API: kiểm tra nguyên liệu cộng dồn của cả giỏ (tối đa 50 mỗi nguyên liệu)
+export const cartAPI = {
+    checkIngredients: (items) => axiosInstance.post('/cart/check-ingredients', { items }),
 };
 
 // Shipping preview API (public)
 export const shippingAPI = {
-    preview: (address) => axiosInstance.post('/deliveries/preview-shipping', { address }),
-    previewByCoordinates: (lat, lng) => axiosInstance.post('/deliveries/preview-shipping-by-coordinates', { lat, lng }),
+    preview: (address, preferredTime = null) => axiosInstance.post('/deliveries/preview-shipping', { address, preferred_delivery_time: preferredTime }),
+    previewByCoordinates: (lat, lng, preferredTime = null) => axiosInstance.post('/deliveries/preview-shipping-by-coordinates', { lat, lng, preferred_delivery_time: preferredTime }),
 };
 
 // Admin APIs
@@ -211,12 +177,6 @@ export const adminAPI = {
             axiosInstance.get('/admin/deliveries/stats', { params: filters }),
         getById: (id) =>
             axiosInstance.get(`/admin/deliveries/${id}`),
-        approve: (id) =>
-            axiosInstance.post(`/admin/deliveries/${id}/approve`),
-        complete: (id) =>
-            axiosInstance.post(`/admin/deliveries/${id}/complete`),
-        cancel: (id) =>
-            axiosInstance.post(`/admin/deliveries/${id}/cancel`),
     },
     dishes: {
         // Lấy TOÀN BỘ món (kể cả đã ẩn) - chỉ dùng cho trang quản lý admin
@@ -233,14 +193,6 @@ export const adminAPI = {
         toggleStatus: (id) => axiosInstance.post(`/admin/dishes/${id}/toggle-status`),
         // Xóa vĩnh viễn - backend sẽ từ chối nếu món đã từng được đặt hàng
         delete: (id) => axiosInstance.delete(`/admin/dishes/${id}`),
-    },
-    stock: {
-        getAll: () => axiosInstance.get('/admin/stocks'),
-        create: (data) => axiosInstance.post('/admin/stocks', data),
-        update: (id, data) =>
-            axiosInstance.put(`/admin/stocks/${id}`, data),
-        getLowStock: () =>
-            axiosInstance.get('/admin/stocks/low-stock'),
     },
     users: {
         getAll: (filters = {}) =>
@@ -282,8 +234,6 @@ export const adminAPI = {
 export const billService = {
     getBills: (filters) => myBillsAPI.getAll(filters),
     storeBill: (data) => billAPI.create(data),
-    processPayment: (id, data) => billAPI.processPayment(id, data),
-    payWithPoints: (id) => billAPI.payWithPoints(id),
     exportPdf: (billId) => billAPI.exportPdf(billId),
 };
 
@@ -295,18 +245,13 @@ export const orderService = {
 
 export const bookingService = {
     getBookings: () => myBillsAPI.getAll({ order_type: 'booking_table' }),
-    createBooking: (data) => bookingTableAPI.create(data),
     checkOverlap: (data) => axiosInstance.post('/booking-tables/check-overlap', data),
     getOccupiedTables: (data) => axiosInstance.post('/booking-tables/occupied', data),
-    updateBooking: (id, data) => bookingTableAPI.update(id, data),
-    deleteBooking: (id) => bookingTableAPI.delete(id),
-    cancelBooking: (id) => bookingTableAPI.delete(id),
     cancelWithPoints: (orderId) => axiosInstance.post('/booking-tables/cancel-points', { order_id: orderId }),
 };
 
 export const deliveryService = {
     getDeliveries: () => myBillsAPI.getAll({ order_type: 'delivery' }),
-    approveDelivery: (id) => deliveryAPI.approve(id),
     cancelDelivery: (id) => deliveryAPI.cancelWithPoints(id),
 };
 

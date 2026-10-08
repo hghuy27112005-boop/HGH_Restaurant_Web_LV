@@ -8,7 +8,6 @@ use App\Models\Bill;
 use App\Models\Order;
 use App\Models\Dish;
 use App\Models\Delivery;
-use App\Models\Discount;
 use App\Models\Points;
 use App\Models\Statistics;
 use App\Models\BookingTable;
@@ -61,14 +60,67 @@ class BillController extends Controller
             'items' => 'required|array|min:1',
             'items.*.dish_id' => 'required|exists:dishes,dish_id',
             'items.*.quantity' => 'required|integer|min:1',
+            'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
+            'items.*.customization_name' => 'nullable|string|max:255',
+            'items.*.ingredients' => 'nullable|string',
+            'items.*.removed_ingredients' => 'nullable|array',
             'delivery.address' => 'required_if:order_type,delivery|string',
             'delivery.phone' => 'required_if:order_type,delivery|string',
             'booking_table' => 'required_if:order_type,booking_table|array',
-            'booking_table.tables' => 'required_if:order_type,booking_table|array',
-            'booking_table.start_date' => 'required_if:order_type,booking_table|date',
-            'booking_table.start_time' => 'required_if:order_type,booking_table|string',
-            'booking_table.end_time' => 'required_if:order_type,booking_table|string',
+            'booking_table.tables' => 'required_if:order_type,booking_table|array|min:1|max:3',
+            'booking_table.tables.*' => 'integer|distinct|exists:restaurant_tables,table_number',
+            'booking_table.start_date' => 'required_if:order_type,booking_table|date_format:Y-m-d|after_or_equal:today|before_or_equal:' . now()->addDays(60)->format('Y-m-d'),
+            'booking_table.start_time' => 'required_if:order_type,booking_table|date_format:H:i',
+            'booking_table.end_time' => 'required_if:order_type,booking_table|date_format:H:i',
         ]);
+
+        if ($validated['order_type'] === 'booking_table') {
+            // Kiểm tra khung giờ ở backend (không chỉ tin frontend): 07:00-22:00, tối đa 90 phút
+            [$sH, $sM] = array_map('intval', explode(':', $validated['booking_table']['start_time']));
+            [$eH, $eM] = array_map('intval', explode(':', $validated['booking_table']['end_time']));
+            $startMinutes = $sH * 60 + $sM;
+            $endMinutes = $eH * 60 + $eM;
+
+            if ($startMinutes < 7 * 60 || $endMinutes > 22 * 60) {
+                return response()->json(['message' => 'Giờ đặt bàn phải nằm trong khung 07:00 - 22:00.'], 422);
+            }
+            if ($endMinutes <= $startMinutes) {
+                return response()->json(['message' => 'Giờ về phải sau giờ đến.'], 422);
+            }
+            if ($endMinutes - $startMinutes > 90) {
+                return response()->json(['message' => 'Chỉ được đặt bàn tối đa 90 phút.'], 422);
+            }
+
+            $bookingStart = \Carbon\Carbon::parse($validated['booking_table']['start_date'] . ' ' . $validated['booking_table']['start_time']);
+            if ($bookingStart->lt(now()->addMinutes(60))) {
+                return response()->json([
+                    'message' => 'Giờ đến phải cách hiện tại ít nhất 60 phút. Vui lòng quay lại chọn lại thời gian.',
+                ], 422);
+            }
+        }
+
+        $over50 = \App\Models\Stock::findIngredientDemandOver50($validated['items']);
+        if ($over50) {
+            return response()->json([
+                'message' => 'Một số nguyên liệu bị yêu cầu vượt quá định lượng tối đa (50). Vui lòng chọn món khác thay thế.',
+                'over_limit' => $over50,
+            ], 422);
+        }
+
+        if ($validated['order_type'] === 'booking_table') {
+            $bookingDateTime = \Carbon\Carbon::parse($validated['booking_table']['start_date'] . ' ' . $validated['booking_table']['start_time']);
+            $isNearCookWindow = $bookingDateTime->betweenIncluded(now()->addMinutes(60), now()->addMinutes(70));
+
+            if ($isNearCookWindow) {
+                $shortage = \App\Models\Stock::checkAndRefillShortage($validated['items'], $validated['booking_table']['start_date']);
+                if ($shortage) {
+                    return response()->json([
+                        'message' => 'Một số nguyên liệu không đủ định lượng trong kho. Quý khách vui lòng đợi một chút để chúng tôi bổ sung hàng vào kho. Sau đó quý khách có thể tiếp tục thực hiện đặt hàng.',
+                        'exceeded' => $shortage,
+                    ], 422);
+                }
+            }
+        }
 
         DB::beginTransaction();
         try {
@@ -97,6 +149,10 @@ class BillController extends Controller
                     'dish_id'  => $item['dish_id'],
                     'quantity' => $item['quantity'],
                     'price'    => $realPrice,
+                    'customization_id' => $item['customization_id'] ?? null,
+                    'customization_name' => $item['customization_name'] ?? null,
+                    'ingredients' => $item['ingredients'] ?? null,
+                    'removed_ingredients' => $item['removed_ingredients'] ?? [],
                 ];
             }
 
@@ -139,6 +195,10 @@ class BillController extends Controller
                     'dish_id' => $item['dish_id'],
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['price'],
+                    'customization_id' => $item['customization_id'] ?? null,
+                    'customization_name' => $item['customization_name'] ?? null,
+                    'ingredients' => $item['ingredients'] ?? null,
+                    'removed_ingredients' => $item['removed_ingredients'] ?? [],
                 ]);
             }
 
@@ -149,7 +209,7 @@ class BillController extends Controller
                     'order_id' => $orderId,
                     'address' => $validated['delivery']['address'],
                     'D_payment_status' => 'unpaid',
-                    'delivery_status' => 'waiting_confirmation',
+                    'delivery_status' => 'waiting_payment',
                 ]);
                 $relatedId = $delivery->delivery_id;
             }
@@ -200,11 +260,6 @@ class BillController extends Controller
                         'booking_status'   => 'waiting_info',
                     ]);
                 }
-            }
-
-            // Trừ kho ngay khi xác nhận đặt bàn (không đợi thanh toán xong)
-            if ($validated['order_type'] === 'booking_table') {
-                \App\Models\Stock::decrementStockForOrder($order, $validated['booking_table']['start_date']);
             }
 
             // Create Bill — booking_table orders are paid immediately at checkout
@@ -297,139 +352,6 @@ class BillController extends Controller
         ]);
     }
 
-    /**
-     * Calculate total with discount
-     */
-    public function calculateTotal(Request $request, Bill $bill)
-    {
-        if ($bill->order->user_id !== $request->user()->user_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $user = $request->user();
-
-        $bill->loadMissing('order.items');
-        $subtotal = $bill->order
-            ? $bill->order->items->sum(function ($item) {
-                return $item->unit_price * $item->quantity;
-            })
-            : 0;
-
-        // Get user discount
-        $discount = Discount::where('user_id', $user->id)
-            ->where('is_active', true)
-            ->first();
-
-        $discountAmount = 0;
-        if ($discount) {
-            $discountAmount = floor($subtotal * ($discount->discount_percentage / 100));
-        }
-
-        $total = $subtotal - $discountAmount;
-
-        // Add shipping for delivery
-        $orderType = $bill->order?->order_type;
-        if ($orderType === 'delivery') {
-            $shippingFee = config('app.shipping_fee', 5000);
-            $total += $shippingFee;
-        }
-
-        return response()->json([
-            'data' => [
-                'subtotal' => $subtotal,
-                'discount_percentage' => $discount?->discount_percentage ?? 0,
-                'discount_amount' => $discountAmount,
-                'shipping_fee' => $orderType === 'delivery' ? 5000 : 0,
-                'total' => $total,
-            ],
-        ]);
-    }
-
-    /**
-     * Process payment
-     */
-    public function processPayment(Request $request, Bill $bill)
-    {
-        if ($bill->order->user_id !== $request->user()->user_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $validated = $request->validate([
-            'payment_method' => 'required|in:credit_card,cash,bank_transfer',
-        ]);
-
-        $amount = (float) $bill->total_price;
-
-        DB::beginTransaction();
-        try {
-            $bill->update([
-                'payment_method' => $validated['payment_method'],
-            ]);
-
-            $order = $bill->order;
-
-            if ($order->order_type === 'delivery' && $bill->delivery !== null) {
-                $bill->delivery->update([
-                    'D_payment_status' => 'paid',
-                    'delivery_status'  => 'waiting_approval',
-                    'approved_at'      => now(),
-                ]);
-            }
-
-            if ($order->order_type === 'booking_table') {
-                $bookingTables = $bill->bookingTable;
-                if ($bookingTables->isNotEmpty()) {
-                    foreach ($bookingTables as $bt) {
-                        $bt->update([
-                            'B_payment_status' => 'paid',
-                            'booking_status'   => 'waiting_confirmation',
-                        ]);
-                    }
-                }
-            }
-
-            $pointsEarned = Points::calculatePoints($amount);
-            Points::create([
-                'user_id'              => $request->user()->user_id,
-                'bill_id'              => $bill->bill_id,
-                'points_earned'        => $pointsEarned,
-                'points_redeemed'      => 0,
-                'booking_total_price'  => $order->order_type === 'booking_table' ? $amount : 0,
-                'delivery_total_price' => $order->order_type === 'delivery' ? $amount : 0,
-            ]);
-
-            $request->user()->incrementPoints($pointsEarned);
-
-            $stats = $request->user()->getOrCreateStatistics();
-            $stats->incrementTotalOrders();
-            $stats->addSpent($amount);
-            $stats->addPoints($pointsEarned);
-
-            if ($order->order_type === 'booking_table') {
-                $stats->increment('booking_orders');
-            } else {
-                $stats->increment('delivery_orders');
-            }
-            $stats->save();
-
-            DB::commit();
-
-            return response()->json([
-                'data' => [
-                    'bill_id'         => $bill->bill_id,
-                    'payment_status'  => 'completed',
-                    'transaction_id'  => 'TXN' . time(),
-                    'amount'          => $amount,
-                    'points_earned'   => $pointsEarned,
-                ],
-                'message' => 'Payment processed successfully',
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
-        }
-    }
-
     public function exportPDF(Bill $bill)
     {
         $bill->load(['order.items.dish', 'order.bookings', 'order.delivery']);
@@ -467,6 +389,12 @@ class BillController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        if ($order->order_type === 'delivery' && $order->delivery && $order->delivery->isPreferredTimeTooClose(now())) {
+            return response()->json([
+                'message' => 'Thời điểm giao hàng mong muốn đã quá gần, không đủ thời gian chuẩn bị. Vui lòng quay lại chọn lại thời điểm.',
+            ], 422);
+        }
+
         $bill = Bill::with(['order.delivery', 'order.bookings'])
             ->where('order_id', $order->order_id)
             ->first();
@@ -482,26 +410,6 @@ class BillController extends Controller
             if ($isPaid) {
                 return response()->json(['message' => 'Đơn hàng đã được thanh toán'], 400);
             }
-        }
-
-        if (!$bill) {
-            $generator = new OrderCodeGenerator();
-            $relatedId = $order->order_id;
-            if ($order->isDelivery()) {
-                $relatedId = $order->delivery?->delivery_id ?? $relatedId;
-            } elseif ($order->bookings->isNotEmpty()) {
-                $relatedId = $order->bookings->first()?->booking_id ?? $relatedId;
-            }
-            $billId = $generator->generateBillId($order->order_type, $relatedId);
-
-            $bill = Bill::create([
-                'bill_id'        => $billId,
-                'order_id'       => $order->order_id,
-                'user_id'        => $user->user_id,
-                'total_price'    => $order->subtotal_price,
-                'payment_method' => null,
-            ]);
-            $bill = $bill->fresh();
         }
 
         // Luôn tự xác thực sự kiện giảm giá ở server, không tin trực tiếp
@@ -524,16 +432,42 @@ class BillController extends Controller
         $amount         = $saleOffTotalPrice ?? $subtotal;
         $requiredPoints = (int) floor($amount / 100);
 
-        if ($requiredPoints > 0 && $user->points < $requiredPoints) {
-            return response()->json([
-                'message'  => 'Bạn không có đủ điểm để thanh toán hóa đơn này.',
-                'required' => $requiredPoints,
-                'current'  => $user->points,
-            ], 400);
-        }
-
         DB::beginTransaction();
         try {
+            // Khóa dòng user rồi mới kiểm tra điểm trong transaction: hai thanh toán song song
+            // (2 tab / 2 đơn) không thể cùng qua kiểm tra rồi trừ điểm thành số âm.
+            $user = \App\Models\User::whereKey($user->getKey())->lockForUpdate()->first();
+
+            if ($requiredPoints > 0 && $user->points < $requiredPoints) {
+                DB::rollBack();
+                return response()->json([
+                    'message'  => 'Bạn không có đủ điểm để thanh toán hóa đơn này.',
+                    'required' => $requiredPoints,
+                    'current'  => $user->points,
+                ], 400);
+            }
+
+            // Chỉ tạo Bill SAU khi đã đủ điểm, trong cùng transaction:
+            // thiếu điểm thì không sinh ra Bill mồ côi (payment_method = null).
+            if (!$bill) {
+                $generator = new OrderCodeGenerator();
+                $relatedId = $order->order_id;
+                if ($order->isDelivery()) {
+                    $relatedId = $order->delivery?->delivery_id ?? $relatedId;
+                } elseif ($order->bookings->isNotEmpty()) {
+                    $relatedId = $order->bookings->first()?->booking_id ?? $relatedId;
+                }
+                $billId = $generator->generateBillId($order->order_type, $relatedId);
+
+                $bill = Bill::create([
+                    'bill_id'        => $billId,
+                    'order_id'       => $order->order_id,
+                    'user_id'        => $user->user_id,
+                    'total_price'    => $order->subtotal_price,
+                    'payment_method' => null,
+                ])->fresh();
+            }
+
             $originalAmount = (float) $order->subtotal_price;
             $bonusPoints = 0;
 
@@ -569,8 +503,8 @@ class BillController extends Controller
             if ($order->order_type === 'delivery' && $order->delivery !== null) {
                 $order->delivery->update([
                     'D_payment_status' => 'paid',
-                    'delivery_status'  => 'waiting_approval',
-                    'approved_at'      => now(),
+                    'delivery_status'  => 'scheduled',
+                    'paid_at'      => now(),
                 ]);
             }
 
@@ -583,8 +517,6 @@ class BillController extends Controller
                     ]);
                 }
                 $firstBt = $bookingTables->first();
-                $date = $firstBt ? $firstBt->booking_date : now()->format('Y-m-d');
-                \App\Models\Stock::refillIfLowForOrder($order, $date);
             }
 
             Points::create([
@@ -631,109 +563,6 @@ class BillController extends Controller
                     'remaining_points' => $user->points,
                 ],
                 'message' => 'Thanh toán bằng điểm thành công',
-            ]);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * Pay with Points
-     */
-    public function payWithPoints(Request $request, Bill $bill)
-    {
-        $user = $request->user();
-        if ($bill->order->user_id !== $user->user_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $isPaid = false;
-        if ($bill->order && $bill->order->order_type === 'delivery' && $bill->delivery) {
-            $isPaid = $bill->delivery->D_payment_status === 'paid';
-        } elseif ($bill->order && $bill->order->order_type === 'booking_table' && $bill->bookingTable->isNotEmpty()) {
-            $isPaid = $bill->bookingTable->first()->B_payment_status === 'paid';
-        }
-
-        if ($isPaid) {
-            return response()->json(['message' => 'Hóa đơn đã được thanh toán'], 400);
-        }
-
-        $amount = (float) $bill->total_price;
-        $requiredPoints = floor($amount / 100);
-
-        if ($user->points < $requiredPoints) {
-            return response()->json([
-                'message' => 'Bạn không có đủ điểm để thanh toán hóa đơn này.',
-                'required' => $requiredPoints,
-                'current' => $user->points
-            ], 400);
-        }
-
-        DB::beginTransaction();
-        try {
-            $user->points -= $requiredPoints;
-            $user->updateMembership();
-            $user->save();
-
-            $bill->update([
-                'payment_method' => 'Points',
-                'total_price'    => 0,
-            ]);
-
-            $order = $bill->order;
-
-            if ($order->order_type === 'delivery' && $bill->delivery !== null) {
-                $bill->delivery->update([
-                    'D_payment_status' => 'paid',
-                    'delivery_status'  => 'waiting_approval',
-                    'approved_at'      => now(),
-                ]);
-            }
-
-            if ($order->order_type === 'booking_table') {
-                $bookingTables = $bill->bookingTable;
-                if ($bookingTables->isNotEmpty()) {
-                    foreach ($bookingTables as $bt) {
-                        $bt->update([
-                            'B_payment_status' => 'paid',
-                            'booking_status'   => 'completed',
-                        ]);
-                    }
-                    $firstBt = $bookingTables->first();
-                    $date = $firstBt ? $firstBt->booking_date : now()->format('Y-m-d');
-                    \App\Models\Stock::refillIfLowForOrder($order, $date);
-                }
-            }
-
-            Points::create([
-                'user_id'              => $user->user_id,
-                'bill_id'              => $bill->bill_id,
-                'points_earned'        => 0,
-                'points_redeemed'      => $requiredPoints,
-                'booking_total_price'  => 0,
-                'delivery_total_price' => 0,
-            ]);
-
-            $stats = $user->getOrCreateStatistics();
-            $stats->incrementTotalOrders();
-            if ($order->order_type === 'booking_table') {
-                $stats->increment('booking_orders');
-            } else {
-                $stats->increment('delivery_orders');
-            }
-            $stats->save();
-
-            DB::commit();
-
-            return response()->json([
-                'data' => [
-                    'bill_id'        => $bill->bill_id,
-                    'payment_status' => 'completed',
-                    'points_used'    => $requiredPoints,
-                    'remaining_points' => $user->points,
-                ],
-                'message' => 'Thanh toán bằng điểm thành công'
             ]);
         } catch (\Exception $e) {
             DB::rollBack();

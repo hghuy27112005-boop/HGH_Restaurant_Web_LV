@@ -15,6 +15,7 @@ class AutoStartDeliveries extends Command
     {
         Delivery::autoCompleteExpired();
         Delivery::autoStartReady();
+        \App\Models\Stock::deductDueBookings();
 
         return self::SUCCESS;
     }

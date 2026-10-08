@@ -2,14 +2,17 @@
 
 namespace App\Models;
 
+use App\Mail\OrderNotificationMail;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class Delivery extends Model
 {
     protected $table = 'deliveries';
-    
+
     protected $primaryKey = 'delivery_id';
     public $incrementing = false;
     protected $keyType = 'string';
@@ -28,10 +31,12 @@ class Delivery extends Model
         'destination_lng',
         'D_payment_status',
         'delivery_status',
-        'approved_at',
+        'paid_at',
         'delivery_started_at',
         'estimated_completion_at',
         'delivered_at',
+        'cooking_at',
+        'ship_at',
     ];
 
     protected $casts = [
@@ -41,10 +46,12 @@ class Delivery extends Model
         'shipping_fee' => 'integer',
         'destination_lat' => 'float',
         'destination_lng' => 'float',
-        'approved_at' => 'datetime',
+        'paid_at' => 'datetime',
         'delivery_started_at' => 'datetime',
         'estimated_completion_at' => 'datetime',
         'delivered_at' => 'datetime',
+        'cooking_at' => 'datetime',
+        'ship_at' => 'datetime',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
@@ -69,11 +76,163 @@ class Delivery extends Model
         return $this->order?->user;
     }
 
+    // ============================================
+    // LỊCH NẤU / GIAO (tính 1 lần lúc thanh toán)
+    // ============================================
+
+    public const PREP_MINUTES = 15;
+
+    /** Thời gian chờ thanh toán (VNPay) tính vào mốc "giờ tới sớm nhất". */
+    public const PAYMENT_WAIT_MINUTES = 45;
+
+    /**
+     * Giờ hàng tới sớm nhất khách được hẹn, tính từ lúc $now:
+     * max(now + 45' chờ thanh toán + 15' chuẩn bị + giao, 7:30 + 15' chuẩn bị + giao).
+     * Làm tròn lên phút vì giờ hẹn chỉ có dạng HH:MM.
+     */
+    public static function earliestArrivalAt(Carbon $now, int $durationMinutes): Carbon
+    {
+        $byClock = $now->copy()->addMinutes(self::PAYMENT_WAIT_MINUTES + self::PREP_MINUTES + $durationMinutes);
+        $byOpening = $now->copy()->setTime(7, 30, 0)->addMinutes(self::PREP_MINUTES + $durationMinutes);
+
+        $earliest = $byClock->gt($byOpening) ? $byClock : $byOpening;
+        $floor = $earliest->copy()->startOfMinute();
+
+        return $floor->lt($earliest) ? $floor->addMinute() : $floor;
+    }
+
+    /**
+     * Giờ hẹn (trong hôm nay, <= 22:00) mà sớm hơn "giờ tới sớm nhất" thì không hợp lệ.
+     * Hẹn sau 22:00 vẫn được (đơn sẽ nấu 7:30 sáng hôm sau).
+     */
+    public static function isPreferredArrivalTooEarly(?string $preferredTime, int $durationMinutes, Carbon $now): bool
+    {
+        if (!$preferredTime) {
+            return false;
+        }
+
+        $preferredAt = $now->copy()->setTimeFromTimeString($preferredTime);
+        if ($preferredAt->gt($now->copy()->setTime(22, 0, 0))) {
+            return false;
+        }
+
+        return $preferredAt->lt(self::earliestArrivalAt($now, $durationMinutes));
+    }
+
+    /**
+     * Lịch dự kiến cho 1 đơn chưa tạo (không lưu DB) — dùng cho API preview.
+     */
+    public static function previewSchedule(int $durationMinutes, ?string $preferredTime, ?Carbon $now = null): array
+    {
+        $now = ($now ?? now())->copy();
+
+        $draft = new self([
+            'estimated_duration_minutes' => $durationMinutes,
+            'preferred_delivery_time' => $preferredTime,
+        ]);
+        $draft->applyCookingSchedule($now);
+
+        return [
+            'cooking_at' => $draft->cooking_at?->toIso8601String(),
+            'ship_at' => $draft->ship_at?->toIso8601String(),
+            'estimated_completion_at' => $draft->estimated_completion_at?->toIso8601String(),
+            'earliest_arrival_at' => self::earliestArrivalAt($now, $durationMinutes)->toIso8601String(),
+            'preferred_time_too_early' => self::isPreferredArrivalTooEarly($preferredTime, $durationMinutes, $now),
+        ];
+    }
+
+    protected static function booted(): void
+    {
+        // Mọi đường thanh toán đặt trạng thái sang 'scheduled' mà chưa có lịch thì tự
+        // tính lịch nấu/giao tại đây, không phải sửa từng nơi thanh toán.
+        static::saving(function (self $delivery) {
+            if (
+                $delivery->delivery_status === 'scheduled'
+                && $delivery->cooking_at === null
+                && $delivery->isDirty('delivery_status')
+            ) {
+                $delivery->applyCookingSchedule(now());
+            }
+        });
+    }
+
+    /**
+     * Giờ nấu theo giờ hẹn = giờ tới - thời gian giao - 15'.
+     * Trả về null nếu không hẹn giờ, hoặc hẹn sau 22:00 (khi đó nấu sáng hôm sau).
+     */
+    public function preferredCookingAt(Carbon $reference): ?Carbon
+    {
+        if (!$this->preferred_delivery_time) {
+            return null;
+        }
+
+        $preferredAt = $reference->copy()->setTimeFromTimeString((string) $this->preferred_delivery_time);
+        if ($preferredAt->gt($reference->copy()->setTime(22, 0, 0))) {
+            return null;
+        }
+
+        return $preferredAt->subMinutes((int) ($this->estimated_duration_minutes ?? 30) + self::PREP_MINUTES);
+    }
+
+    /** Hẹn giờ mà giờ nấu còn < 15' nữa (hoặc đã qua) thì không kịp cho khâu thanh toán. */
+    public function isPreferredTimeTooClose(Carbon $now): bool
+    {
+        $cookAt = $this->preferredCookingAt($now);
+
+        return $cookAt !== null && $cookAt->lt($now->copy()->addMinutes(15));
+    }
+
+    /**
+     * Tính và gán (chưa save) lịch: cooking_at, ship_at, estimated_completion_at, paid_at.
+     * - Không hẹn giờ: nấu ngay khi thanh toán.
+     * - Hẹn giờ: nấu = giờ tới - thời gian giao - 15'. Hẹn sau 22:00: nấu 7:30 sáng kế tiếp.
+     * - Chưa tới 7:30: nấu 7:30. Không kịp tới trước 22:00: nấu 7:30 sáng hôm sau.
+     * - Giờ hẹn đã quá sát/đã qua (vd IPN VNPay về muộn): nấu ngay.
+     */
+    public function applyCookingSchedule(Carbon $paidAt): void
+    {
+        $duration = (int) ($this->estimated_duration_minutes ?? 30);
+        $opening = fn (Carbon $t) => $t->copy()->setTime(7, 30, 0);
+        $closing = fn (Carbon $t) => $t->copy()->setTime(22, 0, 0);
+
+        $cookAt = $this->preferredCookingAt($paidAt);
+
+        if ($cookAt === null) {
+            if ($this->preferred_delivery_time) {
+                $cookAt = $paidAt->lt($opening($paidAt)) ? $opening($paidAt) : $opening($paidAt)->addDay();
+            } else {
+                $cookAt = $paidAt->copy();
+            }
+        }
+
+        if ($cookAt->lt($paidAt)) {
+            $cookAt = $paidAt->copy();
+        }
+
+        if ($cookAt->lt($opening($cookAt))) {
+            $cookAt = $opening($cookAt);
+        }
+
+        if ($cookAt->copy()->addMinutes(self::PREP_MINUTES + $duration)->gt($closing($cookAt))) {
+            $cookAt = $opening($cookAt)->addDay();
+        }
+
+        $cookAt = $cookAt->startOfMinute();
+        $shipAt = $cookAt->copy()->addMinutes(self::PREP_MINUTES);
+
+        $this->paid_at = $this->paid_at ?? $paidAt;
+        $this->cooking_at = $cookAt;
+        $this->ship_at = $shipAt;
+        $this->estimated_completion_at = $shipAt->copy()->addMinutes($duration);
+    }
+
+    // ============================================
+    // JOB TỰ CHẠY (scheduler mỗi phút + gọi lúc tải trang)
+    // ============================================
+
     /**
      * Tự động chuyển các đơn đang giao (shipping) đã hết thời gian đếm ngược dự kiến
-     * sang trạng thái đã hoàn thành. Gọi hàm này ở đầu các API list/detail (cả phía
-     * admin lẫn phía người dùng) để trạng thái luôn được cập nhật đúng thực tế mỗi
-     * khi có ai load lại trang, không cần chạy cron nền riêng.
+     * sang trạng thái đã hoàn thành.
      */
     public static function autoCompleteExpired(): void
     {
@@ -87,78 +246,95 @@ class Delivery extends Model
     }
 
     /**
-     * Tự động bắt đầu các đơn đã thanh toán khi tới thời điểm được phép giao.
-     * Việc này có thể được gọi nhiều lần (scheduler và API đọc dữ liệu) mà không
-     * làm trừ kho trùng vì mỗi đơn chỉ chuyển từ trạng thái chờ sang shipping một lần.
+     * scheduled -> preparing (tới cooking_at: trừ kho, gửi mail)
+     * preparing -> shipping (tới ship_at).
+     * Gọi nhiều lần vẫn an toàn: mỗi lần chuyển trạng thái nằm trong transaction có khóa dòng.
      */
     public static function autoStartReady(): void
     {
-        $now = now();
+        static::startCookingDue();
+        static::startShippingDue();
+    }
 
-        static::whereIn('delivery_status', ['waiting_confirmation', 'waiting_payment', 'waiting_approval'])
+    protected static function startCookingDue(): void
+    {
+        static::where('delivery_status', 'scheduled')
             ->where('D_payment_status', 'paid')
-            ->with('order')
-            ->get()
-            ->each(function (self $delivery) use ($now): void {
-                $durationMinutes = (int) ($delivery->estimated_duration_minutes ?? 30);
-                $paidAt = $delivery->approved_at?->copy() ?? $delivery->updated_at?->copy() ?? $now->copy();
-                $startAt = $delivery->getAutomaticStartAt($paidAt, $durationMinutes);
+            ->whereNotNull('cooking_at')
+            ->where('cooking_at', '<=', now())
+            ->pluck('delivery_id')
+            ->each(function ($deliveryId): void {
+                $started = null;
 
-                if ($startAt->gt($now)) {
+                try {
+                    DB::transaction(function () use ($deliveryId, &$started): void {
+                        $locked = static::whereKey($deliveryId)->lockForUpdate()->first();
+                        if (!$locked || $locked->delivery_status !== 'scheduled' || $locked->D_payment_status !== 'paid') {
+                            return;
+                        }
+
+                        $locked->update(['delivery_status' => 'preparing']);
+
+                        if ($locked->order) {
+                            Stock::consumeForOrder($locked->order, $locked->cooking_at->toDateString());
+                        }
+
+                        $started = $locked;
+                    });
+                } catch (\Throwable $e) {
+                    Log::error('Bắt đầu nấu đơn ship thất bại', [
+                        'delivery_id' => $deliveryId,
+                        'error' => $e->getMessage(),
+                    ]);
                     return;
                 }
 
-                DB::transaction(function () use ($delivery, $durationMinutes, $now): void {
-                    $locked = static::whereKey($delivery->getKey())->lockForUpdate()->first();
-                    if (!$locked || !in_array($locked->delivery_status, ['waiting_confirmation', 'waiting_payment', 'waiting_approval'], true) || $locked->D_payment_status !== 'paid') {
+                if ($started) {
+                    static::sendCookingStartedMail($started);
+                }
+            });
+    }
+
+    protected static function startShippingDue(): void
+    {
+        static::where('delivery_status', 'preparing')
+            ->whereNotNull('ship_at')
+            ->where('ship_at', '<=', now())
+            ->pluck('delivery_id')
+            ->each(function ($deliveryId): void {
+                DB::transaction(function () use ($deliveryId): void {
+                    $locked = static::whereKey($deliveryId)->lockForUpdate()->first();
+                    if (!$locked || $locked->delivery_status !== 'preparing') {
                         return;
                     }
 
-                    $startedAt = $now->copy();
+                    // Dùng giờ đã lên lịch (ship_at) để giờ tới không bị lệch dù job chạy trễ.
                     $locked->update([
                         'delivery_status' => 'shipping',
-                        'delivery_started_at' => $startedAt,
-                        'estimated_completion_at' => $startedAt->copy()->addMinutes($durationMinutes),
+                        'delivery_started_at' => $locked->ship_at,
                     ]);
-
-                    if ($locked->order) {
-                        Stock::decrementStockForOrder($locked->order, $startedAt->toDateString());
-                        Stock::refillIfLowForOrder($locked->order, $startedAt->toDateString());
-                    }
                 });
             });
     }
 
-    /**
-     * Tính giờ bắt đầu cho cả giao ngay và giao theo giờ hẹn.
-     * Không cho phép bắt đầu trước 07:30; nếu đã quá giờ hoạt động thì dời sang
-     * 07:30 ngày kế tiếp.
-     */
-    public function getAutomaticStartAt(Carbon $paidAt, int $durationMinutes): Carbon
+    protected static function sendCookingStartedMail(self $delivery): void
     {
-        $opening = $paidAt->copy()->setTime(7, 30, 0);
-        $closing = $paidAt->copy()->setTime(22, 0, 0);
-        $earliestApproval = $paidAt->copy()->addMinutes(15);
+        try {
+            $delivery->loadMissing('order.bill', 'order.user');
+            $bill = $delivery->order?->bill;
+            $email = $delivery->order?->user?->email;
 
-        if ($this->preferred_delivery_time && Carbon::parse($this->preferred_delivery_time)->format('H:i') <= '22:00') {
-            $preferredAt = $paidAt->copy()->setTimeFromTimeString((string) $this->preferred_delivery_time);
-            $startAt = $preferredAt->copy()->subMinutes($durationMinutes + 15);
-            // Nếu giờ khách chọn quá gần, vẫn giao trong ngày từ thời điểm sớm
-            // nhất có thể duyệt; thời điểm tới thực tế sẽ muộn hơn giờ khách chọn.
-            $startAt = $startAt->max($earliestApproval);
-        } elseif ($this->preferred_delivery_time) {
-            $startAt = $opening->copy()->addDay();
-        } else {
-            $startAt = $earliestApproval;
+            if (!$bill || !$email) {
+                return;
+            }
+
+            $arrival = $delivery->estimated_completion_at?->format('H:i d/m/Y') ?? '—';
+            $bodyLine = "Nhà hàng đã bắt đầu chuẩn bị đơn hàng đặt ship của quý khách, mã hóa đơn là <strong>{$bill->bill_id}</strong>. "
+                . "Đơn hàng sẽ bắt đầu được giao sau 15 phút nữa và dự kiến tới nơi lúc <strong>{$arrival}</strong>.";
+
+            Mail::to($email)->send(new OrderNotificationMail($bill, $bodyLine));
+        } catch (\Throwable $e) {
+            Log::error('Gửi mail bắt đầu chuẩn bị đơn ship thất bại: ' . $e->getMessage());
         }
-
-        $startAt = $startAt->max($opening);
-
-        if ($startAt->copy()->addMinutes($durationMinutes)->gt($closing) || $startAt->gt($closing)) {
-            $startAt = $opening->copy()->addDay();
-        }
-
-        return $startAt;
     }
 }
-

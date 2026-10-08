@@ -1,9 +1,32 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { deliveryService, billService, vnpayService, extractListData, userAPI, orderService, stockAPI, promotionAPI, shippingAPI } from '../../services/api';
+import { deliveryService, billService, vnpayService, extractListData, userAPI, orderService, promotionAPI, shippingAPI } from '../../services/api';
 import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal, ShippingProgressBar, CountdownTimer } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
+import IngredientLimitModal from '../../components/IngredientLimitModal';
+import { translateIngredients } from '../Menu/DishDetailPage';
 
 const DELIVERY_SESSION_KEY = 'delivery_checkout_session';
+const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
+
+// 6 trạng thái của đơn ship (khớp enum delivery_status ở backend)
+const DELIVERY_STATUS_INFO = {
+    waiting_payment: { label: '⏳ Chờ thanh toán', variant: 'warning' },
+    scheduled: { label: '📅 Đã lên lịch', variant: 'info' },
+    preparing: { label: '🍳 Đang chuẩn bị', variant: 'info' },
+    shipping: { label: '🚗 Đang giao hàng', variant: 'info' },
+    completed: { label: '✓ Đã giao hàng', variant: 'success' },
+    cancelled: { label: '✕ Đã hủy', variant: 'danger' },
+};
+
+const DELIVERY_STATUS_FILTERS = [
+    { id: 'all', label: 'Tất cả' },
+    // Không có nút "Chờ thanh toán": đơn chưa thanh toán chưa có Bill nên không hiện ở danh sách của khách.
+    { id: 'scheduled', label: 'Đã lên lịch' },
+    { id: 'preparing', label: 'Đang chuẩn bị' },
+    { id: 'shipping', label: 'Đang giao hàng' },
+    { id: 'completed', label: 'Đã giao hàng' },
+    { id: 'cancelled', label: 'Đã hủy' },
+];
 
 const getTodayDateKey = () => {
     const today = new Date();
@@ -50,10 +73,14 @@ const DeliveriesPage = () => {
     // Đánh dấu bỏ qua 1 lần chạy debounce preview theo địa chỉ chữ, dùng khi vừa tự
     // điền địa chỉ từ kết quả GPS (đã có preview chính xác rồi, không cần lookup lại).
     const skipNextPreviewRef = React.useRef(false);
+    // Giờ hẹn đã dùng ở lần preview gần nhất (null = không hẹn giờ), để biết khi nào cần tính lại lịch.
+    const scheduleTimeRef = React.useRef(null);
 
     // Payment locking: null | 'vnpay' | 'points'
     const [payingWith, setPayingWith] = useState(null);
     const [createdOrderId, setCreatedOrderId] = useState(null);
+    // Bản chụp thông tin tóm tắt tại lúc đặt hàng (dùng cho khối tóm tắt ở bước thanh toán).
+    const [orderSummary, setOrderSummary] = useState(null);
 
     // Points Payment states
     const { user, fetchUser } = useAuthContext();
@@ -63,7 +90,8 @@ const DeliveriesPage = () => {
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
     const [cancelErrorMessage, setCancelErrorMessage] = useState(null);
-    const [stockErrorItems, setStockErrorItems] = useState(null); // null = ẩn, [...] = danh sách món vượt kho
+    const [pointsErrorMessage, setPointsErrorMessage] = useState(null); // lỗi thanh toán bằng điểm (hiện trong modal, không tự ẩn)
+    const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit, shortage } = hiện modal lỗi nguyên liệu
     const [searchBillId, setSearchBillId] = useState('');
     const [createdDateFilter, setCreatedDateFilter] = useState(getTodayDateKey);
 
@@ -103,6 +131,7 @@ const DeliveriesPage = () => {
                     if (session.preferredTimeH) setPreferredTimeH(session.preferredTimeH);
                     if (session.preferredTimeM) setPreferredTimeM(session.preferredTimeM);
                     if (session.orderId) setCreatedOrderId(session.orderId);
+                    if (session.orderSummary) setOrderSummary(session.orderSummary);
                     // 🔑 Restore cart từ session (trong case quay lại từ VNPay)
                     if (session.deliveryCart && session.deliveryCart.length > 0) {
                         setDeliveryCart(session.deliveryCart);
@@ -113,6 +142,18 @@ const DeliveriesPage = () => {
                 sessionStorage.removeItem(DELIVERY_SESSION_KEY);
             }
         }
+    }, []);
+
+    // Khi bấm Back từ VNPay, trình duyệt có thể khôi phục nguyên trang từ bfcache
+    // (state cũ, không chạy lại mount) -> payingWith vẫn kẹt 'vnpay'. Reset để dùng lại được.
+    useEffect(() => {
+        const handlePageShow = (event) => {
+            if (event.persisted) {
+                setPayingWith(null);
+            }
+        };
+        window.addEventListener('pageshow', handlePageShow);
+        return () => window.removeEventListener('pageshow', handlePageShow);
     }, []);
 
     const cartTotal = deliveryCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -134,6 +175,16 @@ const DeliveriesPage = () => {
             </>
         );
     };
+
+    // Giờ hẹn gửi lên backend để tính lịch dự kiến: null nếu chưa bật hoặc nhập chưa hợp lệ.
+    const previewPreferredTime = (() => {
+        if (!preferredDeliveryEnabled) return null;
+        if (!/^\d{1,2}$/.test(String(preferredTimeH)) || !/^\d{1,2}$/.test(String(preferredTimeM))) return null;
+        const h = Number(preferredTimeH);
+        const m = Number(preferredTimeM);
+        if (h > 23 || m > 59) return null;
+        return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    })();
 
     // Tự động kiểm tra phí ship sau khi khách ngừng gõ 800ms, tránh gọi API liên tục
     // theo từng ký tự gõ vào.
@@ -160,7 +211,8 @@ const DeliveriesPage = () => {
 
         shippingDebounceRef.current = setTimeout(async () => {
             try {
-                const res = await shippingAPI.preview(address.trim());
+                const res = await shippingAPI.preview(address.trim(), previewPreferredTime);
+                scheduleTimeRef.current = previewPreferredTime;
                 setShippingPreview(res.data.data);
                 setPreviewedAddress(address.trim());
             } catch (err) {
@@ -173,6 +225,42 @@ const DeliveriesPage = () => {
 
         return () => clearTimeout(shippingDebounceRef.current);
     }, [address, checkoutStage]);
+
+    // Khi khách đổi giờ hẹn mà địa chỉ giữ nguyên: gọi lại preview để backend tính lại lịch dự kiến.
+    // Địa chỉ lấy từ GPS thì gọi bản theo toạ độ để không mất độ chính xác.
+    useEffect(() => {
+        const trimmed = address.trim();
+        if (checkoutStage !== 'info' || !trimmed || !shippingPreview || previewedAddress !== trimmed) return;
+        if (scheduleTimeRef.current === previewPreferredTime) return;
+
+        let cancelled = false;
+        let started = false;
+        const timer = setTimeout(async () => {
+            started = true;
+            setShippingLoading(true);
+            setShippingError(null);
+            try {
+                const res = gpsCoords
+                    ? await shippingAPI.previewByCoordinates(gpsCoords.lat, gpsCoords.lng, previewPreferredTime)
+                    : await shippingAPI.preview(trimmed, previewPreferredTime);
+                if (cancelled) return;
+                setShippingPreview(res.data.data);
+                scheduleTimeRef.current = previewPreferredTime;
+            } catch (err) {
+                if (cancelled) return;
+                setShippingPreview(null);
+                setShippingError(err.response?.data?.message || 'Không thể kiểm tra địa chỉ này.');
+            } finally {
+                if (!cancelled) setShippingLoading(false);
+            }
+        }, 800);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+            if (started) setShippingLoading(false);
+        };
+    }, [previewPreferredTime, address, previewedAddress, checkoutStage]);
 
     // Kiểm tra có sự kiện giảm giá nào đang diễn ra không — chỉ gọi khi vào tới
     // bước thanh toán (checkoutStage === 'payment'), không cần gọi sớm hơn.
@@ -212,7 +300,8 @@ const DeliveriesPage = () => {
             async (position) => {
                 const { latitude, longitude } = position.coords;
                 try {
-                    const res = await shippingAPI.previewByCoordinates(latitude, longitude);
+                    const res = await shippingAPI.previewByCoordinates(latitude, longitude, previewPreferredTime);
+                    scheduleTimeRef.current = previewPreferredTime;
                     const data = res.data.data;
 
                     skipNextPreviewRef.current = true;
@@ -234,14 +323,11 @@ const DeliveriesPage = () => {
         );
     };
 
+    // Backend đã tính lịch nấu: nếu giờ nấu rơi sang ngày khác (đơn không kịp giao trước 22:00) thì cảnh báo.
     const willFinishAfterClose = () => {
-        if (!shippingPreview) return false;
-        const now = new Date();
-        const todayClose = new Date(now);
-        todayClose.setHours(22, 0, 0, 0);
-        const durationMinutes = shippingPreview.duration_minutes ?? 0;
-        const estimatedFinish = new Date(now.getTime() + durationMinutes * 60000);
-        return estimatedFinish > todayClose;
+        const cookingAt = shippingPreview?.schedule?.cooking_at;
+        if (!cookingAt) return false;
+        return new Date(cookingAt).toDateString() !== new Date().toDateString();
     };
 
     const getPreferredDeliveryTime = () => {
@@ -249,14 +335,10 @@ const DeliveriesPage = () => {
         return `${String(preferredTimeH).padStart(2, '0')}:${String(preferredTimeM).padStart(2, '0')}`;
     };
 
-    const getEarliestApprovalTime = () => {
-        return new Date(Math.ceil((Date.now() + 15 * 60000) / 60000) * 60000);
-    };
-
+    // Giờ hàng tới sớm nhất do backend tính (Delivery::earliestArrivalAt), frontend chỉ hiển thị.
     const getEarliestArrivalTime = () => {
-        if (!shippingPreview) return null;
-        const totalDurationMinutes = Number(shippingPreview.duration_minutes ?? 0);
-        return new Date(Math.ceil((getEarliestApprovalTime().getTime() + totalDurationMinutes * 60000) / 60000) * 60000);
+        const value = shippingPreview?.schedule?.earliest_arrival_at;
+        return value ? new Date(value) : null;
     };
 
     const formatShortTime = (date) => date
@@ -282,11 +364,7 @@ const DeliveriesPage = () => {
 
     const isPreferredTimeTooEarly = () => {
         if (!preferredDeliveryEnabled || !hasValidPreferredDeliveryTime() || isPreferredTimeAfterClosing()) return false;
-        const selected = Number(preferredTimeH) * 60 + Number(preferredTimeM);
-        const earliestArrival = getEarliestArrivalTime();
-        if (!earliestArrival) return false;
-        const earliestArrivalMinutes = earliestArrival.getHours() * 60 + earliestArrival.getMinutes();
-        return selected < earliestArrivalMinutes;
+        return shippingPreview?.schedule?.preferred_time_too_early === true;
     };
 
     const getNextMorningLabel = () => {
@@ -305,6 +383,8 @@ const DeliveriesPage = () => {
         e.preventDefault();
         if (deliveryCart.length === 0 || !address.trim()) return;
         if (!shippingPreview || previewedAddress !== address.trim()) return;
+        // Lịch dự kiến phải khớp giờ hẹn đang nhập (tránh bấm khi đang chờ tính lại).
+        if (scheduleTimeRef.current !== previewPreferredTime) return;
 
         if (!hasValidPreferredDeliveryTime()) {
             setPreferredTimeModalType('invalid');
@@ -368,6 +448,17 @@ const DeliveriesPage = () => {
             const orderId = orderRes.data.data.order_id;
             setCreatedOrderId(orderId);
 
+            // Chụp lại thông tin tóm tắt (effect preview sẽ xóa shippingPreview khi sang bước thanh toán).
+            const summary = {
+                address: address.trim(),
+                distance_km: shippingPreview?.distance_km ?? null,
+                duration_minutes: shippingPreview?.duration_minutes ?? null,
+                shipping_fee: shippingPreview?.shipping_fee ?? null,
+                preferred_time: getPreferredDeliveryTime(),
+                schedule: shippingPreview?.schedule ?? null,
+            };
+            setOrderSummary(summary);
+
             // 🔑 Lưu session với đủ thông tin (cart + info) để khôi phục nếu quay lại
             saveCheckoutSession('payment', {
                 address,
@@ -376,11 +467,17 @@ const DeliveriesPage = () => {
                 preferredTimeM,
                 orderId,
                 deliveryCart: deliveryCart, // Lưu cart vào session
+                orderSummary: summary,
             });
             setCheckoutStage('payment');
         } catch (err) {
-            if (err.response?.status === 422 && err.response?.data?.exceeded) {
-                setStockErrorItems(err.response.data.exceeded);
+            const data = err.response?.data;
+            if (err.response?.status === 422 && (data?.over_limit || data?.exceeded)) {
+                setIngredientError({
+                    message: data.message,
+                    overLimit: data.over_limit || [],
+                    shortage: data.exceeded || [],
+                });
             } else {
                 showError(err.response?.data?.message || 'Lỗi tạo đơn hàng');
             }
@@ -392,7 +489,7 @@ const DeliveriesPage = () => {
             const updated = prev
                 .map((item, i) => {
                     if (i !== idx) return item;
-                    const newQty = item.quantity + amount;
+                    const newQty = Math.min(MAX_ITEM_QUANTITY, item.quantity + amount);
                     return { ...item, quantity: newQty };
                 })
                 .filter(item => item.quantity > 0); // tự loại bỏ món đã về 0
@@ -402,26 +499,8 @@ const DeliveriesPage = () => {
         });
     };
 
-    const checkStockBeforePayment = async () => {
-        const today = new Date().toISOString().slice(0, 10);
-        const items = deliveryCart.map(item => ({ dish_id: item.dish_id, quantity: item.quantity }));
-        try {
-            await stockAPI.check(items, today);
-            return true; // đủ hàng
-        } catch (err) {
-            if (err.response?.status === 422) {
-                setStockErrorItems(err.response.data.exceeded || []);
-            } else {
-                showError('Lỗi kiểm tra kho hàng: ' + (err.response?.data?.message || err.message));
-            }
-            return false; // thiếu hàng
-        }
-    };
-
     const handlePayment = async () => {
         if (payingWith) return; // chặn double-click
-        const ok = await checkStockBeforePayment();
-        if (!ok) return;
         setPayingWith('vnpay');
         try {
             // 1. Lấy URL thanh toán VNPay
@@ -447,8 +526,6 @@ const DeliveriesPage = () => {
     };
 
     const handlePointsPaymentClick = async () => {
-        const ok = await checkStockBeforePayment();
-        if (!ok) return;
         try {
             // Lấy điểm mới nhất từ server thay vì cache ở AuthContext (localStorage)
             const res = await userAPI.getProfile();
@@ -464,7 +541,7 @@ const DeliveriesPage = () => {
                 setPointsModalType('confirm');
             }
         } catch (err) {
-            showError('Không thể lấy thông tin điểm: ' + (err.response?.data?.message || err.message));
+            setPointsErrorMessage('Không thể lấy thông tin điểm: ' + (err.response?.data?.message || err.message));
         }
     };
 
@@ -486,7 +563,7 @@ const DeliveriesPage = () => {
             if (fetchUser) fetchUser(); // update user points
             window.location.href = `/payment-result?status=success&code=00&order_type=delivery&bill_id=${billId}`;
         } catch (err) {
-            showError('Lỗi thanh toán bằng điểm: ' + (err.response?.data?.message || err.message));
+            setPointsErrorMessage(err.response?.data?.message || err.message || 'Không thể thanh toán bằng điểm. Vui lòng thử lại.');
             setPointsModalType(null);
             setPayingWith(null);
         }
@@ -551,15 +628,6 @@ const DeliveriesPage = () => {
 
     const getFilteredDeliveries = () => {
         if (filter === 'all') return deliveries;
-        if (filter === 'waiting_confirmation') {
-            return deliveries.filter(d => ['waiting_confirmation', 'waiting_approval', 'waiting_info', 'waiting_payment'].includes(d.delivery?.delivery_status));
-        }
-        if (filter === 'waiting_delivery') {
-            return deliveries.filter(d => ['shipping', 'waiting_delivery', 'delivering'].includes(d.delivery?.delivery_status));
-        }
-        if (filter === 'delivered') {
-            return deliveries.filter(d => ['completed', 'delivered'].includes(d.delivery?.delivery_status));
-        }
         return deliveries.filter(d => d.delivery?.delivery_status === filter);
     };
 
@@ -573,20 +641,11 @@ const DeliveriesPage = () => {
         return `${year}-${month}-${day}`;
     };
 
-    const getStatusColor = (bill) => {
-        const status = bill.delivery?.delivery_status;
-        if (status === 'cancelled') return 'danger';
-        if (['completed', 'delivered'].includes(status)) return 'success';
-        if (['shipping', 'waiting_delivery', 'delivering'].includes(status)) return 'info';
-        return 'warning';
-    };
+    const getStatusColor = (bill) => DELIVERY_STATUS_INFO[bill.delivery?.delivery_status]?.variant ?? 'warning';
 
     const getStatusLabel = (bill) => {
         const status = bill.delivery?.delivery_status;
-        if (status === 'cancelled') return '✕ Đã hủy';
-        if (['completed', 'delivered'].includes(status)) return '✓ Đã giao hàng';
-        if (['shipping', 'waiting_delivery', 'delivering'].includes(status)) return '⏳ Đang giao hàng';
-        return '⏳ Đang chờ duyệt';
+        return DELIVERY_STATUS_INFO[status]?.label ?? status ?? '—';
     };
 
     const getExpectedDeliveryArrival = (delivery) => {
@@ -604,6 +663,75 @@ const DeliveriesPage = () => {
             year: 'numeric',
         })
         : 'Đang tính';
+
+    // Khối tóm tắt ở bước thanh toán (dữ liệu chụp lúc đặt hàng; lịch nấu/giao chỉ là DỰ KIẾN).
+    const renderOrderSummary = () => {
+        if (!orderSummary) return null;
+
+        const schedule = orderSummary.schedule;
+        const cookingAt = schedule?.cooking_at ? new Date(schedule.cooking_at) : null;
+        const shipAt = schedule?.ship_at ? new Date(schedule.ship_at) : null;
+        const arrivalAt = schedule?.estimated_completion_at ? new Date(schedule.estimated_completion_at) : null;
+        // Giờ nấu còn ở tương lai (đơn hẹn giờ, hoặc dời sang sáng hôm sau) thì mới có giờ cụ thể.
+        const hasFixedCooking = cookingAt && cookingAt.getTime() > Date.now() + 5 * 60000;
+        const totalMinutes = cookingAt && arrivalAt ? Math.round((arrivalAt - cookingAt) / 60000) : null;
+
+        return (
+            <div className="bg-white border border-gray-200 rounded p-4 text-sm space-y-2 text-left">
+                <h4 className="font-bold text-gray-800 border-b pb-2">Tóm tắt đơn hàng</h4>
+                <div className="flex justify-between gap-4">
+                    <span className="text-gray-600">Địa chỉ giao hàng:</span>
+                    <span className="font-semibold text-right">{orderSummary.address}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                    <span className="text-gray-600">Tổng tiền món:</span>
+                    <span className="font-semibold">{cartTotal.toLocaleString('vi-VN')}đ</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                    <span className="text-gray-600">Phí ship (thu riêng khi nhận hàng):</span>
+                    <span className="font-semibold">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}đ</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                    <span className="text-gray-600">Khoảng cách / thời gian giao:</span>
+                    <span className="font-semibold">{orderSummary.distance_km} km / {orderSummary.duration_minutes} phút</span>
+                </div>
+                {orderSummary.preferred_time && (
+                    <div className="flex justify-between gap-4">
+                        <span className="text-gray-600">Giờ hàng tới bạn chọn:</span>
+                        <span className="font-semibold">{orderSummary.preferred_time}</span>
+                    </div>
+                )}
+                {hasFixedCooking ? (
+                    <>
+                        <div className="flex justify-between gap-4">
+                            <span className="text-gray-600">Bắt đầu nấu (dự kiến):</span>
+                            <span className="font-semibold">{formatExpectedDateTime(cookingAt)}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                            <span className="text-gray-600">Bắt đầu giao (dự kiến):</span>
+                            <span className="font-semibold">{formatExpectedDateTime(shipAt)}</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                            <span className="text-gray-600">Hàng tới (dự kiến):</span>
+                            <span className="font-semibold">{formatExpectedDateTime(arrivalAt)}</span>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="flex justify-between gap-4">
+                            <span className="text-gray-600">Bắt đầu nấu:</span>
+                            <span className="font-semibold">Ngay sau khi thanh toán</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                            <span className="text-gray-600">Hàng tới (dự kiến):</span>
+                            <span className="font-semibold">{totalMinutes != null ? `Sau khoảng ${totalMinutes} phút kể từ lúc thanh toán` : '—'}</span>
+                        </div>
+                    </>
+                )}
+                <p className="text-xs text-gray-500 pt-1">Lịch trên là dự kiến, hệ thống tính lại chính xác vào lúc bạn thanh toán thành công.</p>
+            </div>
+        );
+    };
 
     if (loading) return <Loading />;
 
@@ -630,7 +758,7 @@ const DeliveriesPage = () => {
                             <button onClick={() => window.location.href = '/menu'} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">Đến Menu</button>
                         </div>
                     ) : (
-                        <div className="grid md:grid-cols-2 gap-8">
+                        <div className={checkoutStage === 'info' ? 'grid md:grid-cols-2 gap-8' : 'max-w-2xl mx-auto space-y-6'}>
                             <div>
                                 <h3 className="font-semibold mb-2">Món đã chọn:</h3>
                                 <table className="w-full mb-4 text-sm bg-white border border-black border-t-4 border-t-red-600">
@@ -649,6 +777,7 @@ const DeliveriesPage = () => {
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, -1)}
+                                                            style={checkoutStage !== 'info' ? { display: 'none' } : undefined}
                                                             className="w-6 h-6 rounded-full border border-red-600 text-red-600 font-bold flex items-center justify-center hover:bg-red-600 hover:text-white transition"
                                                         >
                                                             -
@@ -656,6 +785,9 @@ const DeliveriesPage = () => {
                                                         <span className="w-6 text-center font-semibold">{item.quantity}</span>
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, 1)}
+                                                            disabled={item.quantity >= MAX_ITEM_QUANTITY}
+                                                            title={item.quantity >= MAX_ITEM_QUANTITY ? 'Tối đa 50 phần mỗi món' : undefined}
+                                                            style={checkoutStage !== 'info' ? { display: 'none' } : (item.quantity >= MAX_ITEM_QUANTITY ? { opacity: 0.4, cursor: 'not-allowed' } : undefined)}
                                                             className="w-6 h-6 rounded-full border border-red-600 text-red-600 font-bold flex items-center justify-center hover:bg-red-600 hover:text-white transition"
                                                         >
                                                             +
@@ -698,6 +830,7 @@ const DeliveriesPage = () => {
                                         setCheckoutStage('info');
                                     }}
                                     className="mt-4 px-4 py-2 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
+                                    style={checkoutStage !== 'info' ? { display: 'none' } : undefined}
                                 >
                                     Xóa đơn hàng
                                 </button>
@@ -780,7 +913,7 @@ const DeliveriesPage = () => {
 
                                         <button
                                             type="submit"
-                                            disabled={!address.trim() || deliveryCart.length === 0 || !shippingPreview || previewedAddress !== address.trim() || shippingLoading}
+                                            disabled={!address.trim() || deliveryCart.length === 0 || !shippingPreview || previewedAddress !== address.trim() || shippingLoading || scheduleTimeRef.current !== previewPreferredTime}
                                             className="w-full bg-red-600 text-white font-bold py-3 rounded hover:bg-red-700 transition disabled:opacity-50 mt-4"
                                         >
                                             Xác nhận thông tin đặt hàng
@@ -792,6 +925,7 @@ const DeliveriesPage = () => {
                                             <h3 className="font-bold text-lg mb-2">Thanh toán đơn hàng</h3>
                                             <p className="text-gray-600 text-sm mb-4">Mọi thông tin đã được chốt. Vui lòng tiến hành thanh toán để hoàn tất.</p>
                                         </div>
+                                        {renderOrderSummary()}
                                         {saleOffEvent && (
                                             <div className="flex items-center justify-between mb-2 px-1">
                                                 <div>
@@ -911,9 +1045,9 @@ const DeliveriesPage = () => {
                                 <p className="text-gray-700 mb-6">
                                     Đơn hàng này được dự kiến là không thể hoàn tất giao trước 10h tối.
                                     <br /><br />
-                                    Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng <strong className="text-red-600">{getNextMorningLabel()}</strong> thì chúng tôi mới duyệt được đơn hàng cho quý khách.
+                                    Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng <strong className="text-red-600">{getNextMorningLabel()}</strong> thì chúng tôi mới bắt đầu chuẩn bị đơn hàng cho quý khách.
                                     <br /><br />
-                                    Thời điểm bắt đầu duyệt đơn giao hàng của mỗi ngày là từ 7h30 sáng.
+                                    Thời điểm bắt đầu chuẩn bị đơn giao hàng của mỗi ngày là từ 7h30 sáng.
                                 </p>
                                 <div className="flex gap-4">
                                     <button
@@ -953,7 +1087,7 @@ const DeliveriesPage = () => {
                             <div className="p-6">
                                 {preferredTimeModalType === 'after-closing' ? (
                                     <p className="text-gray-700">
-                                        Nhà hàng chúng tôi đóng cửa lúc 22h và không thực hiện giao hàng sau giờ đóng cửa. Quý khách vẫn có thể tiếp tục đặt hàng, nhà hàng sẽ tự động duyệt giao hàng cho quý khách vào 7h30 sáng <strong className="text-red-600">{getNextMorningLabel()}</strong>.
+                                        Nhà hàng chúng tôi đóng cửa lúc 22h và không thực hiện giao hàng sau giờ đóng cửa. Quý khách vẫn có thể tiếp tục đặt hàng, nhà hàng sẽ bắt đầu chuẩn bị đơn hàng cho quý khách vào 7h30 sáng <strong className="text-red-600">{getNextMorningLabel()}</strong>.
                                     </p>
                                 ) : preferredTimeModalType === 'invalid' ? (
                                     <p className="text-gray-700">
@@ -961,10 +1095,18 @@ const DeliveriesPage = () => {
                                     </p>
                                 ) : (
                                     <p className="text-gray-700">
-                                        Chúng tôi có thể duyệt giao hàng cho bạn sớm nhất là <strong className="text-red-600">{formatShortTime(getEarliestApprovalTime())}</strong>, nên hàng của bạn sẽ tới sớm nhất là <strong className="text-red-600">{getMinimumPreferredTime()}</strong>.
+                                        Thời điểm bạn chọn quá sớm. Hàng của bạn sẽ tới sớm nhất là <strong className="text-red-600">{getMinimumPreferredTime()}</strong>
                                     </p>
                                 )}
-                                <div className="flex justify-end mt-6">
+                                <div className="flex justify-end gap-3 mt-6">
+                                    {preferredTimeModalType === 'after-closing' && (
+                                        <button
+                                            onClick={() => setShowPreferredTimeErrorModal(false)}
+                                            className="px-5 py-2 bg-white border border-gray-300 text-gray-800 rounded font-bold hover:bg-gray-100"
+                                        >
+                                            Quay lại
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => {
                                             setShowPreferredTimeErrorModal(false);
@@ -1092,6 +1234,16 @@ const DeliveriesPage = () => {
                     </div>
                 )}
 
+                {/* Lỗi thanh toán bằng điểm: modal có nút Đóng, không tự ẩn */}
+                <Modal
+                    isOpen={!!pointsErrorMessage}
+                    title="Lỗi thanh toán bằng điểm"
+                    onClose={() => setPointsErrorMessage(null)}
+                    cancelText="Đóng"
+                >
+                    <p className="text-gray-700">{pointsErrorMessage}</p>
+                </Modal>
+
                 {/* Cancel Order Error Modal - dùng chung component Modal */}
                 <Modal
                     isOpen={!!cancelErrorMessage}
@@ -1104,13 +1256,7 @@ const DeliveriesPage = () => {
 
                 {/* Filter Buttons */}
                 <div className="flex gap-2 mb-8 overflow-x-auto">
-                    {[
-                        { id: 'all', label: 'Tất cả' },
-                        { id: 'waiting_confirmation', label: 'Đang chờ duyệt' },
-                        { id: 'waiting_delivery', label: 'Đang giao hàng' },
-                        { id: 'delivered', label: 'Đã giao hàng' },
-                        { id: 'cancelled', label: 'Đã hủy' }
-                    ].map(f => (
+                    {DELIVERY_STATUS_FILTERS.map(f => (
                         <button
                             key={f.id}
                             onClick={() => setFilter(f.id)}
@@ -1133,13 +1279,7 @@ const DeliveriesPage = () => {
                                 ? 'Bạn chưa có đơn mang về nào.'
                                 : searchBillId.trim()
                                     ? 'Không tìm thấy đơn hàng phù hợp với bộ lọc.'
-                                    : `Chưa có đơn với bộ lọc "${[
-                                        { id: 'all', label: 'Tất cả' },
-                                        { id: 'waiting_confirmation', label: 'Đang chờ duyệt' },
-                                        { id: 'waiting_delivery', label: 'Đang giao hàng' },
-                                        { id: 'delivered', label: 'Đã giao hàng' },
-                                        { id: 'cancelled', label: 'Đã hủy' }
-                                    ].find(f => f.id === filter)?.label || filter}"`
+                                    : `Chưa có đơn với bộ lọc "${DELIVERY_STATUS_FILTERS.find(f => f.id === filter)?.label || filter}"`
                         }
                     />
                 ) : (
@@ -1209,7 +1349,7 @@ const DeliveriesPage = () => {
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between font-bold text-gray-800">
-                                                    <span>Số tiền đã trả:</span>
+                                                    <span>Số tiền cần trả:</span>
                                                     <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}đ</span>
                                                 </div>
                                             </>
@@ -1246,7 +1386,7 @@ const DeliveriesPage = () => {
                                         </div>
                                     )}
 
-                                    {(bill.delivery?.delivery_status === 'waiting_confirmation' || bill.delivery?.delivery_status === 'waiting_approval' || bill.delivery?.delivery_status === 'waiting_info') && (
+                                    {(bill.delivery?.delivery_status === 'waiting_payment' || bill.delivery?.delivery_status === 'scheduled') && (
                                         <button
                                             onClick={() => {
                                                 setCancelingBill(bill);
@@ -1264,43 +1404,15 @@ const DeliveriesPage = () => {
                 )}
             </div>
 
-            {/* Stock Error Modal */}
-            {stockErrorItems !== null && (
-                <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full">
-                        <div className="bg-red-600 text-white px-6 py-4 rounded-t-lg">
-                            <h2 className="text-xl font-bold">Báo lỗi</h2>
-                        </div>
-                        <div className="p-6">
-                            <p className="text-gray-700 mb-4">Các món sau đang thiếu nguyên liệu:</p>
-                            <table className="w-full text-sm border border-gray-200 rounded">
-                                <thead className="bg-red-600 text-white">
-                                    <tr>
-                                        <th className="px-3 py-2 text-left">Món ăn</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {stockErrorItems
-                                        .filter((item, index, items) => items.findIndex(other => other.dish_id === item.dish_id) === index)
-                                        .map((item) => (
-                                        <tr key={item.dish_id} className="border-t">
-                                            <td className="px-3 py-2">{item.dish_name}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                            <div className="mt-6 flex justify-end">
-                                <button
-                                    onClick={() => setStockErrorItems(null)}
-                                    className="px-5 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
-                                >
-                                    Đóng
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Ingredient Error Modal */}
+            <IngredientLimitModal
+                isOpen={ingredientError !== null}
+                onClose={() => setIngredientError(null)}
+                message={ingredientError?.message}
+                overLimit={ingredientError?.overLimit}
+                shortage={ingredientError?.shortage}
+                formatIngredient={translateIngredients}
+            />
         </div>
     );
 };

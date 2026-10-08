@@ -20,8 +20,10 @@ return new class extends Migration
             $table->decimal('destination_lat', 10, 7)->nullable();
             $table->decimal('destination_lng', 10, 7)->nullable();
             $table->enum('D_payment_status', ['unpaid', 'paid', 'refunded'])->default('unpaid');
-            $table->enum('delivery_status', ['waiting_info', 'waiting_confirmation', 'waiting_payment', 'waiting_approval', 'shipping', 'completed', 'cancelled'])->default('waiting_info');
-            $table->timestamp('approved_at')->nullable();
+            $table->enum('delivery_status', ['waiting_payment', 'scheduled', 'preparing', 'shipping', 'completed', 'cancelled'])->default('waiting_payment');
+            $table->timestamp('paid_at')->nullable();
+            $table->timestamp('cooking_at')->nullable();
+            $table->timestamp('ship_at')->nullable();
             $table->timestamp('delivery_started_at')->nullable();
             $table->timestamp('estimated_completion_at')->nullable();
             $table->timestamp('delivered_at')->nullable();

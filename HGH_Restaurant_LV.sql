@@ -142,24 +142,7 @@ CREATE TABLE restaurant_tables (
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Seed data (giống migration gốc)
-INSERT INTO table_types(table_type_name, capacity)
-VALUES
-('Loại 1', 5),
-('Loại 2', 10),
-('Loại 3', 15);
-
-INSERT INTO restaurant_tables(table_number, table_type_id)
-SELECT generate_series(1,25),
-       (SELECT table_type_id FROM table_types WHERE capacity = 5);
-
-INSERT INTO restaurant_tables(table_number, table_type_id)
-SELECT generate_series(26,45),
-       (SELECT table_type_id FROM table_types WHERE capacity = 10);
-
-INSERT INTO restaurant_tables(table_number, table_type_id)
-SELECT generate_series(46,50),
-       (SELECT table_type_id FROM table_types WHERE capacity = 15);
+-- Dữ liệu bàn được nạp bởi DatabaseSeeder (không còn nằm trong migration).
 
 -- =====================================================================
 -- 6. orders
@@ -286,7 +269,7 @@ CREATE TABLE booking_tables (
     start_time          TIME NOT NULL,
     end_time            TIME NOT NULL,
     "B_payment_status"  VARCHAR(20) NOT NULL DEFAULT 'unpaid'
-                         CHECK ("B_payment_status" IN ('unpaid','paid')),
+                         CHECK ("B_payment_status" IN ('unpaid','paid','refunded')),
     booking_status      VARCHAR(30) NOT NULL DEFAULT 'waiting_info'
                          CHECK (booking_status IN ('waiting_info','waiting_confirmation','waiting_payment','completed','cancelled')),
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

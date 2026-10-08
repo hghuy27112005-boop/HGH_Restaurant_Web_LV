@@ -36,7 +36,8 @@ return new class extends Migration
 
             $table->enum('B_payment_status', [
                 'unpaid',
-                'paid'
+                'paid',
+                'refunded'
             ])->default('unpaid');
 
             $table->enum('booking_status', [

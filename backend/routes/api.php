@@ -25,9 +25,6 @@ Route::get('/dishes', [\App\Http\Controllers\DishController::class, 'index']);
 Route::get('/dishes/{id}', [\App\Http\Controllers\DishController::class, 'show']);
 Route::get('/dish-types', [\App\Http\Controllers\DishTypeController::class, 'index']);
 
-// Public API - Stock check (used by booking and delivery pages)
-Route::post('/stocks/check', [\App\Http\Controllers\Admin\Admin_StockController::class, 'checkStock']);
-
 // Public API - Preview shipping distance/duration/fee based on address (used before creating delivery order)
 Route::post('/deliveries/preview-shipping', [\App\Http\Controllers\DeliveryController::class, 'previewShipping']);
 Route::post('/deliveries/preview-shipping-by-coordinates', [\App\Http\Controllers\DeliveryController::class, 'previewShippingByCoordinates']);
@@ -54,35 +51,25 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [\App\Http\Controllers\AuthController::class, 'logout']);
 
     // Bills (Booking & Delivery)
-    Route::apiResource('bills', \App\Http\Controllers\BillController::class);
-    Route::post('bills/{bill}/calculate-total', [\App\Http\Controllers\BillController::class, 'calculateTotal']);
-    Route::post('bills/{bill}/payment', [\App\Http\Controllers\BillController::class, 'processPayment']);
-    Route::post('bills/{bill}/pay-with-points', [\App\Http\Controllers\BillController::class, 'payWithPoints']);
+    Route::apiResource('bills', \App\Http\Controllers\BillController::class)->only(['store']);
     Route::get('bills/{bill}/export-pdf', [\App\Http\Controllers\BillController::class, 'exportPDF']);
 
     // Orders
     Route::apiResource('orders', \App\Http\Controllers\OrderController::class)->only(['store', 'destroy']);
+    Route::post('cart/check-ingredients', [\App\Http\Controllers\OrderController::class, 'checkCartIngredients']);
     Route::post('orders/{order}/pay-with-points', [\App\Http\Controllers\BillController::class, 'payWithPointsByOrder']);
 
     // Deliveries
-    Route::apiResource('deliveries', \App\Http\Controllers\DeliveryController::class, ['only' => ['index', 'show', 'store']]);
-    Route::post('deliveries/{delivery}/approve', [\App\Http\Controllers\DeliveryController::class, 'approve']);
-    Route::post('deliveries/{delivery}/start', [\App\Http\Controllers\DeliveryController::class, 'startDelivery']);
-    Route::post('deliveries/{delivery}/complete', [\App\Http\Controllers\DeliveryController::class, 'completeDelivery']);
     Route::post('deliveries/{delivery}/cancel-points', [\App\Http\Controllers\DeliveryController::class, 'cancelWithPoints']);
 
     // Booking Tables
-    Route::apiResource('booking-tables', \App\Http\Controllers\BookingTableController::class);
     Route::post('booking-tables/check-overlap', [\App\Http\Controllers\BookingTableController::class, 'checkMultiOverlap']);
-        Route::post('booking-tables/occupied', [\App\Http\Controllers\BookingTableController::class, 'getOccupiedTables']);
+    Route::post('booking-tables/occupied', [\App\Http\Controllers\BookingTableController::class, 'getOccupiedTables']);
     Route::post('booking-tables/cancel-points', [\App\Http\Controllers\BookingTableController::class, 'cancelWithPoints']);
 
     // VNPay - yêu cầu đăng nhập để tạo link thanh toán/hoàn tiền cho đúng đơn của mình
     Route::post('vnpay/create-payment-url', [VnpayController::class, 'createPaymentUrl']);
     Route::post('vnpay/create-refund-url', [VnpayController::class, 'createRefundUrl']);
-
-    // Points & Statistics
-    Route::get('points', [\App\Http\Controllers\PointsController::class, 'userPoints']);
 
     //Password
     Route::post('/user/change-password', [\App\Http\Controllers\UserController::class, 'changePassword']);
@@ -123,15 +110,10 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('admin/deliveries', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'index']);
     Route::get('admin/deliveries/stats', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'stats']);
     Route::get('admin/deliveries/{delivery}', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'show']);
-    Route::post('admin/deliveries/{delivery}/approve', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'approve']);
-    Route::post('admin/deliveries/{delivery}/cancel', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'cancel']);
 
     // Stock Management
-    Route::get('admin/stocks/low-stock', [\App\Http\Controllers\Admin\Admin_StockController::class, 'lowStock']);
-    Route::get('admin/stocks/by-date', [\App\Http\Controllers\Admin\Admin_StockController::class, 'byDate']);
     Route::get('admin/stocks/ingredients/by-date', [\App\Http\Controllers\Admin\Admin_StockController::class, 'ingredientsByDate']);
     Route::get('admin/stocks/ingredients/history', [\App\Http\Controllers\Admin\Admin_StockController::class, 'ingredientHistory']);
-    Route::apiResource('admin/stocks', \App\Http\Controllers\Admin\Admin_StockController::class);
 
     // Users Management
     Route::apiResource('admin/users', \App\Http\Controllers\Admin\Admin_UserController::class);

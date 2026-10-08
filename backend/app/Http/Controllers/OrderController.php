@@ -23,65 +23,7 @@ class OrderController extends Controller
         return now()->format('Y-m-d');
     }
 
-    private function ensureStockAvailability(array $items, string $date): ?array
-    {
-        $exceeded = [];
-
-        foreach ($items as $item) {
-            $dish = Dish::find($item['dish_id']);
-            $ingredients = $this->resolveItemIngredients($dish, $item);
-            $requirements = [];
-
-            foreach ($ingredients as $ingredient) {
-                $key = \App\Models\IngredientStock::keyFor($ingredient);
-                $requirements[$key] = ($requirements[$key] ?? 0) + (int) $item['quantity'];
-            }
-
-            foreach ($requirements as $key => $requiredQuantity) {
-                $stock = \App\Models\IngredientStock::getOrCreateForDate($key, $date);
-                if ($requiredQuantity > $stock->quantity_left) {
-                    $exceeded[] = [
-                        'dish_id' => $item['dish_id'],
-                        'dish_name' => $dish?->dish_name ?? 'Unknown',
-                        'ingredient_name' => $stock->ingredient_name,
-                        'requested' => $requiredQuantity,
-                        'available' => (int) $stock->quantity_left,
-                    ];
-                }
-            }
-        }
-
-        return count($exceeded) > 0 ? $exceeded : null;
-    }
-
-    private function resolveItemIngredients(?Dish $dish, array $item): array
-    {
-        if (!empty($item['customization_id'])) {
-            $customization = DishCustomization::find($item['customization_id']);
-            if ($customization && $customization->dish_id == ($dish?->dish_id ?? null)) {
-                $ingredients = $customization->ingredients;
-                if (!empty($ingredients)) {
-                    return collect(explode(',', (string) $ingredients))
-                        ->map(fn ($ingredient) => trim($ingredient))
-                        ->filter()
-                        ->values()->all();
-                }
-            }
-        }
-
-        if (!empty($item['ingredients'])) {
-            return collect(explode(',', (string) $item['ingredients']))
-                ->map(fn ($ingredient) => trim($ingredient))
-                ->filter()
-                ->values()->all();
-        }
-
-        return collect(explode(',', (string) $dish?->ingredients ?? ''))
-            ->map(fn ($ingredient) => trim($ingredient))
-            ->filter()
-            ->values()->all();
-    }
-
+    
     public function store(Request $request, \App\Services\DeliveryDistanceService $distanceService)
     {
         $validated = $request->validate([
@@ -106,12 +48,26 @@ class OrderController extends Controller
         ]);
 
         $stockDate = $this->resolveStockDate($validated);
-        $stockExceeded = \App\Models\Stock::ensureIngredientAvailability($validated['items'], $stockDate);
-        if ($stockExceeded) {
+
+        $over50 = \App\Models\Stock::findIngredientDemandOver50($validated['items']);
+        if ($over50) {
             return response()->json([
-                'message' => 'Một số nguyên liệu không đủ định lượng trong kho.',
-                'exceeded' => $stockExceeded,
+                'message' => 'Một số nguyên liệu bị yêu cầu vượt quá định lượng tối đa (50). Vui lòng chọn món khác thay thế.',
+                'over_limit' => $over50,
             ], 422);
+        }
+
+        $isImmediateCook = $validated['order_type'] === 'delivery'
+            && empty($validated['delivery']['preferred_delivery_time'] ?? null);
+
+        if ($isImmediateCook) {
+            $shortage = \App\Models\Stock::checkAndRefillShortage($validated['items'], $stockDate);
+            if ($shortage) {
+                return response()->json([
+                    'message' => 'Một số nguyên liệu không đủ định lượng trong kho. Quý khách vui lòng đợi một chút để chúng tôi bổ sung hàng vào kho. Sau đó quý khách có thể tiếp tục thực hiện đặt hàng.',
+                    'exceeded' => $shortage,
+                ], 422);
+            }
         }
 
         DB::beginTransaction();
@@ -209,18 +165,15 @@ class OrderController extends Controller
 
                 $preferredDeliveryTime = $validated['delivery']['preferred_delivery_time'] ?? null;
                 if ($preferredDeliveryTime) {
-                    $preferredAt = \Carbon\Carbon::createFromFormat('H:i', $preferredDeliveryTime)
-                        ->setDate(now()->year, now()->month, now()->day);
-
-                    // Giờ hẹn trong ngày phải còn đủ 15 phút chuẩn bị và thời gian
-                    // giao thực tế. Giờ sau 22:00 vẫn được lưu để giao sáng hôm sau.
-                    $latestSameDayArrival = now()->copy()
-                        ->addMinutes(15 + $shippingResult['duration_minutes']);
-                    $closingTime = now()->copy()->setTime(22, 0, 0);
-                    if ($preferredAt->lte($closingTime) && $preferredAt->lt($latestSameDayArrival)) {
+                    // Giờ hẹn trong ngày không được sớm hơn "giờ tới sớm nhất"
+                    // (chờ thanh toán + 15' chuẩn bị + thời gian giao, và không trước 7:45).
+                    // Giờ sau 22:00 vẫn được lưu để nấu/giao sáng hôm sau.
+                    $durationMinutes = (int) $shippingResult['duration_minutes'];
+                    if (Delivery::isPreferredArrivalTooEarly($preferredDeliveryTime, $durationMinutes, now())) {
                         DB::rollBack();
+                        $earliest = Delivery::earliestArrivalAt(now(), $durationMinutes);
                         return response()->json([
-                            'message' => 'Thời điểm giao hàng mong muốn chưa đủ 15 phút chuẩn bị và thời gian giao thực tế.',
+                            'message' => 'Thời điểm giao hàng mong muốn quá sớm. Hàng sớm nhất tới lúc ' . $earliest->format('H:i') . '.',
                         ], 422);
                     }
                 }
@@ -236,7 +189,7 @@ class OrderController extends Controller
                     'destination_lat' => $shippingResult['lat'],
                     'destination_lng' => $shippingResult['lng'],
                     'D_payment_status' => 'unpaid',
-                    'delivery_status' => 'waiting_confirmation',
+                    'delivery_status' => 'waiting_payment',
                 ]);
             }
 
@@ -285,20 +238,46 @@ class OrderController extends Controller
         }
     }
 
+    /**
+     * Kiểm tra giỏ (các món đang có + món sắp thêm): có nguyên liệu nào cộng dồn vượt 50 hay không.
+     * Dùng khi thêm món vào giỏ (MenuPage, DishDetailPage). Giỏ chỉ có 1 món thì cũng kiểm tra bình thường.
+     */
+    public function checkCartIngredients(Request $request)
+    {
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.dish_id' => 'required|exists:dishes,dish_id',
+            'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
+            'items.*.ingredients' => 'nullable|string',
+            'items.*.quantity' => 'required|integer|min:1',
+        ]);
+
+        $over50 = Stock::findIngredientDemandOver50($validated['items']);
+        if ($over50) {
+            return response()->json([
+                'message' => 'Một số nguyên liệu bị yêu cầu vượt quá định lượng tối đa (50). Vui lòng chọn món khác thay thế.',
+                'over_limit' => $over50,
+            ], 422);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     public function destroy(Request $request, Order $order)
     {
         if ($order->user_id !== $request->user()->user_id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        $existingBill = \App\Models\Bill::where('order_id', $order->order_id)->first();
+        if ($existingBill && !in_array($existingBill->payment_method, [null, 'unpaid'], true)) {
+            return response()->json(['message' => 'Đơn hàng đã thanh toán, không thể xóa.'], 422);
+        }
+
         // Order deletion should cascade to related items, booking tables, deliveries, and bills.
         try {
-            if ($order->order_type === 'booking_table') {
-                $order->load('bookings');
-                $firstBt = $order->bookings->first();
-                $date = $firstBt ? $firstBt->booking_date : now()->format('Y-m-d');
-                Stock::restoreStockForOrder($order, $date);
-            }
+            // Đơn chưa thanh toán thì chưa từng bị trừ kho (kho chỉ trừ lúc nấu / trước giờ đặt bàn 60'),
+            // nên không cần hoàn kho ở đây.
 
             $order->delete();
             return response()->json(['message' => 'Đã xóa đơn hàng thành công'], 200);
@@ -332,12 +311,8 @@ class OrderController extends Controller
             $automaticStart = null;
             $automaticArrival = null;
             if ($delivery) {
-                $durationMinutes = (int) ($delivery->estimated_duration_minutes ?? 30);
-                $paidAt = $delivery->approved_at?->copy() ?? $delivery->updated_at?->copy();
-                if ($paidAt) {
-                    $automaticStart = $delivery->getAutomaticStartAt($paidAt, $durationMinutes);
-                    $automaticArrival = $automaticStart->copy()->addMinutes($durationMinutes);
-                }
+                $automaticStart = $delivery->ship_at?->copy();
+                $automaticArrival = $delivery->estimated_completion_at?->copy();
             }
 
             // All booking rows for this order (one per table)
@@ -374,7 +349,9 @@ class OrderController extends Controller
                     'delivery_status'  => $delivery->delivery_status,
                     'estimated_duration_minutes' => $delivery->estimated_duration_minutes,
                     'preferred_delivery_time' => $delivery->preferred_delivery_time,
-                    'approved_at'      => $delivery->approved_at,
+                    'paid_at'      => $delivery->paid_at,
+                    'cooking_at' => $delivery->cooking_at,
+                    'ship_at' => $delivery->ship_at,
                     'automatic_start_at' => $automaticStart,
                     'automatic_arrival_at' => $automaticArrival,
                     'delivery_started_at'     => $delivery->delivery_started_at,

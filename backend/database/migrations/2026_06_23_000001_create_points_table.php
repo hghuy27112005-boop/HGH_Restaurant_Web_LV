@@ -22,6 +22,7 @@ return new class extends Migration
             $table->string('bill_id');
             $table->foreign('bill_id')->references('bill_id')->on('bills')->onDelete('cascade');
             $table->integer('points_earned')->default(0);
+            $table->integer('points_redeemed')->default(0);
             $table->decimal('booking_total_price', 12, 2)->default(0);
             $table->decimal('delivery_total_price', 12, 2)->default(0);
             $table->timestamp('created_at')->useCurrent();

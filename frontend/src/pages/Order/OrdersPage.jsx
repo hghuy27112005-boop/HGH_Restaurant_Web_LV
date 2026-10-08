@@ -8,11 +8,23 @@ const TYPE_FILTERS = [
     { id: 'delivery', label: 'Đặt ship' },
 ];
 
+// 6 trạng thái của đơn ship (khớp enum delivery_status ở backend)
+const DELIVERY_STATUS_INFO = {
+    waiting_payment: { label: '⏳ Chờ thanh toán', variant: 'warning' },
+    scheduled: { label: '📅 Đã lên lịch', variant: 'info' },
+    preparing: { label: '🍳 Đang chuẩn bị', variant: 'info' },
+    shipping: { label: '🚗 Đang giao hàng', variant: 'info' },
+    completed: { label: '✓ Đã giao hàng', variant: 'success' },
+    cancelled: { label: '✕ Đã hủy', variant: 'danger' },
+};
+
+// Không có nút "Chờ thanh toán": đơn chưa thanh toán chưa có Bill nên không hiện ở danh sách của khách.
 const DELIVERY_STATUS_FILTERS = [
     { id: 'all', label: 'Tất cả' },
-    { id: 'waiting_confirmation', label: 'Đang chờ duyệt' },
-    { id: 'waiting_delivery', label: 'Đang chờ giao hàng' },
-    { id: 'delivered', label: 'Đã giao hàng' },
+    { id: 'scheduled', label: 'Đã lên lịch' },
+    { id: 'preparing', label: 'Đang chuẩn bị' },
+    { id: 'shipping', label: 'Đang giao hàng' },
+    { id: 'completed', label: 'Đã giao hàng' },
     { id: 'cancelled', label: 'Đã hủy' },
 ];
 
@@ -57,30 +69,9 @@ const OrdersPage = () => {
         setStatusFilter('all'); // reset bộ lọc trạng thái khi đổi loại đơn
     };
 
-    const getDeliveryStatusGroup = (status) => {
-        if (status === 'completed' || status === 'delivered') return 'delivered';
-        if (status === 'shipping' || status === 'waiting_delivery' || status === 'delivering') return 'waiting_delivery';
-        if (status === 'cancelled') return 'cancelled';
-        return 'waiting_confirmation';
-    };
+    const getStatusText = (status) => DELIVERY_STATUS_INFO[status]?.label ?? status ?? '—';
 
-    const getStatusText = (status) => {
-        switch (getDeliveryStatusGroup(status)) {
-            case 'delivered': return '✓ Đã giao hàng';
-            case 'waiting_delivery': return '🚗 Đang chờ giao hàng';
-            case 'cancelled': return '❌ Đã hủy';
-            default: return '⏳ Đang chờ duyệt';
-        }
-    };
-
-    const getStatusColor = (status) => {
-        switch (getDeliveryStatusGroup(status)) {
-            case 'delivered': return 'success';
-            case 'waiting_delivery': return 'info';
-            case 'cancelled': return 'danger';
-            default: return 'warning';
-        }
-    };
+    const getStatusColor = (status) => DELIVERY_STATUS_INFO[status]?.variant ?? 'warning';
 
     const formatDateTime = (dateString) => {
         if (!dateString) return '—';
@@ -104,7 +95,7 @@ const OrdersPage = () => {
     const getDateKey = (value) => {
         if (!value) return '';
         const text = String(value);
-        if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
         const date = new Date(value);
         if (Number.isNaN(date.getTime())) return '';
         const year = date.getFullYear();
@@ -140,7 +131,7 @@ const OrdersPage = () => {
             result = result.filter(o => o.order_type === typeFilter);
         }
         if (typeFilter === 'delivery' && statusFilter !== 'all') {
-            result = result.filter(o => getDeliveryStatusGroup(o.delivery?.delivery_status) === statusFilter);
+            result = result.filter(o => o.delivery?.delivery_status === statusFilter);
         }
         if (searchBillId.trim()) {
             result = result.filter(o => String(o.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase()));

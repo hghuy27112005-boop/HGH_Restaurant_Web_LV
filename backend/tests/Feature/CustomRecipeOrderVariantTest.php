@@ -16,7 +16,7 @@ class CustomRecipeOrderVariantTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_custom_recipe_uses_variant_ingredients_for_stock_check(): void
+    public function test_custom_recipe_uses_variant_ingredients_for_over_limit_check(): void
     {
         $user = User::factory()->create();
         $dishType = DishType::create(['type_name' => 'Món chính']);
@@ -28,24 +28,7 @@ class CustomRecipeOrderVariantTest extends TestCase
             'is_bestseller' => false,
             'is_active' => true,
         ]);
-
-        IngredientStock::create([
-            'ingredient_key' => 'bò',
-            'ingredient_name' => 'bò',
-            'stock_date' => now()->toDateString(),
-            'quantity_start' => 20,
-            'quantity_left' => 20,
-            'refill_count' => 0,
-        ]);
-
-        IngredientStock::create([
-            'ingredient_key' => 'hành',
-            'ingredient_name' => 'hành',
-            'stock_date' => now()->toDateString(),
-            'quantity_start' => 20,
-            'quantity_left' => 1,
-            'refill_count' => 0,
-        ]);
+        $dish->forceFill(['ingredients' => 'bò, hành, nước dùng'])->save();
 
         $customization = DishCustomization::create([
             'user_id' => $user->user_id,
@@ -57,15 +40,20 @@ class CustomRecipeOrderVariantTest extends TestCase
             'replacements' => [],
         ]);
 
-        $result = \App\Models\Stock::ensureIngredientAvailability([
+        // 51 phần của công thức thay thế: chỉ các nguyên liệu CÒN LẠI trong công thức mới vượt 50.
+        $over = \App\Models\Stock::findIngredientDemandOver50([
             [
                 'dish_id' => $dish->dish_id,
                 'customization_id' => $customization->dish_customization_id,
-                'quantity' => 1,
+                'quantity' => 51,
             ],
-        ], now()->toDateString());
+        ]);
 
-        $this->assertNull($result);
+        $this->assertNotNull($over);
+        $names = collect($over)->pluck('ingredient_name')->all();
+        $this->assertContains('bò', $names);
+        $this->assertContains('nước dùng', $names);
+        $this->assertNotContains('hành', $names);
     }
 
     public function test_custom_recipe_is_distinct_from_base_dish_when_adding_to_cart(): void
@@ -73,7 +61,7 @@ class CustomRecipeOrderVariantTest extends TestCase
         $this->assertTrue(true);
     }
 
-    public function test_recommendations_include_max_quantity_from_ingredient_stock(): void
+    public function test_recommendations_return_similar_dish_without_quantity_left(): void
     {
         /** @var User $user */
         $user = User::factory()->create();
@@ -122,6 +110,7 @@ class CustomRecipeOrderVariantTest extends TestCase
         $response = $this->actingAs($user)->getJson('/api/recommendations');
 
         $response->assertOk();
-        $response->assertJsonPath('data.0.quantity_left', 3);
+        $response->assertJsonPath('data.0.dish_id', $recommended->dish_id);
+        $response->assertJsonMissingPath('data.0.quantity_left');
     }
 }

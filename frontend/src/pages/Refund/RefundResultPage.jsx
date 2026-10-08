@@ -17,7 +17,7 @@ const RefundResultPage = () => {
                     success: true,
                     amount: searchParams.get('amount'),
                     type: 'points',
-                    orderId: searchParams.get('order_stt')
+                    orderId: searchParams.get('order_id')
                 });
                 return;
             }

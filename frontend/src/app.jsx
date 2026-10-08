@@ -17,11 +17,7 @@ import MenuPage from './pages/Menu/MenuPage';
 import DishDetailPage from './pages/Menu/DishDetailPage';
 import AboutPage from './pages/Home/AboutPage';
 import ProfilePage from './pages/User/ProfilePage';
-import StatisticsPage from './pages/User/StatisticsPage';
-import PointsPage from './pages/User/PointsPage';
 import BookingsPage from './pages/Booking/BookingsPage';
-import BookingFormPage from './pages/Booking/BookingFormPage';
-import BookingListPage from './pages/Booking/BookingListPage';
 import OrdersPage from './pages/Order/OrdersPage';
 import RatingPage from './pages/Rating/RatingPage';
 import DeliveriesPage from './pages/Delivery/DeliveriesPage';
@@ -78,13 +74,9 @@ function App() {
 
               {/* User Routes */}
               <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-              <Route path="/statistics" element={<ProtectedRoute><StatisticsPage /></ProtectedRoute>} />
-              <Route path="/points" element={<ProtectedRoute><PointsPage /></ProtectedRoute>} />
 
               {/* Bookings */}
               <Route path="/bookings" element={<ProtectedRoute><BookingsPage /></ProtectedRoute>} />
-              <Route path="/bookings/form" element={<ProtectedRoute><BookingFormPage /></ProtectedRoute>} />
-              <Route path="/bookings/list" element={<ProtectedRoute><BookingListPage /></ProtectedRoute>} />
 
               {/* Orders */}
               <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />

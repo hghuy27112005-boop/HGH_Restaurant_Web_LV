@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Dish;
-use App\Models\Stock;
 use App\Models\OrderItem;
 use App\Services\OrderCodeGenerator;
 use Carbon\Carbon;
@@ -17,25 +16,8 @@ class DishController extends Controller
         // Chỉ lấy món đang bán (is_active = true) cho trang menu công khai / đặt hàng
         $dishes = Dish::where('is_active', true)->orderBy('dish_id', 'asc')->get();
 
-        // Lấy/tạo stock của ngày hôm nay và gắn quantity_left vào mỗi món
-        $generator = new OrderCodeGenerator();
-        $today = now()->format('Y-m-d');
-
-        $result = $dishes->map(function ($dish) use ($generator, $today) {
-            $stockId = $generator->generateStockId($dish->dish_id, $today);
-            $stock = Stock::find($stockId);
-            if (!$stock) {
-                $stock = Stock::create([
-                    'stock_id'       => $stockId,
-                    'dish_id'        => $dish->dish_id,
-                    'quantity_start' => 50,
-                    'quantity_left'  => 50,
-                ]);
-            }
-            $dishArray = $dish->toArray();
-            $dishArray['quantity_left'] = (int) $stock->quantity_left;
-            return $dishArray;
-        });
+        // Số lượng tối đa mỗi món là 50 (kiểm tra theo nguyên liệu ở backend), không còn trả quantity_left.
+        $result = $dishes;
 
         if ($request->expectsJson()) {
             return response()->json($result->values());
@@ -65,17 +47,7 @@ class DishController extends Controller
 
         if ($request->expectsJson()) {
             $payload = $dish->toArray();
-            $stockId = (new OrderCodeGenerator())->generateStockId($dish->dish_id, now()->format('Y-m-d'));
-            $stock = Stock::find($stockId);
-            if (!$stock) {
-                $stock = Stock::create([
-                    'stock_id' => $stockId,
-                    'dish_id' => $dish->dish_id,
-                    'quantity_start' => 50,
-                    'quantity_left' => 50,
-                ]);
-            }
-            $payload['quantity_left'] = (int) $stock->quantity_left;
+            // Không còn trả quantity_left (xem ghi chú ở index()).
             if (Auth::check()) {
                 $payload['custom_recipes'] = $dish->customizations()
                     ->where('user_id', Auth::id())
@@ -267,11 +239,6 @@ class DishController extends Controller
             // Lưu lại tên ảnh gốc trước khi xóa (vì sau khi $dish->delete() thành công,
             // object $dish vẫn còn trong PHP nên vẫn đọc được, nhưng để rõ ràng ta lấy trước)
             $imageName = $dish->getRawOriginal('image_url');
-
-            // Món chưa từng được đặt hàng -> chỉ còn ràng buộc với bảng stocks (được
-            // tự động tạo khi món hiển thị lên menu) -> xóa các bản ghi stock liên quan
-            // trước để giải phóng khóa ngoại, sau đó mới xóa món.
-            Stock::where('dish_id', $id)->delete();
 
             // Xóa record trong DB. Nếu vẫn còn bị chặn bởi khóa ngoại nào khác phát sinh
             // sau này thì sẽ ném exception ngay tại đây -> file ảnh chưa bị động tới, vẫn an toàn.

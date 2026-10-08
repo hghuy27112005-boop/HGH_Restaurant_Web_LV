@@ -34,6 +34,17 @@ class VnpayController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        // Đơn ship hẹn giờ mà giờ nấu đã quá sát (khách để lâu mới thanh toán) thì chặn,
+        // vì link VNPay sống 15 phút, tới lúc IPN về giờ nấu có thể đã qua.
+        if ($order->order_type === 'delivery') {
+            $order->loadMissing('delivery');
+            if ($order->delivery && $order->delivery->isPreferredTimeTooClose(now())) {
+                return response()->json([
+                    'message' => 'Thời điểm giao hàng mong muốn đã quá gần, không đủ thời gian chuẩn bị. Vui lòng quay lại chọn lại thời điểm.',
+                ], 422);
+            }
+        }
+
         // Luôn tự xác thực sự kiện giảm giá ở server, không tin trực tiếp
         // giá trị use_sale_off từ client.
         $saleOffPercentage = null;
@@ -175,8 +186,8 @@ class VnpayController extends Controller
         } elseif ($order->order_type === 'delivery') {
             $delivery = $order->delivery;
 
-            if (!$delivery || !in_array($delivery->delivery_status, ['waiting_info', 'waiting_confirmation', 'waiting_approval'])) {
-                return response()->json(['message' => 'Không thể hủy đơn hàng ở trạng thái này'], 400);
+            if (!$delivery || !in_array($delivery->delivery_status, ['waiting_payment', 'scheduled'])) {
+                return response()->json(['message' => 'Đơn hàng đang được chuẩn bị, không thể hủy'], 400);
             }
         }
 
@@ -382,6 +393,16 @@ class VnpayController extends Controller
         if ($isRefund) {
             Log::info('VNPay IPN refund', ['order_id' => $orderId]);
 
+            // Chặn xử lý lặp: đơn đã hoàn rồi thì không thu hồi điểm / hoàn kho lần nữa
+            $alreadyRefunded = $order->order_type === 'delivery'
+                ? $order->delivery?->D_payment_status === 'refunded'
+                : \App\Models\BookingTable::where('order_id', $orderId)
+                    ->where('B_payment_status', 'refunded')
+                    ->exists();
+            if ($alreadyRefunded) {
+                return response()->json(['RspCode' => '02', 'Message' => 'Order already confirmed']);
+            }
+
             $bill = \App\Models\Bill::where('order_id', $orderId)->first();
             $user = $order->user;
             $pointsToRevoke = 0;
@@ -401,8 +422,11 @@ class VnpayController extends Controller
             } elseif ($order->order_type === 'booking_table') {
                 \App\Models\BookingTable::where('order_id', $orderId)->update([
                     'booking_status' => 'cancelled',
+                    'B_payment_status' => 'refunded',
                 ]);
             }
+
+            \App\Models\Stock::restoreForOrder($order);
 
             // Thu hồi điểm — lấy đúng số điểm đã thực sự ghi nhận vào bảng points
             // tại thời điểm thanh toán, KHÔNG tính lại từ đầu. Tính lại dễ bị lệch
@@ -428,7 +452,7 @@ class VnpayController extends Controller
             return response()->json(['RspCode' => '01', 'Message' => 'Order record not found']);
         }
 
-        if ($record->{$paidField} === 'paid') {
+        if (in_array($record->{$paidField}, ['paid', 'refunded'], true)) {
             Log::info('VNPay IPN order already paid', ['order_id' => $orderId]);
             return response()->json(['RspCode' => '02', 'Message' => 'Order already confirmed']);
         }
@@ -509,6 +533,14 @@ class VnpayController extends Controller
             $record->{$statusField} = $nextStatus;
             $record->save();
 
+            // Đơn đặt nhiều bàn: $record chỉ là 1 dòng (hasOne), phải cập nhật mọi dòng bàn của đơn
+            if ($order->order_type === 'booking_table') {
+                \App\Models\BookingTable::where('order_id', $order->order_id)->update([
+                    'B_payment_status' => 'paid',
+                    'booking_status'   => 'completed',
+                ]);
+            }
+
             $bill->payment_method = 'vnpay';
             $bill->save();
 
@@ -520,8 +552,6 @@ class VnpayController extends Controller
 
             if ($bill->order->order_type === 'booking_table') {
                 $booking = $bill->order->bookings->first() ?? $bill->order->bookingTable->first();
-                $date = $booking ? $booking->booking_date : now()->format('Y-m-d');
-                \App\Models\Stock::refillIfLowForOrder($bill->order, $date);
 
                 // Gửi mail thông báo đặt bàn HÔM NAY — chỉ tại đây, khi VNPay đã xác
                 // nhận thanh toán thành công thật sự (không còn ở BillController::store()).
@@ -761,7 +791,7 @@ class VnpayController extends Controller
                 $order->delivery,
                 'D_payment_status',
                 'delivery_status',
-                'waiting_approval',
+                'scheduled',
             ];
         }
 

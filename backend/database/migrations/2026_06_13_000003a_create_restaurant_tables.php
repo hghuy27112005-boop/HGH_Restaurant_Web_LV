@@ -18,31 +18,7 @@ return new class extends Migration
             $table->timestamp('updated_at')->useCurrent();
         });
 
-        DB::unprepared("
-            INSERT INTO table_types(table_type_name, capacity)
-            VALUES
-            ('Loại 1', 5),
-            ('Loại 2', 10),
-            ('Loại 3', 15);
-
-            INSERT INTO restaurant_tables(table_number, table_type_id)
-            SELECT generate_series(1,25),
-                   (SELECT table_type_id
-                    FROM table_types
-                    WHERE capacity = 5);
-
-            INSERT INTO restaurant_tables(table_number, table_type_id)
-            SELECT generate_series(26,45),
-                   (SELECT table_type_id
-                    FROM table_types
-                    WHERE capacity = 10);
-
-            INSERT INTO restaurant_tables(table_number, table_type_id)
-            SELECT generate_series(46,50),
-                   (SELECT table_type_id
-                    FROM table_types
-                    WHERE capacity = 15);
-        ");
+        // Dữ liệu table_types / restaurant_tables được nạp bởi DatabaseSeeder (cần chạy --seed).
     }
 
     public function down(): void

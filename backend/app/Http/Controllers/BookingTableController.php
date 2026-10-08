@@ -145,27 +145,17 @@ class BookingTableController extends Controller
         try {
             BookingTable::where('order_id', $order->order_id)->update([
                 'booking_status' => 'cancelled',
+                'B_payment_status' => 'refunded',
             ]);
 
+            \App\Models\Stock::restoreForOrder($order);
+
             // Thu hồi điểm tích lũy/thưởng đã nhận khi thanh toán
-            $subtotal = $order->subtotal_price ?? $bill->total_price;
-            $total = $bill->total_price;
-            $basePoints = floor($total / 1000);
-            $bonusPoints = 0;
-            if ($user && $subtotal >= 100000 && $user->role !== 'admin' && $user->membership !== 'administrator') {
-                $bonusMap = [
-                    'bronze' => 10,
-                    'silver' => 20,
-                    'gold' => 30,
-                    'platinum' => 40,
-                    'diamond' => 50,
-                ];
-                $bonusPoints = $bonusMap[$user->membership] ?? 0;
-            }
-            $pointsToRevoke = $basePoints + $bonusPoints;
-            if ($pointsToRevoke > 0) {
-                $user->points -= $pointsToRevoke;
-            }
+            // Thu hồi đúng số điểm đã ghi nhận lúc thanh toán (undo), không tính lại
+            $pointsRecord = \App\Models\Points::where('bill_id', $bill->bill_id)
+                ->orderBy('created_at')
+                ->first();
+            $pointsToRevoke = $pointsRecord ? (int) $pointsRecord->points_earned : 0;
 
             // Hoàn điểm đã trừ lúc thanh toán, theo giá đã áp giảm giá sự kiện (nếu có)
             $amount = $bill->sale_off_total_price !== null
@@ -173,10 +163,11 @@ class BookingTableController extends Controller
                 : (float) $order->subtotal_price;
             $refundPoints = (int) floor($amount / 100);
 
+            $user->points = max(0, $user->points - $pointsToRevoke + $refundPoints);
+            $user->updateMembership();
+            $user->save();
+
             if ($refundPoints > 0) {
-                $user->points += $refundPoints;
-                if ($user->points < 0) $user->points = 0;
-                $user->save();
 
                 \App\Models\Points::create([
                     'user_id' => $user->user_id,

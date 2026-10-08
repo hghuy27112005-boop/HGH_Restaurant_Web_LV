@@ -330,7 +330,7 @@ class OrdersSeeder extends Seeder
                     'address' => 'Auto seed address ' . rand(100, 999),
                     'D_payment_status' => $dPayment,
                     'delivery_status' => $deliveryStatus,
-                    'approved_at' => $isCompleted ? $createdAt->copy()->addMinutes(rand(10, 120)) : null,
+                    'paid_at' => $isCompleted ? $createdAt->copy()->addMinutes(rand(10, 120)) : null,
                     'delivered_at' => $isCompleted ? $createdAt->copy()->addMinutes(rand(121, 360)) : null,
                     'created_at' => $createdAt,
                     'updated_at' => $createdAt,

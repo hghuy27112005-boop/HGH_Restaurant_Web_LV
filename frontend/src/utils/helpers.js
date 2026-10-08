@@ -29,50 +29,6 @@ export const formatDateTime = (datetime) => {
 };
 
 /**
- * Tính chiết khấu dựa trên hạng thành viên
- * @param {string} membershipTier - Hạng thành viên (Bronze, Silver, Gold, Platinum, Diamond)
- * @returns {number} - Phần trăm chiết khấu
- */
-export const getDiscountByTier = (membershipTier) => {
-    const discounts = {
-        'Bronze': 0,
-        'Silver': 5,
-        'Gold': 10,
-        'Platinum': 15,
-        'Diamond': 20,
-    };
-    return discounts[membershipTier] || 0;
-};
-
-/**
- * Tính điểm từ giá tiền (1 điểm per 1,000 VND)
- * @param {number} amount - Số tiền
- * @returns {number} - Số điểm
- */
-export const calculatePoints = (amount) => {
-    return Math.floor(amount / 1000);
-};
-
-/**
- * Xác định hạng thành viên dựa trên điểm
- * @param {number} points - Tổng điểm
- * @returns {object} - Object chứa {tier, discount, nextTier, pointsNeeded}
- */
-export const getMembershipTier = (points) => {
-    if (points >= 50000) {
-        return { tier: 'Diamond', discount: 20, nextTier: null, pointsNeeded: 0 };
-    } else if (points >= 10000) {
-        return { tier: 'Platinum', discount: 15, nextTier: 'Diamond', pointsNeeded: 50000 - points };
-    } else if (points >= 5000) {
-        return { tier: 'Gold', discount: 10, nextTier: 'Platinum', pointsNeeded: 10000 - points };
-    } else if (points >= 1000) {
-        return { tier: 'Silver', discount: 5, nextTier: 'Gold', pointsNeeded: 5000 - points };
-    } else {
-        return { tier: 'Bronze', discount: 0, nextTier: 'Silver', pointsNeeded: 1000 - points };
-    }
-};
-
-/**
  * Kiểm tra email hợp lệ
  * @param {string} email - Email cần kiểm tra
  * @returns {boolean} - True nếu hợp lệ

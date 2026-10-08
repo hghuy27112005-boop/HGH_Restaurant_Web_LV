@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { dishAPI, recommendationAPI, dishCustomizationAPI } from '../../services/api';
+import { dishAPI, recommendationAPI, dishCustomizationAPI, cartAPI } from '../../services/api';
 import { Loading, ErrorMessage, EmptyState, Button, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
+import IngredientLimitModal from '../../components/IngredientLimitModal';
+import { translateIngredients } from './DishDetailPage';
+
+// Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
+const MAX_ORDER_QTY = 50;
 
 const MenuPage = () => {
     const navigate = useNavigate();
@@ -26,6 +31,7 @@ const MenuPage = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState(null);
+    const [ingredientError, setIngredientError] = useState(null); // { message, overLimit } khi giỏ vượt 50 nguyên liệu
     const [selectedDish, setSelectedDish] = useState(null);
     const [quantity, setQuantity] = useState(1);
     const [orderType, setOrderType] = useState('mang-ve');
@@ -242,7 +248,7 @@ const MenuPage = () => {
     };
 
     const handleIncreaseQty = () => {
-        const max = selectedDish?.quantity_left ?? 10;
+        const max = MAX_ORDER_QTY;
         setQuantity(prev => {
             const q = parseInt(prev) || 1;
             return Math.min(max, q + 1);
@@ -251,7 +257,7 @@ const MenuPage = () => {
 
     const handleSetMinQty = () => setQuantity(1);
 
-    const handleSetMaxQty = () => setQuantity(selectedDish?.quantity_left ?? 10);
+    const handleSetMaxQty = () => setQuantity(MAX_ORDER_QTY);
     
     const handleDecrease10Qty = () => {
         setQuantity(prev => {
@@ -261,7 +267,7 @@ const MenuPage = () => {
     };
 
     const handleIncrease10Qty = () => {
-        const max = selectedDish?.quantity_left ?? 10;
+        const max = MAX_ORDER_QTY;
         setQuantity(prev => {
             const q = parseInt(prev) || 1;
             return Math.min(max, q + 10);
@@ -270,7 +276,7 @@ const MenuPage = () => {
 
     const confirmAddToCart = async () => {
         let qty = parseInt(quantity);
-        const maxQty = selectedDish?.quantity_left ?? 10;
+        const maxQty = MAX_ORDER_QTY;
 
         if (isNaN(qty) || qty < 1) {
             setErrorMessage('Vui lòng nhập số lượng hợp lệ!');
@@ -278,7 +284,7 @@ const MenuPage = () => {
         }
 
         if (qty > maxQty) {
-            setErrorMessage('Đặt hàng quá số lượng còn lại');
+            setErrorMessage('Mỗi lần chỉ được đặt tối đa 50 phần cho một món.');
             return;
         }
 
@@ -302,6 +308,25 @@ const MenuPage = () => {
                 ingredients: selectedCustomization?.ingredients ?? null,
                 removed_ingredients: selectedCustomization?.removed_ingredients ?? [],
             });
+        }
+
+        // Kiểm tra nguyên liệu cộng dồn của cả giỏ (backend là nguồn luật duy nhất).
+        try {
+            await cartAPI.checkIngredients(currentCart.map(item => ({
+                dish_id: item.dish_id,
+                customization_id: item.customization_id ?? null,
+                ingredients: item.ingredients ?? null,
+                quantity: item.quantity,
+            })));
+        } catch (err) {
+            const data = err.response?.data;
+            if (err.response?.status === 422 && data?.over_limit) {
+                setIsModalOpen(false);
+                setIngredientError({ message: data.message, overLimit: data.over_limit });
+            } else {
+                setErrorMessage(data?.message || 'Không thể kiểm tra nguyên liệu lúc này. Vui lòng thử lại.');
+            }
+            return;
         }
 
         localStorage.setItem(cartKey, JSON.stringify(currentCart));
@@ -550,11 +575,9 @@ const MenuPage = () => {
                                                     ⭐ Bán chạy
                                                 </span>
                                             )}
-                                            {dish.quantity_left !== undefined && (
-                                                <span className={`text-xs font-semibold ${dish.quantity_left <= 15 ? 'text-red-600' : 'text-green-700'}`}>
-                                                    Còn lại {dish.quantity_left} phần
-                                                </span>
-                                            )}
+                                            <span className="text-xs font-semibold text-green-700">
+                                                Tối đa 50 phần
+                                            </span>
                                         </div>
                                         <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="w-2/5 shrink-0 rounded border border-amber-600 py-2 px-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">
                                             Xem chi tiết món
@@ -590,13 +613,9 @@ const MenuPage = () => {
                 confirmText="Xác nhận thêm vào giỏ hàng"
             >
                 <div className="flex flex-col gap-4">
-                    {selectedDish?.quantity_left !== undefined && (
-                        <div>
-                            <span className={`text-sm font-semibold ${selectedDish.quantity_left <= 15 ? 'text-red-600' : 'text-green-700'}`}>
-                                Còn lại {selectedDish.quantity_left} phần
-                            </span>
-                        </div>
-                    )}
+                    <div>
+                        <span className="text-sm font-semibold text-green-700">Tối đa 50 phần mỗi món</span>
+                    </div>
 
                     <div>
                         <label className="block font-semibold mb-2 text-gray-700">Chọn công thức thay thế</label>
@@ -689,6 +708,15 @@ const MenuPage = () => {
             >
                 <p className="text-gray-700">{successMessage}</p>
             </Modal>
+
+            {/* Lỗi nguyên liệu vượt 50 khi thêm vào giỏ */}
+            <IngredientLimitModal
+                isOpen={ingredientError !== null}
+                onClose={() => setIngredientError(null)}
+                message={ingredientError?.message}
+                overLimit={ingredientError?.overLimit}
+                formatIngredient={translateIngredients}
+            />
 
             {/* Thông báo lỗi chung - dùng chung component Modal */}
             <Modal
