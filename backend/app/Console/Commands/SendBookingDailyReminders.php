@@ -28,7 +28,7 @@ class SendBookingDailyReminders extends Command
         // đã thanh toán (completed + paid, nên không gồm đơn bị hủy). Trường hợp đặt ngay trong hôm nay đã được gửi mail lúc thanh toán rồi
         // nên loại trừ ở đây để tránh gửi trùng.
         $bookings = BookingTable::where('booking_date', $today)
-            ->where('booking_status', 'completed')
+            ->whereIn('booking_status', ['scheduled', 'preparing'])
             ->where('B_payment_status', 'paid')
             ->whereRaw('DATE(created_at) < booking_date')
             ->with('order.bill', 'order.user')

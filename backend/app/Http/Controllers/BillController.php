@@ -389,6 +389,15 @@ class BillController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        if ($order->order_type === 'booking_table') {
+            $bookingToPay = $order->booking;
+            if ($bookingToPay && $bookingToPay->startsAt()->lt(now()->addMinutes(\App\Models\BookingTable::LEAD_MINUTES))) {
+                return response()->json([
+                    'message' => 'Giờ đến đã quá gần (phải cách hiện tại ít nhất 60 phút), không thể thanh toán đơn này. Vui lòng quay lại đặt lại.',
+                ], 422);
+            }
+        }
+
         if ($order->order_type === 'delivery' && $order->delivery && $order->delivery->isPreferredTimeTooClose(now())) {
             return response()->json([
                 'message' => 'Thời điểm giao hàng mong muốn đã quá gần, không đủ thời gian chuẩn bị. Vui lòng quay lại chọn lại thời điểm.',
@@ -513,7 +522,7 @@ class BillController extends Controller
                 foreach ($bookingTables as $bt) {
                     $bt->update([
                         'B_payment_status' => 'paid',
-                        'booking_status'   => 'completed',
+                        'booking_status'   => 'scheduled',
                     ]);
                 }
                 $firstBt = $bookingTables->first();

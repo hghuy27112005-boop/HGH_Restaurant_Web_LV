@@ -34,6 +34,16 @@ class VnpayController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        // Đơn đặt bàn mà giờ đến đã cách hiện tại dưới 60 phút (khách để lâu mới thanh toán) thì chặn.
+        if ($order->order_type === 'booking_table') {
+            $bookingToPay = $order->booking;
+            if ($bookingToPay && $bookingToPay->startsAt()->lt(now()->addMinutes(\App\Models\BookingTable::LEAD_MINUTES))) {
+                return response()->json([
+                    'message' => 'Giờ đến đã quá gần (phải cách hiện tại ít nhất 60 phút), không thể thanh toán đơn này. Vui lòng quay lại đặt lại.',
+                ], 422);
+            }
+        }
+
         // Đơn ship hẹn giờ mà giờ nấu đã quá sát (khách để lâu mới thanh toán) thì chặn,
         // vì link VNPay sống 15 phút, tới lúc IPN về giờ nấu có thể đã qua.
         if ($order->order_type === 'delivery') {
@@ -169,7 +179,7 @@ class VnpayController extends Controller
         if ($order->order_type === 'booking_table') {
             $booking = $order->booking;
 
-            if (!$booking || $booking->booking_status !== 'completed') {
+            if (!$booking || $booking->booking_status !== 'scheduled') {
                 return response()->json(['message' => 'Không thể hủy đơn hàng ở trạng thái này'], 400);
             }
 
@@ -537,7 +547,7 @@ class VnpayController extends Controller
             if ($order->order_type === 'booking_table') {
                 \App\Models\BookingTable::where('order_id', $order->order_id)->update([
                     'B_payment_status' => 'paid',
-                    'booking_status'   => 'completed',
+                    'booking_status'   => 'scheduled',
                 ]);
             }
 
@@ -799,7 +809,7 @@ class VnpayController extends Controller
             $order->booking,
             'B_payment_status',
             'booking_status',
-            'completed',
+            'scheduled',
         ];
     }
 }

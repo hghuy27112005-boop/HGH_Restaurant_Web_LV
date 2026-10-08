@@ -215,10 +215,12 @@ class Stock extends Model
      */
     public static function deductDueBookings(): void
     {
+        // Đơn đã tới giờ đến thì chuyển sang "completed".
+        \App\Models\BookingTable::autoCompleteStarted();
         $dueOrders = \App\Models\Order::where('order_type', 'booking_table')
             ->whereNull('stock_deducted_at')
             ->whereHas('bookings', function ($query) {
-                $query->where('booking_status', 'completed')
+                $query->where('booking_status', 'scheduled')
                     ->where('B_payment_status', 'paid')
                     ->whereRaw('(booking_date + start_time) <= ?', [now()->addMinutes(60)->format('Y-m-d H:i:s')]);
             })
@@ -228,7 +230,13 @@ class Stock extends Model
         foreach ($dueOrders as $order) {
             try {
                 $date = \Carbon\Carbon::parse($order->bookings->first()->booking_date)->toDateString();
-                self::consumeForOrder($order, $date);
+                \Illuminate\Support\Facades\DB::transaction(function () use ($order, $date) {
+                    \App\Models\BookingTable::where('order_id', $order->order_id)
+                        ->where('booking_status', 'scheduled')
+                        ->update(['booking_status' => 'preparing']);
+
+                    self::consumeForOrder($order, $date);
+                });
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error('Trừ kho đơn đặt bàn thất bại', [
                     'order_id' => $order->order_id,

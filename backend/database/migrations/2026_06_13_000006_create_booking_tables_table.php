@@ -44,6 +44,8 @@ return new class extends Migration
                 'waiting_info',
                 'waiting_confirmation',
                 'waiting_payment',
+                'scheduled',
+                'preparing',
                 'completed',
                 'cancelled'
             ])->default('waiting_info');

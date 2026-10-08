@@ -92,7 +92,7 @@ class BookingTableController extends Controller
 
         /**
      * Khách hủy đơn đặt bàn đã thanh toán bằng điểm, tự hoàn điểm.
-     * Điều kiện: đã thanh toán (booking_status = completed) và còn cách giờ đặt ít nhất 60 phút.
+     * Điều kiện: đã thanh toán (booking_status = scheduled) và còn cách giờ đặt ít nhất 60 phút.
      */
     public function cancelWithPoints(Request $request)
     {
@@ -116,7 +116,7 @@ class BookingTableController extends Controller
 
         $firstBooking = $bookings->first();
 
-        if ($firstBooking->booking_status !== 'completed') {
+        if ($firstBooking->booking_status !== 'scheduled') {
             return response()->json(['message' => 'Không thể hủy đơn hàng ở trạng thái này'], 400);
         }
 

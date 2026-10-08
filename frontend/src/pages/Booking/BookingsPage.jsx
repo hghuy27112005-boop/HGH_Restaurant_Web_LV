@@ -9,6 +9,15 @@ import { translateIngredients } from '../Menu/DishDetailPage';
 const BOOKING_SESSION_KEY = 'booking_checkout_session';
 const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
 
+// Trạng thái đơn đặt bàn (khớp enum booking_status ở backend)
+const BOOKING_STATUS_INFO = {
+    waiting_info: { label: '⏳ Chờ thanh toán', variant: 'warning' },
+    scheduled: { label: '📅 Đã lên lịch', variant: 'info' },
+    preparing: { label: '🍳 Đang chuẩn bị', variant: 'info' },
+    completed: { label: '✓ Đã hoàn thành', variant: 'success' },
+    cancelled: { label: '✕ Đã hủy', variant: 'danger' },
+};
+
 const getTodayDateKey = () => {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -698,7 +707,7 @@ const BookingsPage = () => {
 
     const canCancelBooking = (bill) => {
         const booking = bill.booking_table;
-        if (!booking || booking.booking_status !== 'completed') return false;
+        if (!booking || booking.booking_status !== 'scheduled') return false;
 
         const bookingDateKey = getDateKey(booking.booking_date);
         const bookingDateObj = new Date(`${bookingDateKey}T00:00:00`);
@@ -1469,18 +1478,8 @@ const BookingsPage = () => {
                                     )}
 
                                     <div className="mt-4 flex justify-between items-center">
-                                        <Badge variant={
-                                            booking?.booking_status === 'cancelled'
-                                                ? 'danger'
-                                                : bill.status === 'paid'
-                                                    ? 'success'
-                                                    : 'warning'
-                                        }>
-                                            {booking?.booking_status === 'cancelled'
-                                                ? '✕ Đã hủy'
-                                                : bill.status === 'paid'
-                                                    ? '✓ Đã thanh toán'
-                                                    : '⏳ Chờ thanh toán'}
+                                        <Badge variant={BOOKING_STATUS_INFO[booking?.booking_status]?.variant ?? 'warning'}>
+                                            {BOOKING_STATUS_INFO[booking?.booking_status]?.label ?? '⏳ Chờ thanh toán'}
                                         </Badge>
 
                                         {canCancelBooking(bill) && (

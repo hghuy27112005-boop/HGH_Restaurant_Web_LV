@@ -250,7 +250,7 @@ class OrdersSeeder extends Seeder
                     'start_time' => $startTime,
                     'end_time' => $endTime,
                     'B_payment_status' => 'paid',
-                    'booking_status' => 'completed',
+                    'booking_status' => \Carbon\Carbon::parse($bookingDateKey . ' ' . $startTime)->lt(now()) ? 'completed' : 'scheduled',
                     'created_at' => $createdAt,
                     'updated_at' => $createdAt,
                 ]);

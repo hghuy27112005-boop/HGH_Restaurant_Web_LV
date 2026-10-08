@@ -50,4 +50,26 @@ class BookingTable extends Model
     {
         return $this->belongsTo(RestaurantTable::class, 'table_number', 'table_number');
     }
+
+    // ============================================
+    // TRẠNG THÁI THEO THỜI GIAN (giống đơn ship)
+    // scheduled (đã thanh toán) -> preparing (60' trước giờ đến) -> completed (tới giờ đến)
+    // ============================================
+
+    /** Đặt bàn phải cách giờ đến ít nhất bấy nhiêu phút; cũng là mốc không còn hủy được và bắt đầu chuẩn bị. */
+    public const LEAD_MINUTES = 60;
+
+    public function startsAt(): \Carbon\Carbon
+    {
+        return \Carbon\Carbon::parse($this->booking_date->format('Y-m-d') . ' ' . $this->start_time);
+    }
+
+    /** preparing -> completed khi tới giờ đến (đổi start_time thành end_time nếu muốn tới giờ về). Gọi nhiều lần vẫn an toàn. */
+    public static function autoCompleteStarted(): void
+    {
+        static::where('booking_status', 'preparing')
+            ->where('B_payment_status', 'paid')
+            ->whereRaw('(booking_date + start_time) <= ?', [now()->format('Y-m-d H:i:s')])
+            ->update(['booking_status' => 'completed']);
+    }
 }
