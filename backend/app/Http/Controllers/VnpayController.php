@@ -570,7 +570,7 @@ class VnpayController extends Controller
                         $startTime = substr($booking->start_time, 0, 5);
                         $endTime = substr($booking->end_time, 0, 5);
                         $bodyLine = "Quý khách có 1 đơn đặt bàn tại nhà hàng chúng tôi trong hôm nay vào lúc ({$startTime} tới {$endTime}).";
-                        Mail::to($bill->order->user->email)->send(new OrderNotificationMail($bill, $bodyLine));
+                        Mail::to($bill->order->user->email)->queue(new OrderNotificationMail($bill, $bodyLine));
                     } catch (\Throwable $e) {
                         Log::error('Gửi mail thông báo đặt bàn hôm nay thất bại (VNPay): ' . $e->getMessage());
                     }

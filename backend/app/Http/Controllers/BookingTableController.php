@@ -143,6 +143,9 @@ class BookingTableController extends Controller
 
         DB::beginTransaction();
         try {
+            // Khóa và đọc lại user từ DB (giống payWithPointsByOrder) để cộng/trừ điểm trên số điểm mới nhất.
+            $user = \App\Models\User::whereKey($user->getKey())->lockForUpdate()->first();
+
             BookingTable::where('order_id', $order->order_id)->update([
                 'booking_status' => 'cancelled',
                 'B_payment_status' => 'refunded',

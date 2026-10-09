@@ -555,7 +555,7 @@ class BillController extends Controller
                         $startTime = substr($firstBt->start_time, 0, 5);
                         $endTime = substr($firstBt->end_time, 0, 5);
                         $bodyLine = "Quý khách có 1 đơn đặt bàn tại nhà hàng chúng tôi trong hôm nay vào lúc ({$startTime} tới {$endTime}).";
-                        Mail::to($user->email)->send(new OrderNotificationMail($bill, $bodyLine));
+                        Mail::to($user->email)->queue(new OrderNotificationMail($bill, $bodyLine));
                     } catch (\Exception $e) {
                         \Log::error('Gửi mail thông báo đặt bàn hôm nay thất bại (thanh toán bằng điểm): ' . $e->getMessage());
                     }

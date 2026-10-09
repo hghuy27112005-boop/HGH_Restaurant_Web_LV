@@ -17,7 +17,8 @@ const RefundResultPage = () => {
                     success: true,
                     amount: searchParams.get('amount'),
                     type: 'points',
-                    orderId: searchParams.get('order_id')
+                    orderId: searchParams.get('order_id'),
+                    orderType: searchParams.get('order_type')
                 });
                 return;
             }
@@ -38,7 +39,8 @@ const RefundResultPage = () => {
                             success: true,
                             amount: Number(bill.subtotal_price).toLocaleString('vi-VN'),
                             type: 'vnpay',
-                            orderId: bill.order_id
+                            orderId: bill.order_id,
+                            orderType: bill.order_type
                         });
                     } else {
                         // Báo lỗi nếu không tìm thấy
@@ -113,7 +115,7 @@ const RefundResultPage = () => {
                         Về trang chủ
                     </Link>
                     <Link
-                        to="/deliveries"
+                        to={(result.orderType || searchParams.get('order_type')) === 'booking_table' ? '/bookings' : '/deliveries'}
                         className="px-5 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition"
                     >
                         Xem đơn hàng

@@ -575,7 +575,7 @@ const DeliveriesPage = () => {
             if (cancelingBill.payment_method === 'Points') {
                 const res = await deliveryService.cancelDelivery(cancelingBill.delivery.delivery_id);
                 const refunded = res.data.points_refunded;
-                window.location.href = `/refund-result?method=Points&amount=${refunded}&order_id=${cancelingBill.order_id}`;
+                window.location.href = `/refund-result?method=Points&amount=${refunded}&order_id=${cancelingBill.order_id}&order_type=delivery`;
             } else if (cancelingBill.payment_method === 'vnpay') {
                 const res = await vnpayService.createRefundUrl({ order_id: cancelingBill.order_id });
                 window.location.href = res.data.payment_url;

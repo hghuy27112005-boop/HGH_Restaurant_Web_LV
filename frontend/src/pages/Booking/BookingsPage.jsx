@@ -760,7 +760,7 @@ const BookingsPage = () => {
             if (cancelingBill.payment_method === 'Points') {
                 const res = await bookingService.cancelWithPoints(cancelingBill.order_id);
                 const refunded = res.data.points_refunded;
-                window.location.href = `/refund-result?method=Points&amount=${refunded}&order_id=${cancelingBill.order_id}`;
+                window.location.href = `/refund-result?method=Points&amount=${refunded}&order_id=${cancelingBill.order_id}&order_type=booking_table`;
             } else if (cancelingBill.payment_method === 'vnpay') {
                 const res = await vnpayService.createRefundUrl({ order_id: cancelingBill.order_id });
                 window.location.href = res.data.payment_url;
@@ -1320,9 +1320,10 @@ const BookingsPage = () => {
                                 </button>
                                 <button
                                     onClick={handleConfirmPointsPayment}
-                                    className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
+                                    disabled={!!payingWith}
+                                    className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                    Xác nhận
+                                    {payingWith === 'points' ? 'Đang xử lý...' : 'Xác nhận'}
                                 </button>
                             </div>
                         </div>

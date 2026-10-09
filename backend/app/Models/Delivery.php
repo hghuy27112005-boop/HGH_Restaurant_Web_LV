@@ -332,7 +332,7 @@ class Delivery extends Model
             $bodyLine = "Nhà hàng đã bắt đầu chuẩn bị đơn hàng đặt ship của quý khách, mã hóa đơn là <strong>{$bill->bill_id}</strong>. "
                 . "Đơn hàng sẽ bắt đầu được giao sau 15 phút nữa và dự kiến tới nơi lúc <strong>{$arrival}</strong>.";
 
-            Mail::to($email)->send(new OrderNotificationMail($bill, $bodyLine));
+            Mail::to($email)->queue(new OrderNotificationMail($bill, $bodyLine));
         } catch (\Throwable $e) {
             Log::error('Gửi mail bắt đầu chuẩn bị đơn ship thất bại: ' . $e->getMessage());
         }

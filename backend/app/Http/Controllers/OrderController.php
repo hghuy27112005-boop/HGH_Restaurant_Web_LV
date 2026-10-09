@@ -27,7 +27,7 @@ class OrderController extends Controller
     public function store(Request $request, \App\Services\DeliveryDistanceService $distanceService)
     {
         $validated = $request->validate([
-            'order_type' => 'required|in:booking_table,delivery',
+            'order_type' => 'required|in:delivery', // đơn đặt bàn chỉ tạo qua BillController::store (nơi áp luật đặt bàn)
             'items' => 'required|array|min:1',
             'items.*.dish_id' => 'required|exists:dishes,dish_id',
             'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
@@ -290,6 +290,12 @@ class OrderController extends Controller
     {
         \App\Models\Delivery::autoCompleteExpired();
         \App\Models\Delivery::autoStartReady();
+
+        try {
+            \App\Models\Stock::deductDueBookings();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Cập nhật trạng thái đặt bàn khi tải trang thất bại: ' . $e->getMessage());
+        }
 
         $query = Order::where('user_id', $request->user()->user_id);
 

@@ -92,6 +92,9 @@ class DeliveryController extends Controller
 
         DB::beginTransaction();
         try {
+            // Khóa và đọc lại user từ DB (giống payWithPointsByOrder) để cộng/trừ điểm trên số điểm mới nhất.
+            $user = \App\Models\User::whereKey($user->getKey())->lockForUpdate()->first();
+
             $delivery->delivery_status = 'cancelled';
             $delivery->D_payment_status = 'refunded';
             $delivery->save();
