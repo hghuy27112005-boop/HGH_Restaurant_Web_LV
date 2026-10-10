@@ -5,6 +5,7 @@ import { Loading, ErrorMessage, EmptyState, Button, Modal } from '../../componen
 import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from './DishDetailPage';
+import { getCartKey } from '../../utils/cartStorage';
 
 // Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
 const MAX_ORDER_QTY = 50;
@@ -288,7 +289,7 @@ const MenuPage = () => {
             return;
         }
 
-        const cartKey = orderType === 'mang-ve' ? 'delivery_cart' : 'booking_cart';
+        const cartKey = getCartKey(orderType === 'mang-ve' ? 'delivery' : 'booking');
         const currentCart = JSON.parse(localStorage.getItem(cartKey)) || [];
 
         const selectedRecipeId = selectedCustomization?.dish_customization_id ?? null;

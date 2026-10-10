@@ -3,12 +3,10 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { myBillsAPI, orderService } from '../../services/api';
 import { domToPng } from 'modern-screenshot';
 import { Modal } from '../../components/Shared';
+import { getCartKey, getSessionKey } from '../../utils/cartStorage';
 
 const MAX_POLL_ATTEMPTS = 5;
 const POLL_INTERVAL_MS = 1500;
-
-const DELIVERY_SESSION_KEY = 'delivery_checkout_session';
-const BOOKING_SESSION_KEY = 'booking_checkout_session';
 
 // Icon dạng ký tự Unicode đơn giản, nhẹ, chụp ảnh luôn ra đúng (không phụ thuộc font ngoài)
 const CircleIcon = ({ success }) => (
@@ -49,15 +47,14 @@ const PaymentResultPage = () => {
             confirmed: false,
         });
 
-        if (type === 'booking_table') {
-            localStorage.removeItem('booking_cart');
-            if (status === 'success') {
-                sessionStorage.removeItem(BOOKING_SESSION_KEY);
-            }
-        } else {
-            localStorage.removeItem('delivery_cart');
-            if (status === 'success') {
-                sessionStorage.removeItem(DELIVERY_SESSION_KEY);
+        // Chỉ xóa giỏ khi thanh toán thành công; thất bại thì giữ giỏ để khách đặt lại.
+        if (status === 'success') {
+            if (type === 'booking_table') {
+                localStorage.removeItem(getCartKey('booking'));
+                sessionStorage.removeItem(getSessionKey('booking'));
+            } else {
+                localStorage.removeItem(getCartKey('delivery'));
+                sessionStorage.removeItem(getSessionKey('delivery'));
             }
         }
 
@@ -65,7 +62,7 @@ const PaymentResultPage = () => {
             orderService.deleteOrder(orderId).catch((err) => {
                 console.warn('Không thể xóa đơn hàng sau khi thanh toán thất bại:', err);
             });
-            sessionStorage.removeItem(type === 'booking_table' ? BOOKING_SESSION_KEY : DELIVERY_SESSION_KEY);
+            sessionStorage.removeItem(getSessionKey(type === 'booking_table' ? 'booking' : 'delivery'));
         }
 
         if (status === 'success') {

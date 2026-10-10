@@ -170,6 +170,13 @@ class BookingTableController extends Controller
             $user->updateMembership();
             $user->save();
 
+            // Revert thống kê: đơn trả bằng điểm lúc thanh toán chỉ cộng số đơn
+            // (không cộng total_spent / total_points) nên chỉ trừ số đơn.
+            $stats = $user->statistics;
+            if ($stats) {
+                $stats->revertOrder('booking_table');
+            }
+
             if ($refundPoints > 0) {
 
                 \App\Models\Points::create([

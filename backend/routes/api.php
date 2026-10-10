@@ -28,6 +28,7 @@ Route::get('/dish-types', [\App\Http\Controllers\DishTypeController::class, 'ind
 // Public API - Preview shipping distance/duration/fee based on address (used before creating delivery order)
 Route::post('/deliveries/preview-shipping', [\App\Http\Controllers\DeliveryController::class, 'previewShipping']);
 Route::post('/deliveries/preview-shipping-by-coordinates', [\App\Http\Controllers\DeliveryController::class, 'previewShippingByCoordinates']);
+Route::post('/deliveries/preview-schedule', [\App\Http\Controllers\DeliveryController::class, 'previewSchedule']);
 
 // Public - Promotions
 Route::get('/sale-off-events', [\App\Http\Controllers\SaleOffEventController::class, 'index']);

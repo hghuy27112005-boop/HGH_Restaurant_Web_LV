@@ -4,6 +4,7 @@ import { dishAPI, dishCustomizationAPI, cartAPI } from '../../services/api';
 import { ErrorMessage, Loading, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
+import { getCartKey } from '../../utils/cartStorage';
 
 // Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
 const MAX_ORDER_QTY = 50;
@@ -355,7 +356,7 @@ const DishDetailPage = () => {
             return;
         }
 
-        const cartKey = orderType === 'mang-ve' ? 'delivery_cart' : 'booking_cart';
+        const cartKey = getCartKey(orderType === 'mang-ve' ? 'delivery' : 'booking');
         const cart = JSON.parse(localStorage.getItem(cartKey) || '[]');
         const selectedRecipeId = selectedCustomization?.dish_customization_id ?? null;
         const existing = cart.find((item) => item.dish_id === selectedDish.dish_id && (item.customization_id ?? null) === selectedRecipeId);

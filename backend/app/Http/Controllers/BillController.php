@@ -19,34 +19,6 @@ use Illuminate\Support\Facades\Mail;
 class BillController extends Controller
 {
     /**
-     * Get all bills for authenticated user
-     */
-    public function index(Request $request)
-    {
-        $query = $request->user()->bills()
-            ->with('order', 'delivery', 'bookingTable')
-            ->orderBy('created_at', 'desc');
-
-        if ($request->has('order_type')) {
-            $query->whereHas('order', function ($q) use ($request) {
-                $q->where('order_type', $request->order_type);
-            });
-        }
-
-        $bills = $query->paginate($request->get('per_page', 20));
-
-        return response()->json([
-            'data' => $bills->items(),
-            'pagination' => [
-                'total'        => $bills->total(),
-                'per_page'     => $bills->perPage(),
-                'current_page' => $bills->currentPage(),
-                'last_page'    => $bills->lastPage(),
-            ],
-        ]);
-    }
-
-    /**
      * Create new bill
      *
      * ⚠️ Đây là hàm DUY NHẤT tạo Order + BookingTable/Delivery + Bill cho luồng
@@ -299,57 +271,6 @@ class BillController extends Controller
             DB::rollBack();
             return response()->json(['message' => $e->getMessage()], 500);
         }
-    }
-
-    /**
-     * Get bill details
-     */
-    public function show(Bill $bill)
-    {
-        if ($bill->order->user_id !== auth()->user()->user_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        return response()->json([
-            'data' => $bill->load('orders.dish', 'delivery', 'bookingTable'),
-        ]);
-    }
-
-    /**
-     * Update bill
-     */
-    public function update(Request $request, Bill $bill)
-    {
-        if ($bill->order->user_id !== $request->user()->user_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $validated = $request->validate([
-            'status' => 'in:pending,unpaid,completed,cancelled',
-        ]);
-
-        $bill->update($validated);
-
-        return response()->json([
-            'data' => $bill,
-            'message' => 'Bill updated successfully',
-        ]);
-    }
-
-    /**
-     * Delete bill
-     */
-    public function destroy(Bill $bill)
-    {
-        if ($bill->order->user_id !== auth()->user()->user_id) {
-            return response()->json(['message' => 'Unauthorized'], 403);
-        }
-
-        $bill->delete();
-
-        return response()->json([
-            'message' => 'Bill deleted successfully',
-        ]);
     }
 
     public function exportPDF(Bill $bill)

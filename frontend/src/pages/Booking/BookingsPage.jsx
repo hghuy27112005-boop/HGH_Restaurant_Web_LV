@@ -4,9 +4,9 @@ import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal } from '../../com
 import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from '../Menu/DishDetailPage';
+import { getCartKey, getSessionKey } from '../../utils/cartStorage';
 
 
-const BOOKING_SESSION_KEY = 'booking_checkout_session';
 const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
 
 // Trạng thái đơn đặt bàn (khớp enum booking_status ở backend)
@@ -54,6 +54,7 @@ const BookingsPage = () => {
     const [arrivalDateFilter, setArrivalDateFilter] = useState(getTodayDateKey);
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
+    const [cancelErrorMessage, setCancelErrorMessage] = useState(null);
 
     // Thông báo / xác nhận dạng modal (thay cho alert / window.confirm)
     const [alertMessage, setAlertMessage] = useState('');
@@ -108,21 +109,21 @@ const BookingsPage = () => {
             bookingCart: bookingCart, // Lưu cart vào session
             ...formData,
         };
-        sessionStorage.setItem(BOOKING_SESSION_KEY, JSON.stringify(fullData));
+        sessionStorage.setItem(getSessionKey('booking'), JSON.stringify(fullData));
     };
 
     // Xóa session khi hoàn tất / hủy
     const clearCheckoutSession = () => {
-        sessionStorage.removeItem(BOOKING_SESSION_KEY);
+        sessionStorage.removeItem(getSessionKey('booking'));
     };
 
     useEffect(() => {
         fetchBookings();
-        const cart = JSON.parse(localStorage.getItem('booking_cart')) || [];
+        const cart = JSON.parse(localStorage.getItem(getCartKey('booking'))) || [];
         setBookingCart(cart);
 
         // Khôi phục session nếu đã xác nhận thông tin trước đó
-        const savedSession = sessionStorage.getItem(BOOKING_SESSION_KEY);
+        const savedSession = sessionStorage.getItem(getSessionKey('booking'));
         if (savedSession) {
             try {
                 const session = JSON.parse(savedSession);
@@ -140,31 +141,17 @@ const BookingsPage = () => {
                     // 🔑 Restore cart từ session (trong case quay lại từ VNPay)
                     if (session.bookingCart && session.bookingCart.length > 0) {
                         setBookingCart(session.bookingCart);
-                        localStorage.setItem('booking_cart', JSON.stringify(session.bookingCart));
+                        localStorage.setItem(getCartKey('booking'), JSON.stringify(session.bookingCart));
                     }
-                    // Nếu trước đó app đã redirect sang VNPay nhưng người dùng quay lại (browser back),
-                    // thì xóa order pending để tránh rác và ghi nhận hành vi huỷ.
-                    // Xóa Order sẽ cascade xóa Bill + BookingTable liên quan (FK onDelete cascade).
-                    const vnpayFlag = sessionStorage.getItem('vnpay_pending');
-                    const hasPaymentQuery = window.location.search && (window.location.search.includes('status') || window.location.search.includes('vnp_ResponseCode') || window.location.search.includes('vnpay'));
-                    if (vnpayFlag === '1' && session.orderId && !hasPaymentQuery) {
-                        (async () => {
-                            try {
-                                await orderService.deleteOrder(session.orderId);
-                            } catch (e) {
-                                console.warn('Failed to delete pending order after VNPay back navigation', e);
-                            }
-                            sessionStorage.removeItem(BOOKING_SESSION_KEY);
-                            sessionStorage.removeItem('vnpay_pending');
-                            setCreatedOrderId(null);
-                            setBookingCart([]);
-                            localStorage.removeItem('booking_cart');
-                            setWizardStep(1);
-                        })();
+                    // Quay lại từ VNPay (hoặc tải lại trang) khi đã có đơn chờ thanh toán:
+                    // giữ đơn và mở lại modal chọn phương thức thanh toán, giống trang Giao hàng.
+                    if (session.orderId) {
+                        setBookingConfirmModalStep(2);
+                        setBookingConfirmModalOpen(true);
                     }
                 }
             } catch (e) {
-                sessionStorage.removeItem(BOOKING_SESSION_KEY);
+                sessionStorage.removeItem(getSessionKey('booking'));
             }
         } else {
             // Set default date to today only nếu không có session
@@ -179,6 +166,18 @@ const BookingsPage = () => {
         const timer = setTimeout(() => setError(null), 4000);
         return () => clearTimeout(timer);
     }, [error]);
+
+    // Khi bấm Back từ VNPay, trình duyệt có thể khôi phục nguyên trang từ bfcache
+    // (state cũ, không chạy lại mount) -> payingWith vẫn kẹt 'vnpay'. Reset để dùng lại được.
+    useEffect(() => {
+        const handlePageShow = (event) => {
+            if (event.persisted) {
+                setPayingWith(null);
+            }
+        };
+        window.addEventListener('pageshow', handlePageShow);
+        return () => window.removeEventListener('pageshow', handlePageShow);
+    }, []);
 
     // Khi vào bước chọn bàn (bước 4), chủ động lấy danh sách bàn đã bị đặt trong
     // đúng khung ngày/giờ khách chọn ở bước 1, để tô xám/khóa luôn thay vì để
@@ -526,8 +525,6 @@ const BookingsPage = () => {
 
         setPayingWith('vnpay');
         try {
-            // Đánh dấu VNPay pending để phát hiện nếu người dùng quay lại (browser back)
-            sessionStorage.setItem('vnpay_pending', '1');
             const vnpayRes = await vnpayService.createPaymentUrl({
                 order_id: createdOrderId,
                 amount: getEffectiveTotal(),
@@ -592,7 +589,7 @@ const BookingsPage = () => {
             })
             .filter(item => item.quantity > 0);
 
-        localStorage.setItem('booking_cart', JSON.stringify(updated));
+        localStorage.setItem(getCartKey('booking'), JSON.stringify(updated));
         setBookingCart(updated);
 
         if (updated.length === 0) {
@@ -692,7 +689,7 @@ const BookingsPage = () => {
             const billId = res.data.data.bill_id;
 
             // 3. Xóa cart, session và redirect
-            localStorage.removeItem('booking_cart');
+            localStorage.removeItem(getCartKey('booking'));
             clearCheckoutSession();
             setBookingCart([]);
             setPointsModalType(null);
@@ -741,7 +738,7 @@ const BookingsPage = () => {
                 }
 
                 // Dọn local state/session
-                localStorage.removeItem('booking_cart');
+                localStorage.removeItem(getCartKey('booking'));
                 clearCheckoutSession();
                 setBookingCart([]);
                 setCreatedOrderId(null);
@@ -768,7 +765,7 @@ const BookingsPage = () => {
                 setAlertMessage('Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.');
             }
         } catch (err) {
-            setAlertMessage('Lỗi hủy đơn: ' + (err.response?.data?.message || err.message));
+            setCancelErrorMessage(err.response?.data?.message || err.message);
         } finally {
             setCancelModalOpen(false);
             setCancelingBill(null);
@@ -1501,6 +1498,16 @@ const BookingsPage = () => {
                     </div>
                 )}
             </div>
+
+            {/* Lỗi hủy đơn */}
+            <Modal
+                isOpen={!!cancelErrorMessage}
+                title="Lỗi hủy đơn"
+                onClose={() => setCancelErrorMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{cancelErrorMessage}</p>
+            </Modal>
 
             {/* Lỗi thanh toán bằng điểm: modal có nút Đóng, không tự ẩn */}
             <Modal

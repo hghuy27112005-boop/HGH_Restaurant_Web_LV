@@ -4,8 +4,8 @@ import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal, ShippingProgress
 import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from '../Menu/DishDetailPage';
+import { getCartKey, getSessionKey } from '../../utils/cartStorage';
 
-const DELIVERY_SESSION_KEY = 'delivery_checkout_session';
 const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
 
 // 6 trạng thái của đơn ship (khớp enum delivery_status ở backend)
@@ -90,6 +90,9 @@ const DeliveriesPage = () => {
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
     const [cancelErrorMessage, setCancelErrorMessage] = useState(null);
+    const [deleteOrderModalOpen, setDeleteOrderModalOpen] = useState(false);
+    const [paymentModalError, setPaymentModalError] = useState(null); // lỗi hiện trong modal thanh toán
+    const [closingPayment, setClosingPayment] = useState(false); // đang xóa đơn khi đóng modal thanh toán
     const [pointsErrorMessage, setPointsErrorMessage] = useState(null); // lỗi thanh toán bằng điểm (hiện trong modal, không tự ẩn)
     const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit, shortage } = hiện modal lỗi nguyên liệu
     const [searchBillId, setSearchBillId] = useState('');
@@ -106,21 +109,21 @@ const DeliveriesPage = () => {
             deliveryCart: data.deliveryCart || deliveryCart,
             ...data,
         };
-        sessionStorage.setItem(DELIVERY_SESSION_KEY, JSON.stringify(fullData));
+        sessionStorage.setItem(getSessionKey('delivery'), JSON.stringify(fullData));
     };
 
     // Xóa session khi hoàn tất / hủy
     const clearCheckoutSession = () => {
-        sessionStorage.removeItem(DELIVERY_SESSION_KEY);
+        sessionStorage.removeItem(getSessionKey('delivery'));
     };
 
     useEffect(() => {
         fetchDeliveries();
-        const cart = JSON.parse(localStorage.getItem('delivery_cart')) || [];
+        const cart = JSON.parse(localStorage.getItem(getCartKey('delivery'))) || [];
         setDeliveryCart(cart);
 
         // Khôi phục session nếu đã xác nhận thông tin trước đó
-        const savedSession = sessionStorage.getItem(DELIVERY_SESSION_KEY);
+        const savedSession = sessionStorage.getItem(getSessionKey('delivery'));
         if (savedSession) {
             try {
                 const session = JSON.parse(savedSession);
@@ -135,11 +138,11 @@ const DeliveriesPage = () => {
                     // 🔑 Restore cart từ session (trong case quay lại từ VNPay)
                     if (session.deliveryCart && session.deliveryCart.length > 0) {
                         setDeliveryCart(session.deliveryCart);
-                        localStorage.setItem('delivery_cart', JSON.stringify(session.deliveryCart));
+                        localStorage.setItem(getCartKey('delivery'), JSON.stringify(session.deliveryCart));
                     }
                 }
             } catch (e) {
-                sessionStorage.removeItem(DELIVERY_SESSION_KEY);
+                sessionStorage.removeItem(getSessionKey('delivery'));
             }
         }
     }, []);
@@ -191,14 +194,23 @@ const DeliveriesPage = () => {
     useEffect(() => {
         if (shippingDebounceRef.current) clearTimeout(shippingDebounceRef.current);
 
-        if (!address.trim() || checkoutStage !== 'info') {
+        if (!address.trim()) {
             setShippingPreview(null);
             setShippingError(null);
             return;
         }
 
-        // Địa chỉ này vừa được tự điền từ kết quả GPS, đã có preview chính xác rồi —
-        // bỏ qua 1 lần lookup theo chữ để tránh gọi trùng và ghi đè kết quả tốt hơn.
+        // Đang ở bước thanh toán: giữ nguyên kết quả preview để quay lại sửa thông tin vẫn còn.
+        if (checkoutStage !== 'info') return;
+
+        // Đã có preview đúng cho địa chỉ này (vừa lấy từ GPS, hoặc vừa quay lại từ bước thanh toán)
+        // thì không tra cứu lại, để khỏi mất toạ độ GPS và khỏi gọi API thừa.
+        if (shippingPreview && previewedAddress === address.trim()) {
+            skipNextPreviewRef.current = false;
+            return;
+        }
+
+        // Địa chỉ này vừa được tự điền từ kết quả GPS: bỏ qua 1 lần lookup theo chữ.
         if (skipNextPreviewRef.current) {
             skipNextPreviewRef.current = false;
             return;
@@ -226,39 +238,31 @@ const DeliveriesPage = () => {
         return () => clearTimeout(shippingDebounceRef.current);
     }, [address, checkoutStage]);
 
-    // Khi khách đổi giờ hẹn mà địa chỉ giữ nguyên: gọi lại preview để backend tính lại lịch dự kiến.
-    // Địa chỉ lấy từ GPS thì gọi bản theo toạ độ để không mất độ chính xác.
+    // Khi khách đổi giờ hẹn mà địa chỉ giữ nguyên: chỉ hỏi backend tính lại lịch dự kiến
+    // (không tính lại khoảng cách/phí ship vì chúng không phụ thuộc giờ hẹn).
     useEffect(() => {
         const trimmed = address.trim();
         if (checkoutStage !== 'info' || !trimmed || !shippingPreview || previewedAddress !== trimmed) return;
         if (scheduleTimeRef.current === previewPreferredTime) return;
 
         let cancelled = false;
-        let started = false;
         const timer = setTimeout(async () => {
-            started = true;
-            setShippingLoading(true);
-            setShippingError(null);
             try {
-                const res = gpsCoords
-                    ? await shippingAPI.previewByCoordinates(gpsCoords.lat, gpsCoords.lng, previewPreferredTime)
-                    : await shippingAPI.preview(trimmed, previewPreferredTime);
+                const res = await shippingAPI.previewSchedule(shippingPreview.duration_minutes, previewPreferredTime);
                 if (cancelled) return;
-                setShippingPreview(res.data.data);
+                setShippingPreview(prev => (prev ? { ...prev, schedule: res.data.data } : prev));
                 scheduleTimeRef.current = previewPreferredTime;
+                setShippingError(null);
             } catch (err) {
                 if (cancelled) return;
                 setShippingPreview(null);
-                setShippingError(err.response?.data?.message || 'Không thể kiểm tra địa chỉ này.');
-            } finally {
-                if (!cancelled) setShippingLoading(false);
+                setShippingError(err.response?.data?.message || 'Không thể tính lại lịch giao hàng.');
             }
         }, 800);
 
         return () => {
             cancelled = true;
             clearTimeout(timer);
-            if (started) setShippingLoading(false);
         };
     }, [previewPreferredTime, address, previewedAddress, checkoutStage]);
 
@@ -304,7 +308,7 @@ const DeliveriesPage = () => {
                     scheduleTimeRef.current = previewPreferredTime;
                     const data = res.data.data;
 
-                    skipNextPreviewRef.current = true;
+                    skipNextPreviewRef.current = data.address !== address;
                     setAddress(data.address);
                     setGpsCoords({ lat: data.lat, lng: data.lng });
                     setShippingPreview(data);
@@ -484,6 +488,25 @@ const DeliveriesPage = () => {
         }
     };
 
+    const confirmDeleteOrder = async () => {
+        setDeleteOrderModalOpen(false);
+
+        if (createdOrderId) {
+            try {
+                await orderService.deleteOrder(createdOrderId);
+            } catch (err) {
+                showError(err.response?.data?.message || 'Lỗi khi xóa đơn hàng');
+                return;
+            }
+        }
+
+        localStorage.removeItem(getCartKey('delivery'));
+        clearCheckoutSession();
+        setDeliveryCart([]);
+        setCreatedOrderId(null);
+        setCheckoutStage('info');
+    };
+
     const handleCartQuantityChange = (idx, amount) => {
         setDeliveryCart(prev => {
             const updated = prev
@@ -494,14 +517,40 @@ const DeliveriesPage = () => {
                 })
                 .filter(item => item.quantity > 0); // tự loại bỏ món đã về 0
 
-            localStorage.setItem('delivery_cart', JSON.stringify(updated));
+            localStorage.setItem(getCartKey('delivery'), JSON.stringify(updated));
             return updated;
         });
+    };
+
+    const closePaymentModal = async () => {
+        if (payingWith || closingPayment) return; // đang thanh toán hoặc đang đóng thì không cho đóng nữa
+        setClosingPayment(true);
+        setPaymentModalError(null);
+        try {
+            if (createdOrderId) {
+                try {
+                    await orderService.deleteOrder(createdOrderId);
+                } catch (err) {
+                    // 404: đơn đã không còn thì cứ quay lại bình thường. Lỗi khác (vd 422 đã thanh toán): ở lại modal.
+                    if (err.response?.status !== 404) {
+                        setPaymentModalError(err.response?.data?.message || 'Không thể quay lại sửa thông tin. Vui lòng thử lại.');
+                        return;
+                    }
+                }
+            }
+            clearCheckoutSession();
+            setCreatedOrderId(null);
+            setOrderSummary(null);
+            setCheckoutStage('info');
+        } finally {
+            setClosingPayment(false);
+        }
     };
 
     const handlePayment = async () => {
         if (payingWith) return; // chặn double-click
         setPayingWith('vnpay');
+        setPaymentModalError(null);
         try {
             // 1. Lấy URL thanh toán VNPay
             const vnpayRes = await vnpayService.createPaymentUrl({
@@ -520,7 +569,7 @@ const DeliveriesPage = () => {
             window.location.href = vnpayRes.data.payment_url;
 
         } catch (err) {
-            showError(err.response?.data?.message || 'Lỗi đặt hàng');
+            setPaymentModalError(err.response?.data?.message || 'Lỗi đặt hàng');
             setPayingWith(null);
         }
     };
@@ -556,7 +605,7 @@ const DeliveriesPage = () => {
             const billId = res.data.data.bill_id;
 
             // 3. Xóa cart, session và redirect
-            localStorage.removeItem('delivery_cart');
+            localStorage.removeItem(getCartKey('delivery'));
             clearCheckoutSession();
             setDeliveryCart([]);
             setPointsModalType(null);
@@ -583,7 +632,7 @@ const DeliveriesPage = () => {
                 setCancelErrorMessage('Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.');
             }
         } catch (err) {
-            setCancelErrorMessage('Lỗi hủy đơn: ' + (err.response?.data?.message || err.message));
+            setCancelErrorMessage(err.response?.data?.message || err.message);
         } finally {
             setCancelModalOpen(false);
             setCancelingBill(null);
@@ -758,7 +807,7 @@ const DeliveriesPage = () => {
                             <button onClick={() => window.location.href = '/menu'} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">Đến Menu</button>
                         </div>
                     ) : (
-                        <div className={checkoutStage === 'info' ? 'grid md:grid-cols-2 gap-8' : 'max-w-2xl mx-auto space-y-6'}>
+                        <div className="grid md:grid-cols-2 gap-8">
                             <div>
                                 <h3 className="font-semibold mb-2">Món đã chọn:</h3>
                                 <table className="w-full mb-4 text-sm bg-white border border-black border-t-4 border-t-red-600">
@@ -810,25 +859,7 @@ const DeliveriesPage = () => {
                                     </tfoot>
                                 </table>
                                 <button
-                                    onClick={async () => {
-                                        const ok = window.confirm('Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món và đơn hàng hiện tại.');
-                                        if (!ok) return;
-
-                                        if (createdOrderId) {
-                                            try {
-                                                await orderService.deleteOrder(createdOrderId);
-                                            } catch (err) {
-                                                showError(err.response?.data?.message || 'Lỗi khi xóa đơn hàng');
-                                                return;
-                                            }
-                                        }
-
-                                        localStorage.removeItem('delivery_cart');
-                                        clearCheckoutSession();
-                                        setDeliveryCart([]);
-                                        setCreatedOrderId(null);
-                                        setCheckoutStage('info');
-                                    }}
+                                    onClick={() => setDeleteOrderModalOpen(true)}
                                     className="mt-4 px-4 py-2 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
                                     style={checkoutStage !== 'info' ? { display: 'none' } : undefined}
                                 >
@@ -836,7 +867,11 @@ const DeliveriesPage = () => {
                                 </button>
                             </div>
                             <div>
-                                {checkoutStage === 'info' ? (
+                                <>
+                                <fieldset
+                                    disabled={checkoutStage !== 'info'}
+                                    className={`border-0 p-0 m-0 min-w-0 ${checkoutStage !== 'info' ? 'opacity-50 select-none' : ''}`}
+                                >
                                     <form onSubmit={handleConfirmInfo} className="space-y-4">
                                         <div>
                                             <label className="block text-sm font-semibold mb-1">Địa chỉ giao hàng</label>
@@ -867,7 +902,7 @@ const DeliveriesPage = () => {
                                             <p className="text-sm text-red-600 font-semibold">{shippingError}</p>
                                         )}
 
-                                        {!shippingLoading && shippingPreview && previewedAddress === address.trim() && (
+                                        {checkoutStage === 'info' && !shippingLoading && shippingPreview && previewedAddress === address.trim() && (
                                             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm space-y-1">
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Khoảng cách:</span>
@@ -880,6 +915,23 @@ const DeliveriesPage = () => {
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-600">Phí ship (thu riêng khi nhận hàng):</span>
                                                     <span className="font-bold text-red-600">{shippingPreview.shipping_fee.toLocaleString('vi-VN')}đ</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {checkoutStage !== 'info' && orderSummary && (
+                                            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm space-y-1">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Khoảng cách:</span>
+                                                    <span className="font-semibold">{orderSummary.distance_km} km</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Thời gian giao dự kiến:</span>
+                                                    <span className="font-semibold">{orderSummary.duration_minutes} phút</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Phí ship (thu riêng khi nhận hàng):</span>
+                                                    <span className="font-bold text-red-600">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}đ</span>
                                                 </div>
                                             </div>
                                         )}
@@ -919,8 +971,15 @@ const DeliveriesPage = () => {
                                             Xác nhận thông tin đặt hàng
                                         </button>
                                     </form>
-                                ) : (
-                                    <div className="space-y-4 border rounded p-4 bg-gray-50">
+                                </fieldset>
+                                <Modal
+                                    isOpen={checkoutStage === 'payment'}
+                                    title="Thanh toán đơn hàng"
+                                    onClose={closePaymentModal}
+                                    showHeaderClose
+                                    showFooterClose={false}
+                                >
+                                    <div className="space-y-4">
                                         <div className="text-center">
                                             <h3 className="font-bold text-lg mb-2">Thanh toán đơn hàng</h3>
                                             <p className="text-gray-600 text-sm mb-4">Mọi thông tin đã được chốt. Vui lòng tiến hành thanh toán để hoàn tất.</p>
@@ -999,7 +1058,8 @@ const DeliveriesPage = () => {
                                             Quay lại sửa thông tin
                                         </button>
                                     </div>
-                                )}
+                                </Modal>
+                            </>
                             </div>
                         </div>
                     )}
@@ -1138,9 +1198,23 @@ const DeliveriesPage = () => {
                     </p>
                 </Modal>
 
+                {/* Delete Order Confirm Modal */}
+                <Modal
+                    isOpen={deleteOrderModalOpen}
+                    title="Xóa đơn hàng"
+                    onClose={() => setDeleteOrderModalOpen(false)}
+                    onConfirm={confirmDeleteOrder}
+                    confirmText="Xóa đơn hàng"
+                    cancelText="Hủy"
+                >
+                    <p className="text-gray-700">
+                        Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món và đơn hàng hiện tại.
+                    </p>
+                </Modal>
+
                 {/* Points Modal: Insufficient */}
                 {pointsModalType === 'insufficient' && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                         <div className="bg-white rounded-lg w-full max-w-md p-6 relative">
                             <button
                                 onClick={() => setPointsModalType(null)}
@@ -1165,7 +1239,7 @@ const DeliveriesPage = () => {
 
                 {/* Points Modal: Confirm */}
                 {pointsModalType === 'confirm' && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+                    <div className="fixed inset-0 z-[9998] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                         <div className="bg-white rounded-lg w-full max-w-md p-6 relative">
                             <button
                                 onClick={() => setPointsModalType(null)}

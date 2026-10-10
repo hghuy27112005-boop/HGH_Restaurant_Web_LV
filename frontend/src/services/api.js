@@ -57,11 +57,7 @@ export const userAPI = {
 
 // Bills API
 export const billAPI = {
-    getAll: (filters = {}) => axiosInstance.get('/bills', { params: filters }),
     create: (data) => axiosInstance.post('/bills', data),
-    getById: (id) => axiosInstance.get(`/bills/${id}`),
-    update: (id, data) => axiosInstance.put(`/bills/${id}`, data),
-    delete: (id) => axiosInstance.delete(`/bills/${id}`),
     exportPdf: (billId) =>
         axiosInstance.get(`/bills/${billId}/export-pdf`, { responseType: 'blob' }),
 };
@@ -82,10 +78,6 @@ export const extractListData = (response) => {
 // Orders API
 export const orderAPI = {
     create: (data) => axiosInstance.post('/orders', data),
-    addToBill: (billId, data) =>
-        axiosInstance.post(`/orders/bill/${billId}`, data),
-    getById: (id) => axiosInstance.get(`/orders/${id}`),
-    update: (id, data) => axiosInstance.put(`/orders/${id}`, data),
     delete: (id) => axiosInstance.delete(`/orders/${id}`),
 };
 
@@ -157,6 +149,7 @@ export const cartAPI = {
 export const shippingAPI = {
     preview: (address, preferredTime = null) => axiosInstance.post('/deliveries/preview-shipping', { address, preferred_delivery_time: preferredTime }),
     previewByCoordinates: (lat, lng, preferredTime = null) => axiosInstance.post('/deliveries/preview-shipping-by-coordinates', { lat, lng, preferred_delivery_time: preferredTime }),
+    previewSchedule: (durationMinutes, preferredTime = null) => axiosInstance.post('/deliveries/preview-schedule', { duration_minutes: durationMinutes, preferred_delivery_time: preferredTime }),
 };
 
 // Admin APIs

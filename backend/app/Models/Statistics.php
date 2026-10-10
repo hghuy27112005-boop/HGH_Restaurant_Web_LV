@@ -56,4 +56,26 @@ class Statistics extends Model
     {
         $this->total_points += $points;
     }
+
+    /**
+     * Đảo ngược (revert) những gì đã cộng vào thống kê lúc thanh toán khi đơn bị hủy.
+     * $spent / $points chỉ truyền khi lúc thanh toán thật sự đã cộng 2 giá trị này
+     * (đơn VNPay); đơn trả bằng điểm không cộng nên để mặc định 0.
+     * Mọi cột đều chặn về 0, không để ra số âm.
+     */
+    public function revertOrder(string $orderType, float $spent = 0, int $points = 0): void
+    {
+        $this->total_orders = max(0, $this->total_orders - 1);
+
+        if ($orderType === 'booking_table') {
+            $this->booking_orders = max(0, $this->booking_orders - 1);
+        } else {
+            $this->delivery_orders = max(0, $this->delivery_orders - 1);
+        }
+
+        $this->total_spent  = max(0, (float) $this->total_spent - $spent);
+        $this->total_points = max(0, $this->total_points - $points);
+
+        $this->save();
+    }
 }

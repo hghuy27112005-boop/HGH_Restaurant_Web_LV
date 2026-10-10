@@ -67,6 +67,27 @@ class DeliveryController extends Controller
     }
 
     /**
+     * Chỉ tính lại lịch nấu/giao theo giờ hẹn, dùng khi khách đổi giờ hẹn mà địa chỉ
+     * không đổi (không cần tính lại khoảng cách).
+     */
+    public function previewSchedule(Request $request)
+    {
+        $request->validate([
+            'duration_minutes' => 'required|integer|min:0|max:600',
+            'preferred_delivery_time' => 'nullable|date_format:H:i',
+        ]);
+
+        $schedule = Delivery::previewSchedule(
+            (int) $request->input('duration_minutes'),
+            $request->input('preferred_delivery_time')
+        );
+
+        return response()->json([
+            'data' => $schedule,
+        ]);
+    }
+
+    /**
      * User cancels delivery paid with Points
      */
     public function cancelWithPoints(Request $request, Delivery $delivery)
@@ -119,6 +140,13 @@ class DeliveryController extends Controller
             $user->points = max(0, $user->points - $pointsToRevoke + $refundPoints);
             $user->updateMembership();
             $user->save();
+
+            // Revert thống kê: đơn trả bằng điểm lúc thanh toán chỉ cộng số đơn
+            // (không cộng total_spent / total_points) nên chỉ trừ số đơn.
+            $stats = $user->statistics;
+            if ($stats) {
+                $stats->revertOrder('delivery');
+            }
             
             if ($refundPoints > 0) {
                 

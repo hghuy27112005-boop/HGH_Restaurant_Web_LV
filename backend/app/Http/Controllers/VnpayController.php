@@ -201,6 +201,20 @@ class VnpayController extends Controller
             }
         }
 
+        // Đơn VNPay: hủy sẽ thu hồi điểm đã nhận lúc thanh toán. Nếu khách đã tiêu
+        // số điểm đó (ví dụ trả đơn khác bằng điểm) thì không đủ để thu hồi -> chặn hủy,
+        // tránh âm điểm và tránh khách giữ đơn đã dùng điểm miễn phí.
+        if ($bill->payment_method === 'vnpay') {
+            $pointsRecord = \App\Models\Points::where('bill_id', $bill->bill_id)
+                ->orderBy('created_at')
+                ->first();
+            $pointsToRevoke = $pointsRecord ? (int) $pointsRecord->points_earned : 0;
+
+            if ($pointsToRevoke > 0 && (int) $order->user->points < $pointsToRevoke) {
+                return response()->json(['message' => 'Bạn không có đủ điểm để thực hiện hủy đơn này.'], 400);
+            }
+        }
+
         // Dùng số tiền khách THỰC SỰ đã trả (có tính giảm giá sự kiện nếu có),
         // không dùng order->subtotal_price (giá gốc trước giảm giá).
         $amount = (int) round((float) ($bill->sale_off_total_price ?? $bill->total_price));
@@ -449,6 +463,20 @@ class VnpayController extends Controller
                 if ($user->points < 0) $user->points = 0;
                 $user->updateMembership();
                 $user->save();
+            }
+
+            // Revert thống kê: đơn VNPay lúc thanh toán đã cộng số đơn, total_spent
+            // (bill->total_price) và total_points (điểm tích lũy + thưởng) nên trừ đủ cả 3.
+            // Gọi ngoài điều kiện $pointsToRevoke > 0 vì số đơn luôn phải trừ.
+            if ($user) {
+                $stats = $user->statistics;
+                if ($stats) {
+                    $stats->revertOrder(
+                        $order->order_type,
+                        $bill ? (float) $bill->total_price : 0,
+                        $pointsToRevoke
+                    );
+                }
             }
 
             return response()->json(['RspCode' => '00', 'Message' => 'Confirm Success']);
