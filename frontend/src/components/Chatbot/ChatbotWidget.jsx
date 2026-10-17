@@ -137,6 +137,17 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [previewIndex, previewImages.length]);
 
+        useEffect(() => {
+        if (!isOpen) return undefined;
+        if (!window.matchMedia('(max-width: 767px)').matches) return undefined;
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = previousOverflow;
+        };
+    }, [isOpen]);
+
     const openImageViewer = (imageUrl) => {
         const index = previewImages.findIndex((image) => image.url === imageUrl);
         if (index !== -1) setPreviewIndex(index);
@@ -482,6 +493,49 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                     }
                 }
 
+                @media (max-width: 1279px) {
+                    .chatbot-window {
+                        inset: auto 0 0 0 !important;
+                        width: 100% !important;
+                        max-width: 760px !important;
+                        margin: 0 auto !important;
+                        height: clamp(300px, 50vh, 560px) !important;
+                        height: clamp(300px, 50dvh, 560px) !important;
+                        border-left: none !important;
+                        border-top: 1px solid #e5e7eb !important;
+                        border-radius: 14px 14px 0 0 !important;
+                        box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.15) !important;
+                        z-index: 45 !important;
+                    }
+                    .chatbot-window textarea {
+                        font-size: 16px !important;
+                    }
+                }
+
+                @media (max-width: 767px) {
+                    .chatbot-window {
+                        max-width: none !important;
+                        margin: 0 !important;
+                        border-top: none !important;
+                        border-radius: 0 !important;
+                        z-index: 1000 !important;
+                    }
+                }
+
+                @media (max-width: 767px) {
+                    .chatbot-window {
+                        inset: 0 auto auto 0 !important;
+                        width: 100% !important;
+                        height: 100vh !important;
+                        height: 100dvh !important;
+                        border-left: none !important;
+                        box-shadow: none !important;
+                    }
+                    .chatbot-window textarea {
+                        font-size: 16px !important;
+                    }
+                }
+
                 @keyframes pageSlideOut {
                     from {
                         opacity: 0.35;
@@ -499,7 +553,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 </button>
             )}
             {isOpen && (
-            <div style={styles.window}>
+            <div className="chatbot-window" style={styles.window}>
             <div style={styles.header}>
                 <div style={styles.headerControls}>
                     <button
@@ -828,7 +882,7 @@ const styles = {
     bubble: {
         position: 'fixed', bottom: '24px', right: '24px', width: '62px', height: '62px',
         borderRadius: '50%', backgroundColor: '#dc2626', color: 'white', border: 'none',
-        cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', zIndex: 1000,
+        cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', zIndex: 45,
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
     },
     bubbleIcon: { width: '100%', height: '100%', objectFit: 'contain', filter: 'hue-rotate(135deg) saturate(1.35)' },

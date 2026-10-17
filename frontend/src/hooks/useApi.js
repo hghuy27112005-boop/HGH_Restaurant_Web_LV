@@ -7,10 +7,20 @@ import { userAPI } from '@/services/api';
  * Manages user authentication state and operations
  */
 export const useAuth = () => {
-    const [user, setUser] = useState(null);
+    // Đọc user từ localStorage ngay từ lần render đầu để Layout biết role ngay (tránh nháy navbar khi F5 lúc là admin)
+    const [user, setUser] = useState(() => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const savedUser = localStorage.getItem('user');
+            return token && savedUser ? JSON.parse(savedUser) : null;
+        } catch (e) {
+            return null;
+        }
+    });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [accountDeleted, setAccountDeleted] = useState(false);
+    const [accountLocked, setAccountLocked] = useState(null); // { until } khi bị khóa, null khi bình thường
     const pollingRef = useRef(null);
 
     // Load user from localStorage or fetch from API
@@ -56,6 +66,11 @@ export const useAuth = () => {
             return { success: true, user };
         } catch (err) {
             const message = err.response?.data?.message || 'Không thể kết nối tới server. Vui lòng thử lại.';
+            const code = err.response?.data?.code;
+            // Tài khoản bị khóa: LoginPage tự hiện modal, không hiện dòng lỗi
+            if (code === 'account_locked') {
+                return { success: false, code, message };
+            }
             setError(message);
             return { success: false };
         } finally {
@@ -94,6 +109,7 @@ export const useAuth = () => {
             localStorage.removeItem('user');
             setUser(null);
             setAccountDeleted(false);
+            setAccountLocked(null);
         }
     }, []);
 
@@ -124,6 +140,10 @@ export const useAuth = () => {
                     setAccountDeleted(true);
                     clearInterval(pollingRef.current);
                     pollingRef.current = null;
+                } else if (err.response?.status === 403 && err.response?.data?.code === 'account_locked') {
+                    setAccountLocked({ until: err.response.data.locked_until });
+                    clearInterval(pollingRef.current);
+                    pollingRef.current = null;
                 }
             }
         }, 30000);
@@ -147,77 +167,6 @@ export const useAuth = () => {
         updateUser,
         isAuthenticated: !!user,
         accountDeleted,
-    };
-};
-
-/**
- * useApi - Data fetching hook
- * Manages loading, error, and caching states
- */
-export const useApi = (apiFunction, dependencies = []) => {
-    const [data, setData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                setError(null);
-                const response = await apiFunction();
-                setData(response.data);
-            } catch (err) {
-                setError(err.response?.data || err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, dependencies);
-
-    const refetch = useCallback(async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const response = await apiFunction();
-            setData(response.data);
-        } catch (err) {
-            setError(err.response?.data || err.message);
-        } finally {
-            setLoading(false);
-        }
-    }, [apiFunction]);
-
-    return { data, loading, error, refetch };
-};
-
-/**
- * usePagination - Pagination hook
- * Manages pagination state and navigation
- */
-export const usePagination = (initialPage = 1, pageSize = 10) => {
-    const [currentPage, setCurrentPage] = useState(initialPage);
-    const [perPage] = useState(pageSize);
-
-    const goToPage = useCallback((page) => {
-        setCurrentPage(Math.max(1, page));
-    }, []);
-
-    const nextPage = useCallback(() => {
-        setCurrentPage((prev) => prev + 1);
-    }, []);
-
-    const prevPage = useCallback(() => {
-        setCurrentPage((prev) => Math.max(1, prev - 1));
-    }, []);
-
-    return {
-        currentPage,
-        perPage,
-        goToPage,
-        nextPage,
-        prevPage,
-        params: { page: currentPage, per_page: perPage },
+        accountLocked,
     };
 };

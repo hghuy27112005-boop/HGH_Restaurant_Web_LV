@@ -66,13 +66,6 @@ class DishController extends Controller
         ]);
     }
 
-    public function menuManagement()
-    {
-        $dishes = Dish::orderBy('dish_id', 'asc')->get();
-        $dishTypes = \Illuminate\Support\Facades\DB::table('dish_types')->get();
-        return view('menu_management', compact('dishes', 'dishTypes'));
-    }
-
     public function addDish(Request $request)
     {
         $request->validate([

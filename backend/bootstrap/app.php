@@ -33,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Alias cho middleware
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,
+            'locked' => \App\Http\Middleware\EnsureAccountNotLocked::class,
             'cors' => \App\Http\Middleware\CorsMiddleware::class,
             'rate-limit' => \App\Http\Middleware\RateLimitMiddleware::class,
         ]);

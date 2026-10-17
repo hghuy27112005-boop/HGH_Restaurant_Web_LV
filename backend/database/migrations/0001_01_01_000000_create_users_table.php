@@ -29,6 +29,9 @@ return new class extends Migration {
             // --- Thêm cho tính năng AI gợi ý món ---
             $table->timestamp('recommendation_reset_at')->nullable();
             $table->boolean('skipped_recommendation_modal')->default(false);
+
+            // --- Khóa tài khoản: null = không khóa; có giá trị = bị khóa tới thời điểm đó ---
+            $table->timestamp('locked_until')->nullable();
         });
 
         Schema::create('sessions', function (Blueprint $table) {

@@ -59,6 +59,11 @@ class FacebookAuthController extends Controller
             ]);
         }
 
+        // Tài khoản đang bị khóa: không đăng nhập, không cấp token
+        if ($user->isLocked()) {
+            return redirect("{$frontendUrl}/login?error=account_locked&until=" . urlencode($user->locked_until->toIso8601String()));
+        }
+
         Auth::login($user);
         request()->session()->regenerate();
 

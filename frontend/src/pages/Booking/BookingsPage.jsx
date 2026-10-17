@@ -18,6 +18,15 @@ const BOOKING_STATUS_INFO = {
     cancelled: { label: '✕ Đã hủy', variant: 'danger' },
 };
 
+const BOOKING_STATUS_FILTERS = [
+    { id: 'all', label: 'Tất cả' },
+    // Không có nút "Chờ thanh toán": đơn chưa thanh toán chưa có Bill nên không hiện ở danh sách của khách.
+    { id: 'scheduled', label: 'Đã lên lịch' },
+    { id: 'preparing', label: 'Đang chuẩn bị' },
+    { id: 'completed', label: 'Đã hoàn thành' },
+    { id: 'cancelled', label: 'Đã hủy' },
+];
+
 const getTodayDateKey = () => {
     const today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -52,6 +61,7 @@ const BookingsPage = () => {
     const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit, shortage } = hiện modal lỗi nguyên liệu
     const [searchBillId, setSearchBillId] = useState('');
     const [arrivalDateFilter, setArrivalDateFilter] = useState(getTodayDateKey);
+    const [filter, setFilter] = useState('all');
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
     const [cancelErrorMessage, setCancelErrorMessage] = useState(null);
@@ -826,18 +836,18 @@ const BookingsPage = () => {
     };
 
     const formatted = bookings.filter(bill =>
-    (!searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())) &&
-    (!arrivalDateFilter || getDateKey(bill.booking_table?.booking_date) === arrivalDateFilter)
-);
+        (!searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())) &&
+        (!arrivalDateFilter || getDateKey(bill.booking_table?.booking_date) === arrivalDateFilter) &&
+        (filter === 'all' || bill.booking_table?.booking_status === filter)
+    );
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8">
-            <div className="max-w-6xl mx-auto px-4">
-                <h1 className="text-4xl font-bold mb-8 text-red-600">Đặt bàn</h1>
+        <div className="bg-gray-50 pb-6 sm:pb-8">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6">
 
                 {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
-                <div className="bg-white rounded-lg shadow p-6 mb-8 border-t-4 border-red-600">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 border-t-4 border-t-red-600 p-4 sm:p-6 mb-8">
                     <h2 className="text-2xl font-bold mb-4"> Góc đặt bàn</h2>
 
                     {bookingCart.length === 0 ? (
@@ -847,22 +857,22 @@ const BookingsPage = () => {
                             <button onClick={() => window.location.href = '/menu'} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">Đến Menu</button>
                         </div>
                     ) : (
-                        <div className="grid md:grid-cols-2 gap-8">
+                        <div className="grid md:grid-cols-2 gap-6 md:gap-8">
                             <div>
                                 <h3 className="font-semibold mb-2">Món đã chọn:</h3>
-                                <table className="w-full mb-4 text-sm bg-white border border-black border-t-4 border-t-red-600">
+                                <table className="w-full mb-4 text-sm bg-white border border-gray-300 border-t-4 border-t-red-600">
                                     <thead>
                                         <tr>
-                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">Món</th>
-                                            <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-black">Số lượng</th>
-                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-black">Thành tiền</th>
+                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">Món</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-gray-300">Số lượng</th>
+                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">Thành tiền</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {bookingCart.map((item, idx) => (
                                             <tr key={idx}>
-                                                <td className="py-2 px-3 border border-black">{renderCartItemName(item)}</td>
-                                                <td className="py-2 px-3 border border-black">
+                                                <td className="py-2 px-3 border border-gray-300">{renderCartItemName(item)}</td>
+                                                <td className="py-2 px-3 border border-gray-300">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, -1)}
@@ -882,7 +892,7 @@ const BookingsPage = () => {
                                                         </button>
                                                     </div>
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
+                                                <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
                                                     {(item.price * item.quantity).toLocaleString('vi-VN')}đ
                                                 </td>
                                             </tr>
@@ -890,8 +900,8 @@ const BookingsPage = () => {
                                     </tbody>
                                     <tfoot>
                                         <tr>
-                                            <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-black">Tổng tiền món:</td>
-                                            <td className="py-2 px-3 text-right font-bold text-lg text-red-600 border border-black">
+                                            <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-gray-300">Tổng tiền món:</td>
+                                            <td className="py-2 px-3 text-right font-bold text-lg text-red-600 border border-gray-300">
                                                 {cartTotal.toLocaleString('vi-VN')}đ
                                             </td>
                                         </tr>
@@ -906,7 +916,7 @@ const BookingsPage = () => {
                             </div>
 
                             <div>
-                                <div className="border-2 border-red-600 rounded-lg p-4 bg-white">
+                                <div className="border border-red-200 rounded-2xl p-4 sm:p-5 bg-white shadow-sm">
                                     <div className="flex justify-between mb-6 relative">
                                         <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 -z-10 -translate-y-1/2"></div>
                                         {[1, 2, 3, 4, 5].map(step => (
@@ -1130,7 +1140,7 @@ const BookingsPage = () => {
                                     <div className="flex justify-between mt-4 border-t pt-4">
                                         <button
                                             onClick={handlePrevStep}
-                                            className={`px-4 py-2 rounded border border-black text-black bg-white text-sm font-semibold ${wizardStep === 1 ? 'invisible' : ''}`}
+                                            className={`px-4 py-2 rounded border border-gray-300 text-black bg-white text-sm font-semibold ${wizardStep === 1 ? 'invisible' : ''}`}
                                         >
                                             Quay lại
                                         </button>
@@ -1148,7 +1158,7 @@ const BookingsPage = () => {
 
                     {isBookingConfirmModalOpen && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-400/40 px-4" onClick={handleBackdropClick}>
-                            <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                            <div className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto bg-white rounded-xl shadow-2xl" onClick={e => e.stopPropagation()}>
                                 <div className="bg-red-600 text-white px-6 py-4 flex items-center justify-between">
                                     <div>
                                         <div className="text-lg font-bold">Xác nhận đặt bàn và thanh toán</div>
@@ -1186,7 +1196,7 @@ const BookingsPage = () => {
                                                     <>
                                                         <button
                                                             onClick={handleCloseBookingConfirmModal}
-                                                            className="px-4 py-2 rounded border border-black text-black bg-white text-sm font-semibold"
+                                                            className="px-4 py-2 rounded border border-gray-300 text-black bg-white text-sm font-semibold"
                                                         >
                                                             Quay lại
                                                         </button>
@@ -1250,7 +1260,7 @@ const BookingsPage = () => {
                                             <div className="flex justify-end">
                                                 <button
                                                     onClick={handleClosePaymentModal}
-                                                    className="px-4 py-2 rounded border border-black text-black bg-white text-sm font-semibold"
+                                                    className="px-4 py-2 rounded border border-gray-300 text-black bg-white text-sm font-semibold"
                                                 >
                                                     Đóng
                                                 </button>
@@ -1361,15 +1371,15 @@ const BookingsPage = () => {
                 )}
 
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                    <h2 className="text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
+                    <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                         <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
                         <input
                             type="text"
                             value={searchBillId}
                             onChange={e => setSearchBillId(e.target.value)}
                             placeholder="Nhập mã hóa đơn..."
-                            className="border rounded px-3 py-2 text-sm w-48 focus:outline-none focus:border-red-600"
+                            className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                         />
                         <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="booking-arrival-date">
                             Ngày:
@@ -1379,9 +1389,25 @@ const BookingsPage = () => {
                             type="date"
                             value={arrivalDateFilter}
                             onChange={e => setArrivalDateFilter(e.target.value)}
-                            className="border rounded px-3 py-2 text-sm focus:outline-none focus:border-red-600"
+                            className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-auto focus:outline-none focus:border-red-600"
                         />
                     </div>
+                </div>
+
+                {/* Filter Buttons */}
+                <div className="flex flex-wrap gap-2 mb-8">
+                    {BOOKING_STATUS_FILTERS.map(f => (
+                        <button
+                            key={f.id}
+                            onClick={() => setFilter(f.id)}
+                            className={`px-3 sm:px-4 py-2 rounded text-sm sm:text-base font-semibold whitespace-nowrap ${filter === f.id
+                                ? 'bg-red-600 text-white'
+                                : 'bg-white border border-gray-300 text-gray-700 hover:border-red-600'
+                                }`}
+                        >
+                            {f.label}
+                        </button>
+                    ))}
                 </div>
 
                 {formatted.length === 0 ? (
@@ -1402,11 +1428,11 @@ const BookingsPage = () => {
                                     title={
                                         <div className="flex items-baseline flex-wrap">
                                             <span>{`Đơn hàng ${bill.order_stt || bill.order_id || bill.bill_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}</span>
-                                            <span className="ml-[2.5cm] text-sm font-normal text-gray-500">Mã hóa đơn: {bill.bill_id || '—'}</span>
+                                            <span className="sm:ml-[2.5cm] w-full sm:w-auto text-sm font-normal text-gray-500">Mã hóa đơn: {bill.bill_id || '—'}</span>
                                         </div>
                                     }
                                 >
-                                    <div className="grid md:grid-cols-4 gap-4 mb-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                                         <div>
                                             <p className="text-sm text-gray-600">Bàn</p>
                                             <p className="font-semibold text-lg">

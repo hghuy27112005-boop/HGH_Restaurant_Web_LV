@@ -44,7 +44,7 @@ function Toast({ toast }) {
       background: c.bg, border: `1px solid ${c.border}`, color: c.text,
       padding: "14px 22px", borderRadius: 8,
       boxShadow: "0 4px 16px rgba(0,0,0,0.12)", fontSize: 15,
-      maxWidth: 360, fontWeight: 600, animation: "fadeIn .25s",
+      maxWidth: "min(360px, calc(100vw - 48px))", fontWeight: 600, animation: "fadeIn .25s",
     }}>{toast.message}</div>
   );
 }
@@ -82,7 +82,7 @@ function Modal({ show, onClose, title, children }) {
     >
       <div style={{
         background: "#fff", padding: 28, borderRadius: 10,
-        width: "90%", maxWidth: 440, boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+        width: "90%", maxWidth: 440, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
       }}>
         <h3 style={{ margin: "0 0 22px", textAlign: "center", color: "#333", fontSize: 20 }}>
           {title}
@@ -164,7 +164,7 @@ function CropperModal({ show, imageUrl, onClose, onCrop }) {
     }}>
       <div style={{
         background: "#fff", borderRadius: 10, padding: 24,
-        width: "90%", maxWidth: 480,
+        width: "90%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto",
         boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
       }}>
         <h3 style={{ margin: "0 0 16px", textAlign: "center", color: "#333", fontSize: 20 }}>
@@ -454,6 +454,16 @@ export default function ProfilePage() {
         .pw-input { width:100%; padding:11px 13px; border:1px solid #ddd; border-radius:6px;
           font-size:15px; box-sizing:border-box; outline:none; transition:all .2s; }
         .pw-input:focus { border-color:#C0392B; box-shadow:0 0 0 3px rgba(192,57,43,.12); }
+        .profile-wrap { min-height:80vh; display:flex; align-items:flex-start; justify-content:center; padding:16px 12px 32px; background:#f8f8f8; }
+        .profile-card { display:flex; flex-direction:column; width:100%; max-width:900px; background:#fff; padding:20px; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.06); }
+        .profile-side { text-align:center; padding-bottom:20px; margin-bottom:20px; border-bottom:1px solid #eee; }
+        .profile-main { min-width:0; }
+        @media (min-width: 700px) {
+          .profile-wrap { padding:24px 20px 50px; }
+          .profile-card { flex-direction:row; padding:40px; }
+          .profile-side { width:30%; min-width:200px; flex-shrink:0; padding-bottom:0; margin-bottom:0; border-bottom:none; border-right:1px solid #eee; padding-right:20px; }
+          .profile-main { flex:1; padding-left:40px; }
+        }
       `}</style>
 
       <Toast toast={toast} />
@@ -495,21 +505,11 @@ export default function ProfilePage() {
       </Modal>
 
       {/* ── Main Layout ── */}
-      <div style={{
-        minHeight: "80vh", display: "flex", alignItems: "flex-start",
-        justifyContent: "center", padding: "50px 20px", background: "#f8f8f8"
-      }}>
-        <div style={{
-          display: "flex", width: "100%", maxWidth: 900,
-          background: "#fff", padding: 40, borderRadius: 12,
-          boxShadow: "0 5px 20px rgba(0,0,0,0.06)", flexWrap: "wrap"
-        }}>
+      <div className="profile-wrap">
+        <div className="profile-card">
 
           {/* ── Sidebar ── */}
-          <div style={{
-            width: "30%", minWidth: 200, textAlign: "center",
-            borderRight: "1px solid #eee", paddingRight: 20
-          }}>
+          <div className="profile-side">
 
             {/* Avatar */}
             <div style={{
@@ -565,7 +565,7 @@ export default function ProfilePage() {
           </div>
 
           {/* ── Content ── */}
-          <div style={{ flex: 1, minWidth: 260, paddingLeft: 40 }}>
+          <div className="profile-main">
             <h2 style={{
               margin: "0 0 24px", color: "#333", fontSize: 22,
               borderBottom: "2px solid #f0f0f0", paddingBottom: 10

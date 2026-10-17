@@ -15,21 +15,23 @@ import HomeApp from './pages/Home/HomeApp';
 import LoginPage from './pages/Auth/LoginPage';
 import MenuPage from './pages/Menu/MenuPage';
 import DishDetailPage from './pages/Menu/DishDetailPage';
-import AboutPage from './pages/Home/AboutPage';
 import ProfilePage from './pages/User/ProfilePage';
 import BookingsPage from './pages/Booking/BookingsPage';
 import OrdersPage from './pages/Order/OrdersPage';
 import RatingPage from './pages/Rating/RatingPage';
 import DeliveriesPage from './pages/Delivery/DeliveriesPage';
+import CartLayout, { CartIndex } from './pages/Cart/CartLayout';
+import ProfileLayout from './pages/User/ProfileLayout';
 import AdminUsersPage from './pages/Admin/AdminUsersPage';
 import AdminStockPage from './pages/Admin/AdminStockPage';
-import AdminDeliveriesPage from './pages/Admin/AdminDeliveriesPage';
+import AdminDeliveriesTab from './pages/Admin/Orders/AdminDeliveriesTab';
+import AdminBookingsTab from './pages/Admin/Orders/AdminBookingsTab';
 import AdminRevenuePage from './pages/Admin/AdminRevenuePage';
 import AdminDashboardPage from './pages/Admin/AdminDashboardPage';
 import AdminMenuManagement from './pages/Admin/AdminMenuManagement';
-import AdminOrderManagement from './pages/Admin/AdminOrderManagement';
 import AdminReportPage from './pages/Admin/AdminReportPage';
 import AdminSaleOffPage from './pages/Admin/AdminSaleOffPage';
+import AdminOrdersLayout from './pages/Admin/Orders/AdminOrdersLayout';
 
 
 (function handleGoogleAuthRedirect() {
@@ -69,27 +71,30 @@ function App() {
               <Route path="/menu" element={<MenuPage />} />
               <Route path="/dish-details/:id?" element={<ProtectedRoute><DishDetailPage /></ProtectedRoute>} />
 
-              {/* About */}
-              <Route path="/gioi-thieu" element={<AboutPage />} />
+              {/* User Routes: Trang cá nhân + Lịch sử giao dịch + Đánh giá dịch vụ */}
+              <Route path="/profile" element={<ProtectedRoute><ProfileLayout /></ProtectedRoute>}>
+                <Route index element={<ProfilePage />} />
+                <Route path="orders" element={<OrdersPage />} />
+                <Route path="ratings" element={<RatingPage />} />
+              </Route>
 
-              {/* User Routes */}
-              <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-
-              {/* Bookings */}
-              <Route path="/bookings" element={<ProtectedRoute><BookingsPage /></ProtectedRoute>} />
-
-              {/* Orders */}
-              <Route path="/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
-              <Route path="/ratings" element={<ProtectedRoute><RatingPage /></ProtectedRoute>} />
-              <Route path="/deliveries" element={<ProtectedRoute><DeliveriesPage /></ProtectedRoute>} />
+              {/* Cart: Đặt bàn + Đặt ship */}
+              <Route path="/cart" element={<ProtectedRoute><CartLayout /></ProtectedRoute>}>
+                <Route index element={<CartIndex />} />
+                <Route path="bookings" element={<BookingsPage />} />
+                <Route path="deliveries" element={<DeliveriesPage />} />
+              </Route>
 
               {/* Admin Routes */}
               <Route path="/admin/dashboard" element={<ProtectedRoute requireAdmin={true}><AdminDashboardPage /></ProtectedRoute>} />
               <Route path="/admin/users" element={<ProtectedRoute requireAdmin={true}><AdminUsersPage /></ProtectedRoute>} />
               <Route path="/admin/stocks" element={<ProtectedRoute requireAdmin={true}><AdminStockPage /></ProtectedRoute>} />
               <Route path="/admin/menu" element={<ProtectedRoute requireAdmin={true}><AdminMenuManagement /></ProtectedRoute>} />
-              <Route path="/admin/orders" element={<ProtectedRoute requireAdmin={true}><AdminOrderManagement /></ProtectedRoute>} />
-              <Route path="/admin/deliveries" element={<ProtectedRoute requireAdmin={true}><AdminDeliveriesPage /></ProtectedRoute>} />
+              <Route path="/admin/orders" element={<ProtectedRoute requireAdmin={true}><AdminOrdersLayout /></ProtectedRoute>}>
+                <Route index element={<Navigate to="/admin/orders/bookings" replace />} />
+                <Route path="bookings" element={<AdminBookingsTab />} />
+                <Route path="deliveries" element={<AdminDeliveriesTab />} />
+              </Route>
               <Route path="/admin/revenue" element={<ProtectedRoute requireAdmin={true}><AdminRevenuePage /></ProtectedRoute>} />
               <Route path="/admin/reports" element={<ProtectedRoute requireAdmin={true}><AdminReportPage /></ProtectedRoute>} />
               <Route path="/admin/sale-off" element={<ProtectedRoute requireAdmin={true}><AdminSaleOffPage /></ProtectedRoute>} />

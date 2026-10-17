@@ -35,7 +35,7 @@ Route::get('/sale-off-events', [\App\Http\Controllers\SaleOffEventController::cl
 Route::get('/sale-off-events/{id}', [\App\Http\Controllers\SaleOffEventController::class, 'show']);
 
 // Protected Routes (Require Auth)
-Route::middleware(['auth:sanctum'])->group(function () {
+Route::middleware(['auth:sanctum', 'locked'])->group(function () {
     // Chi tiết món ăn chỉ dành cho người dùng đã đăng nhập
     Route::get('/dish-details/{id}', [\App\Http\Controllers\DishController::class, 'show']);
     Route::get('/dish-customizations', [\App\Http\Controllers\DishCustomizationController::class, 'index']);
@@ -98,26 +98,32 @@ Route::middleware(['auth:sanctum'])->group(function () {
 });
 
 // Admin Routes
-Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+Route::middleware(['auth:sanctum', 'locked', 'admin'])->group(function () {
     // Dashboard
     Route::get('admin/dashboard', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'index']);
 
     // Bills Management
-    Route::get('admin/bills', [\App\Http\Controllers\Admin\Admin_BillController::class, 'index']);
-    Route::put('admin/bills/{bill}', [\App\Http\Controllers\Admin\Admin_BillController::class, 'update']);
     Route::get('admin/bills/{bill}/export-pdf', [\App\Http\Controllers\BillController::class, 'exportPDFAdmin']);
+
+    // Bookings Management
+    Route::get('admin/bookings', [\App\Http\Controllers\Admin\Admin_BookingController::class, 'index']);
+    Route::get('admin/bookings/stats', [\App\Http\Controllers\Admin\Admin_BookingController::class, 'stats']);
 
     // Deliveries Management
     Route::get('admin/deliveries', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'index']);
     Route::get('admin/deliveries/stats', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'stats']);
-    Route::get('admin/deliveries/{delivery}', [\App\Http\Controllers\Admin\Admin_DeliveryController::class, 'show']);
 
     // Stock Management
     Route::get('admin/stocks/ingredients/by-date', [\App\Http\Controllers\Admin\Admin_StockController::class, 'ingredientsByDate']);
     Route::get('admin/stocks/ingredients/history', [\App\Http\Controllers\Admin\Admin_StockController::class, 'ingredientHistory']);
 
     // Users Management
-    Route::apiResource('admin/users', \App\Http\Controllers\Admin\Admin_UserController::class);
+    Route::get('admin/users/stats', [\App\Http\Controllers\Admin\Admin_UserController::class, 'stats']);
+    Route::post('admin/users/{user}/lock', [\App\Http\Controllers\Admin\Admin_UserController::class, 'lock']);
+    Route::post('admin/users/{user}/unlock', [\App\Http\Controllers\Admin\Admin_UserController::class, 'unlock']);
+    Route::post('admin/users/{user}/send-lock-mail', [\App\Http\Controllers\Admin\Admin_UserController::class, 'sendLockMail']);
+    Route::post('admin/users/{user}/send-unlock-mail', [\App\Http\Controllers\Admin\Admin_UserController::class, 'sendUnlockMail']);
+    Route::get('admin/users', [\App\Http\Controllers\Admin\Admin_UserController::class, 'index']);
 
     // Dishes Management
     Route::get('admin/dishes', [\App\Http\Controllers\DishController::class, 'adminIndex']);

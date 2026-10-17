@@ -40,6 +40,18 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Tài khoản đang bị khóa: không cho đăng nhập, không cấp token
+        if ($account->isLocked()) {
+            return response()->json([
+                'success' => false,
+                'code' => 'account_locked',
+                'locked_until' => $account->locked_until->toIso8601String(),
+                'message' => 'Tài khoản của bạn đã bị khóa đến '
+                    . $account->locked_until->format('H:i d/m/Y')
+                    . '. Lý do: vi phạm chính sách nội quy Nhà hàng.',
+            ], 403);
+        }
+
         // Bước 2: tài khoản tồn tại, kiểm tra password
         if (Auth::attempt([$loginType => $login, 'password' => $request->password])) {
             $user = Auth::user();
@@ -164,170 +176,11 @@ class AuthController extends Controller
         return 'Tài khoản đã tồn tại.';
     }
 
-    public function profile()
-    {
-        $user = Auth::user();
-        return view('profile', compact('user'));
-    }
-
-    public function updateProfile(Request $request)
-    {
-        $user = Auth::user();
-
-        $validator = Validator::make($request->all(), [
-            'username' => 'required|max:20|unique:users,username,' . $user->user_id . ',user_id',
-            'email' => [
-                'required',
-                'email',
-                'max:50',
-                'regex:' . self::EMAIL_REGEX,
-            ],
-            'phone' => 'nullable|max:10',
-        ], [
-            'username.required' => 'Vui lòng nhập tên đăng nhập.',
-            'username.unique' => 'Tên đăng nhập này đã tồn tại.',
-            'email.required' => 'Vui lòng nhập địa chỉ Email.',
-            'email.regex' => self::EMAIL_REGEX_MESSAGE
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => $validator->errors()->first()
-            ], 422);
-        }
-
-        $user->update([
-            'username' => $request->username,
-            'email' => $request->email,
-            'tele_number' => $request->phone,
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Cập nhật thông tin thành công!'
-        ]);
-    }
-
-    public function updateAvatar(Request $request)
-    {
-        $user = Auth::user();
-
-        $request->validate([
-            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120', // Tối đa 5MB
-        ]);
-
-        if (!$request->hasFile('avatar')) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Lỗi tải ảnh lên'
-            ], 400);
-        }
-
-        $file = $request->file('avatar');
-
-        // Thư mục riêng cho từng user: public/avatars/{user_id}/
-        $destinationPath = public_path('avatars/' . $user->user_id);
-
-        // Chưa có thư mục (user set avatar lần đầu) => dò không thấy thì tạo mới
-        if (!file_exists($destinationPath)) {
-            if (!@mkdir($destinationPath, 0755, true) && !is_dir($destinationPath)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Không thể tạo thư mục lưu ảnh.'
-                ], 500);
-            }
-        }
-
-        // Đặt tên file theo STT tăng dần (1, 2, 3, ...) dựa trên các ảnh đã có sẵn,
-        // không xoá ảnh cũ để giữ lại lịch sử; ảnh có STT lớn nhất là avatar hiện tại.
-        $existingFiles = glob($destinationPath . '/*.*');
-        $maxSeq = 0;
-        foreach ($existingFiles as $existingFile) {
-            $seq = (int) pathinfo($existingFile, PATHINFO_FILENAME);
-            if ($seq > $maxSeq) {
-                $maxSeq = $seq;
-            }
-        }
-        $nextSeq = $maxSeq + 1;
-
-        $extension = $file->getClientOriginalExtension() ?: 'jpg';
-        $filename = $nextSeq . '.' . $extension;
-
-        $file->move($destinationPath, $filename);
-
-        // Lưu link vào DB để load nhanh; nguồn xác thực thật vẫn là thư mục trên ổ đĩa
-        $avatar_url = asset('avatars/' . $user->user_id . '/' . $filename);
-        $user->update(['avatar_url' => $avatar_url]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Lưu ảnh đại diện thành công!',
-            'avatar_url' => $avatar_url
-        ]);
-    }
-
     public function logout(Request $request)
     {
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         return redirect()->route('login');
-    }
-
-    public function showForgotPassword()
-    {
-        return view('forgot_password');
-    }
-
-    public function verifyUser(Request $request)
-    {
-        $request->validate([
-            'username' => 'required',
-            'email' => [
-                'required',
-                'email',
-                'regex:' . self::EMAIL_REGEX
-            ],
-            'phone' => 'required',
-        ], [
-            'email.regex' => self::EMAIL_REGEX_MESSAGE
-        ]);
-
-        $user = User::where('username', $request->username)
-            ->where('email', $request->email)
-            ->where('phone', $request->phone)
-            ->first();
-
-        if ($user) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Thông tin xác thực chính xác. Vui lòng đặt lại mật khẩu.',
-                'user_id' => $user->user_id
-            ]);
-        }
-
-        return response()->json([
-            'success' => false,
-            'message' => 'Tài khoản không tồn tại hoặc sai mật khẩu.'
-        ], 401);
-    }
-
-    public function resetPassword(Request $request)
-    {
-        $request->validate([
-            'user_id' => 'required|exists:users,user_id',
-            'password' => 'required|min:6',
-        ]);
-
-        $user = User::findOrFail($request->user_id);
-        $user->update([
-            'password_hash' => Hash::make($request->password),
-        ]);
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Đổi mật khẩu thành công!'
-        ]);
     }
 }

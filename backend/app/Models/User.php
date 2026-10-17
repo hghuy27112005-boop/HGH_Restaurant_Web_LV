@@ -29,6 +29,7 @@ class User extends Authenticatable
         'provider_id',
         'recommendation_reset_at',
         'skipped_recommendation_modal',
+        'locked_until',
     ];
 
     protected $hidden = [
@@ -38,6 +39,7 @@ class User extends Authenticatable
     protected $casts = [
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
+        'locked_until' => 'datetime',
     ];
 
     public function getAuthPassword()
@@ -94,6 +96,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Tài khoản đang bị khóa khi locked_until còn ở tương lai
+     */
+    public function isLocked(): bool
+    {
+        return $this->locked_until !== null && $this->locked_until->isFuture();
+    }
+
+    /**
      * Cộng điểm và cập nhật hạng
      */
     public function incrementPoints(int $amount): void
@@ -138,5 +148,24 @@ class User extends Authenticatable
     public function getOrCreateStatistics(): Statistics
     {
         return $this->statistics ?? Statistics::create(['user_id' => $this->user_id]);
+    }
+
+        /**
+     * Link avatar lưu trong DB là link đầy đủ kèm tên miền lúc upload (asset()).
+     * Mỗi lần đổi tên miền tunnel thì link cũ chết, nên dựng lại theo tên miền hiện tại.
+     * Chỉ đụng tới ảnh do chính web này lưu (dạng .../avatars/{user_id}/{file});
+     * ảnh từ nguồn ngoài (vd Google) giữ nguyên.
+     */
+    public function getAvatarUrlAttribute($value)
+    {
+        if (empty($value)) {
+            return $value;
+        }
+
+        if (preg_match('#/avatars/(\d+/[^/?]+)$#', $value, $matches)) {
+            return asset('avatars/' . $matches[1]);
+        }
+
+        return $value;
     }
 }

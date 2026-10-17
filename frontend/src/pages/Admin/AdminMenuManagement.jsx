@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { adminAPI, dishAPI } from '../../services/api';
-import { Loading, ErrorMessage, Card, Badge, Modal } from '../../components/Shared';
+import { TableLoading, Badge, Modal } from '../../components/Shared';
+import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:8000';
 
@@ -17,11 +18,25 @@ const getImageUrl = (imageUrl) => {
     return `${API_BASE_URL}/dishes/${cleanPath}`;
 };
 
+const STATUS_FILTERS = [
+    { id: 'all', label: 'Tất cả' },
+    { id: 'active', label: 'Đang bán' },
+    { id: 'hidden', label: 'Đã ẩn' },
+    { id: 'bestseller', label: 'Bestseller' },
+];
+
+const NO_SPIN = '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+
 const AdminMenuManagement = () => {
     const [dishes, setDishes] = useState([]);
     const [dishTypes, setDishTypes] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+
+    // Bộ lọc / chế độ xem
+    const [typeFilter, setTypeFilter] = useState(''); // '' = tất cả loại
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [search, setSearch] = useState('');
+    const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -44,9 +59,7 @@ const AdminMenuManagement = () => {
     const [previewImage, setPreviewImage] = useState(null);
     const fileInputRef = useRef(null);
 
-    // FIX: dùng để phân biệt "bấm ra ngoài để đóng" với "kéo chọn text trong modal
-    // rồi lỡ thả chuột ra ngoài" — chỉ đóng khi cả mousedown lẫn mouseup đều rơi
-    // đúng trên lớp nền (backdrop), không phải trên nội dung modal bên trong.
+    // Phân biệt "bấm ra ngoài để đóng" với "kéo chọn text trong modal rồi lỡ thả chuột ra ngoài"
     const mouseDownOnBackdrop = useRef(false);
 
     useEffect(() => {
@@ -63,13 +76,38 @@ const AdminMenuManagement = () => {
             setDishes(dishesRes.data);
             setDishTypes(typesRes.data);
         } catch (err) {
-            setError('Lỗi tải danh sách thực đơn');
+            setAlertMessage('Lỗi tải danh sách thực đơn');
             console.error(err);
         } finally {
             setLoading(false);
         }
     };
 
+    // ===== Lọc tại trình duyệt =====
+    const isFiltered = typeFilter !== '' || statusFilter !== 'all' || search.trim() !== '';
+
+    const visibleDishes = dishes.filter((dish) => {
+        if (typeFilter !== '' && String(dish.type_id) !== String(typeFilter)) return false;
+        if (statusFilter === 'active' && !dish.is_active) return false;
+        if (statusFilter === 'hidden' && dish.is_active) return false;
+        if (statusFilter === 'bestseller' && !dish.is_bestseller) return false;
+        if (search.trim() && !(dish.dish_name || '').toLowerCase().includes(search.trim().toLowerCase())) return false;
+        return true;
+    });
+
+    // Chưa lọc: STT = dish_id gốc. Có lọc: đánh lại 1, 2, 3...
+    const getStt = (dish, index) => (isFiltered ? index + 1 : dish.dish_id);
+
+    const getTypeName = (typeId) =>
+        dishTypes.find((t) => t.type_id === typeId)?.type_name || 'Khác';
+
+    // Thống kê trên toàn bộ món (không đổi theo bộ lọc)
+    const totalDishes = dishes.length;
+    const activeDishes = dishes.filter((d) => d.is_active).length;
+    const hiddenDishes = totalDishes - activeDishes;
+    const bestsellerDishes = dishes.filter((d) => d.is_bestseller).length;
+
+    // ===== Thêm / sửa =====
     const handleOpenModal = (dish = null) => {
         if (dish) {
             setEditMode(true);
@@ -187,7 +225,6 @@ const AdminMenuManagement = () => {
                     setAlertMessage("Đã xóa món ăn thành công!");
                     fetchData();
                 } catch (err) {
-                    // Log chi tiết để xác định nguyên nhân thật (vd: sai method/route giữa frontend và backend)
                     console.error('Delete dish error:', err.response?.status, err.response?.data || err.message);
                     setAlertMessage(err.response?.data?.message || ("Lỗi khi xóa món ăn: " + err.message));
                 }
@@ -206,95 +243,206 @@ const AdminMenuManagement = () => {
         mouseDownOnBackdrop.current = false;
     };
 
-    if (loading) return <Loading />;
+    const chipClass = (active) =>
+        `whitespace-nowrap px-3 py-1.5 rounded text-sm font-medium transition ${active
+            ? 'bg-red-600 text-white'
+            : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`;
+
+    const statusBadge = (dish) => dish.is_active ? (
+        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">Đang bán</span>
+    ) : (
+        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-gray-200 text-gray-600">Đã ẩn</span>
+    );
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8 relative">
-            <div className="max-w-6xl mx-auto px-4">
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-4xl font-bold text-red-600">Quản lý thực đơn</h1>
-                    <button
-                        onClick={() => handleOpenModal()}
-                        className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition-colors"
-                    >
-                        + Thêm món ăn
+        <AdminPageShell
+            title="Quản lý thực đơn"
+            actions={
+                <button
+                    onClick={() => handleOpenModal()}
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition-colors"
+                >
+                    + Thêm món ăn
+                </button>
+            }
+        >
+            {/* Thống kê: một hàng */}
+            <StatGrid>
+                <StatCard label="Tổng món" value={totalDishes} icon="fa-utensils" tone="red" />
+                <StatCard label="Đang bán" value={activeDishes} icon="fa-check" tone="green" />
+                <StatCard label="Đã ẩn" value={hiddenDishes} icon="fa-eye-slash" tone="gray" />
+                <StatCard label="Bestseller" value={bestsellerDishes} icon="fa-star" tone="yellow" />
+            </StatGrid>
+
+            {/* Thanh công cụ: chip loại món + tìm kiếm + trạng thái + chế độ xem */}
+            <div className="mb-4 bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-3">
+                <div className="flex gap-2 overflow-x-auto">
+                    <button onClick={() => setTypeFilter('')} className={chipClass(typeFilter === '')}>
+                        Tất cả loại
                     </button>
+                    {dishTypes.map((type) => (
+                        <button
+                            key={type.type_id}
+                            onClick={() => setTypeFilter(type.type_id)}
+                            className={chipClass(String(typeFilter) === String(type.type_id))}
+                        >
+                            {type.type_name}
+                        </button>
+                    ))}
                 </div>
 
-                {error && <ErrorMessage message={error} />}
+                <div className="flex flex-wrap items-center gap-2">
+                    <div className="relative flex-1 min-w-[220px]">
+                        <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Tìm theo tên món..."
+                            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:border-red-600"
+                        />
+                    </div>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded bg-white focus:outline-none focus:border-red-600"
+                    >
+                        {STATUS_FILTERS.map((s) => (
+                            <option key={s.id} value={s.id}>{s.label}</option>
+                        ))}
+                    </select>
+                    <div className="inline-flex rounded-lg border-2 border-red-600 overflow-hidden bg-white">
+                        {[['table', 'fa-table-list', 'Bảng'], ['grid', 'fa-table-cells-large', 'Lưới']].map(([mode, icon, text]) => (
+                            <button
+                                key={mode}
+                                onClick={() => setViewMode(mode)}
+                                className={`px-3 py-1.5 text-sm font-bold transition ${viewMode === mode ? 'bg-red-600 text-white' : 'bg-white text-red-600 hover:bg-red-50'}`}
+                            >
+                                <i className={`fas ${icon} mr-1`}></i>{text}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
 
-                <Card title={`Danh sách món ăn (${dishes.length})`}>
+            {/* Danh sách */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b font-semibold text-gray-800">
+                    Danh sách món ăn ({visibleDishes.length}{isFiltered ? ` / ${dishes.length}` : ''})
+                </div>
+
+                {loading ? (
+                    <TableLoading />
+                ) : visibleDishes.length === 0 ? (
+                    <p className="py-8 text-center text-gray-500">Không có món ăn nào phù hợp</p>
+                ) : viewMode === 'table' ? (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-red-600 text-white border-b uppercase">
+                            <thead className="bg-red-600 text-white uppercase text-xs">
                                 <tr>
-                                    <th className="px-4 py-3">STT</th>
-                                    <th className="px-4 py-3">Hình ảnh</th>
-                                    <th className="px-4 py-3">Tên món</th>
-                                    <th className="px-4 py-3">Loại</th>
-                                    <th className="px-4 py-3">Giá tiền</th>
-                                    <th className="px-4 py-3 text-center">Bestseller</th>
-                                    <th className="px-4 py-3 text-center">Trạng thái</th>
-                                    <th className="px-4 py-3 text-center">Thao tác</th>
+                                    <th className="px-4 py-2.5 w-16">STT</th>
+                                    <th className="px-4 py-2.5">Hình ảnh</th>
+                                    <th className="px-4 py-2.5">Tên món</th>
+                                    <th className="px-4 py-2.5">Loại</th>
+                                    <th className="px-4 py-2.5">Giá tiền</th>
+                                    <th className="px-4 py-2.5 text-center">Bestseller</th>
+                                    <th className="px-4 py-2.5 text-center">Trạng thái</th>
+                                    <th className="px-4 py-2.5 text-center">Thao tác</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {dishes.map((dish, index) => {
-                                    const typeName = dishTypes.find(t => t.type_id === dish.type_id)?.type_name || 'Khác';
-                                    return (
-                                        <tr key={dish.dish_id} className={`border-b hover:bg-gray-50 ${!dish.is_active ? 'opacity-50' : ''}`}>
-                                            <td className="px-4 py-3">{index + 1}</td>
-                                            <td className="px-4 py-3">
-                                                <img
-                                                    src={getImageUrl(dish.image_url)}
-                                                    alt={dish.dish_name}
-                                                    className="w-16 h-16 object-cover rounded shadow-sm"
-                                                />
-                                            </td>
-                                            <td className="px-4 py-3 font-semibold">{dish.dish_name}</td>
-                                            <td className="px-4 py-3">
-                                                <Badge variant="info">{typeName}</Badge>
-                                            </td>
-                                            <td className="px-4 py-3 font-bold text-red-600">
-                                                {Number(dish.price).toLocaleString('vi-VN')}đ
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                {dish.is_bestseller ? <span className="text-yellow-500 text-xl">⭐</span> : ''}
-                                            </td>
-                                            <td className="px-4 py-3 text-center">
-                                                {dish.is_active ? (
-                                                    <span className="inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700">Đang bán</span>
-                                                ) : (
-                                                    <span className="inline-block px-2 py-1 text-xs font-semibold rounded bg-gray-200 text-gray-600">Đã ẩn</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-center space-x-3">
-                                                <button
-                                                    onClick={() => handleOpenModal(dish)}
-                                                    className="text-blue-600 hover:text-blue-800 font-medium"
-                                                >
-                                                    Sửa
-                                                </button>
-                                                <button
-                                                    onClick={() => handleToggleStatus(dish)}
-                                                    className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
-                                                >
-                                                    {dish.is_active ? 'Ẩn' : 'Hiện'}
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(dish.dish_id)}
-                                                    className="text-red-600 hover:text-red-800 font-medium"
-                                                >
-                                                    Xóa
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                {visibleDishes.map((dish, index) => (
+                                    <tr key={dish.dish_id} className={`border-b last:border-b-0 hover:bg-gray-50 ${!dish.is_active ? 'opacity-50' : ''}`}>
+                                        <td className="px-4 py-2 text-gray-500">{getStt(dish, index)}</td>
+                                        <td className="px-4 py-2">
+                                            <img
+                                                src={getImageUrl(dish.image_url)}
+                                                alt={dish.dish_name}
+                                                className="w-12 h-12 object-cover rounded shadow-sm"
+                                            />
+                                        </td>
+                                        <td className="px-4 py-2 font-semibold">{dish.dish_name}</td>
+                                        <td className="px-4 py-2">
+                                            <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
+                                        </td>
+                                        <td className="px-4 py-2 font-bold text-red-600">
+                                            {Number(dish.price).toLocaleString('vi-VN')}đ
+                                        </td>
+                                        <td className="px-4 py-2 text-center">
+                                            {dish.is_bestseller ? <span className="text-yellow-500 text-lg">⭐</span> : ''}
+                                        </td>
+                                        <td className="px-4 py-2 text-center">{statusBadge(dish)}</td>
+                                        <td className="px-4 py-2 text-center space-x-3">
+                                            <button
+                                                onClick={() => handleOpenModal(dish)}
+                                                className="text-blue-600 hover:text-blue-800 font-medium"
+                                            >
+                                                Sửa
+                                            </button>
+                                            <button
+                                                onClick={() => handleToggleStatus(dish)}
+                                                className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
+                                            >
+                                                {dish.is_active ? 'Ẩn' : 'Hiện'}
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(dish.dish_id)}
+                                                className="text-red-600 hover:text-red-800 font-medium"
+                                            >
+                                                Xóa
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
-                </Card>
+                ) : (
+                    <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+                        {visibleDishes.map((dish, index) => (
+                            <div
+                                key={dish.dish_id}
+                                className={`bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col ${!dish.is_active ? 'opacity-60' : ''}`}
+                            >
+                                <div className="relative">
+                                    <img
+                                        src={getImageUrl(dish.image_url)}
+                                        alt={dish.dish_name}
+                                        className="w-full h-36 object-cover"
+                                    />
+                                    <span className="absolute top-2 left-2 bg-black/60 text-white text-xs font-bold px-2 py-0.5 rounded">
+                                        #{getStt(dish, index)}
+                                    </span>
+                                    <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                                        {dish.is_bestseller && (
+                                            <span className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded">⭐ Bestseller</span>
+                                        )}
+                                        {!dish.is_active && (
+                                            <span className="bg-gray-700 text-white text-xs font-bold px-2 py-0.5 rounded">Đã ẩn</span>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="p-3 flex flex-col flex-1">
+                                    <p className="font-semibold text-gray-800 leading-snug line-clamp-2">{dish.dish_name}</p>
+                                    <div className="mt-1">
+                                        <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
+                                    </div>
+                                    <p className="mt-2 font-bold text-red-600">{Number(dish.price).toLocaleString('vi-VN')}đ</p>
+                                    <div className="mt-auto pt-3 flex justify-between text-sm">
+                                        <button onClick={() => handleOpenModal(dish)} className="text-blue-600 hover:text-blue-800 font-medium">Sửa</button>
+                                        <button
+                                            onClick={() => handleToggleStatus(dish)}
+                                            className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
+                                        >
+                                            {dish.is_active ? 'Ẩn' : 'Hiện'}
+                                        </button>
+                                        <button onClick={() => handleDelete(dish.dish_id)} className="text-red-600 hover:text-red-800 font-medium">Xóa</button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Modal thêm/sửa món */}
@@ -350,7 +498,7 @@ const AdminMenuManagement = () => {
                                             type="number" required min="0" step="1000"
                                             value={formData.price}
                                             onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                                            className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${NO_SPIN}`}
                                         />
                                     </div>
                                     <div className="flex items-center">
@@ -424,7 +572,7 @@ const AdminMenuManagement = () => {
             >
                 <p className="text-gray-700">{confirmState?.message}</p>
             </Modal>
-        </div>
+        </AdminPageShell>
     );
 };
 

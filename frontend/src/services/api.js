@@ -158,18 +158,20 @@ export const adminAPI = {
         get: (filters = {}) => axiosInstance.get('/admin/dashboard', { params: filters }),
     },
     bills: {
+        exportPdf: (id) =>
+            axiosInstance.get(`/admin/bills/${id}/export-pdf`, { responseType: 'blob' }),
+    },
+    bookings: {
         getAll: (filters = {}) =>
-            axiosInstance.get('/admin/bills', { params: filters }),
-        update: (id, data) =>
-            axiosInstance.put(`/admin/bills/${id}`, data),
+            axiosInstance.get('/admin/bookings', { params: filters }),
+        getStats: (filters = {}) =>
+            axiosInstance.get('/admin/bookings/stats', { params: filters }),
     },
     deliveries: {
         getAll: (filters = {}) =>
             axiosInstance.get('/admin/deliveries', { params: filters }),
         getStats: (filters = {}) =>
             axiosInstance.get('/admin/deliveries/stats', { params: filters }),
-        getById: (id) =>
-            axiosInstance.get(`/admin/deliveries/${id}`),
     },
     dishes: {
         // Lấy TOÀN BỘ món (kể cả đã ẩn) - chỉ dùng cho trang quản lý admin
@@ -190,10 +192,16 @@ export const adminAPI = {
     users: {
         getAll: (filters = {}) =>
             axiosInstance.get('/admin/users', { params: filters }),
-        update: (id, data) =>
-            axiosInstance.put(`/admin/users/${id}`, data),
-        delete: (id) =>
-            axiosInstance.delete(`/admin/users/${id}`),
+        getStats: () =>
+            axiosInstance.get('/admin/users/stats'),
+        lock: (id, amount, unit) =>
+            axiosInstance.post(`/admin/users/${id}/lock`, { amount, unit }),
+        unlock: (id) =>
+            axiosInstance.post(`/admin/users/${id}/unlock`),
+        sendLockMail: (id) =>
+            axiosInstance.post(`/admin/users/${id}/send-lock-mail`),
+        sendUnlockMail: (id) =>
+            axiosInstance.post(`/admin/users/${id}/send-unlock-mail`),
     },
     statistics: {
         revenue: (filters = {}) =>

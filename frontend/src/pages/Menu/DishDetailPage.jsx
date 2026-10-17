@@ -517,14 +517,22 @@ const DishDetailPage = () => {
     const steps = splitInstructions(displayedInstructions);
 
     return (
-        <div className="min-h-screen bg-gray-50 px-4 py-8">
+        <div className="min-h-screen bg-gray-50 px-4 sm:px-6 py-6 sm:py-8">
             <div className="max-w-6xl mx-auto">
-                <h1 className="text-4xl font-bold text-red-600 mb-8">Chi tiết món ăn</h1>
-                <div className="bg-white rounded-lg shadow p-6">
+                <button
+                    type="button"
+                    onClick={() => navigate('/menu')}
+                    className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-700"
+                >
+                    <i className="fas fa-arrow-left"></i>
+                    Quay lại menu
+                </button>
+                <h1 className="text-3xl sm:text-4xl font-bold text-red-600 mb-6 sm:mb-8">Chi tiết món ăn</h1>
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
                     <div className="grid md:grid-cols-2 gap-8 items-start">
-                        <img src={selectedDish.image_url} alt={selectedDish.dish_name} className="w-full max-w-lg mx-auto h-72 object-cover rounded-lg" />
+                        <img src={selectedDish.image_url} alt={selectedDish.dish_name} className="w-full max-w-lg mx-auto h-56 sm:h-72 object-cover rounded-xl" />
                         <div>
-                            <h2 className="text-3xl font-bold text-gray-900 mb-4">{selectedDish.dish_name}</h2>
+                            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">{selectedDish.dish_name}</h2>
                             <p className="text-red-600 text-2xl font-bold mb-5">{Number(selectedDish.price).toLocaleString('vi-VN')}đ</p>
                             <h3 className="font-semibold text-lg mb-2">Nguyên liệu nấu</h3>
                             <p className="text-gray-700 leading-7">{displayedIngredients ? translateIngredients(displayedIngredients) : 'Món này chưa có thông tin nguyên liệu.'}</p>
@@ -603,7 +611,7 @@ const DishDetailPage = () => {
 
                     <div>
                         <label className="block font-semibold mb-1 text-gray-700">Nhập số lượng</label>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
                             <button type="button" onClick={handleDecrease10Qty} className="px-2 h-9 flex-shrink-0 border border-gray-300 rounded text-xs font-semibold hover:bg-gray-100">−10</button>
                             <button type="button" onClick={handleDecreaseQty} className="w-9 h-9 flex-shrink-0 flex items-center justify-center border border-gray-300 rounded font-bold text-lg hover:bg-gray-100">−</button>
                             <button type="button" onClick={handleSetMinQty} className="px-3 h-9 flex-shrink-0 border border-gray-300 rounded text-sm font-semibold hover:bg-gray-100">Min</button>
@@ -611,7 +619,7 @@ const DishDetailPage = () => {
                                 type="number"
                                 value={quantity}
                                 onChange={(event) => setQuantity(event.target.value)}
-                                className="flex-1 min-w-0 border border-gray-300 rounded px-3 py-2 text-center focus:outline-none focus:border-red-600"
+                                className="order-first w-full sm:order-none sm:w-auto sm:flex-1 min-w-0 border border-gray-300 rounded px-3 py-2 text-center focus:outline-none focus:border-red-600"
                             />
                             <button type="button" onClick={handleSetMaxQty} className="px-3 h-9 flex-shrink-0 border border-gray-300 rounded text-sm font-semibold hover:bg-gray-100">Max</button>
                             <button type="button" onClick={handleIncreaseQty} className="w-9 h-9 flex-shrink-0 flex items-center justify-center border border-gray-300 rounded font-bold text-lg hover:bg-gray-100">+</button>
@@ -647,7 +655,7 @@ const DishDetailPage = () => {
             </Modal>
             <Modal
                 isOpen={recipeModalOpen}
-                className="max-w-3xl max-h-[90vh] overflow-y-auto"
+                className="max-w-3xl"
                 title={recipeModalView === 'list' ? 'Công thức thay thế' : recipeModalView === 'detail' ? selectedRecipe?.recipe_name : recipeModalView === 'preview' ? 'Công thức mới' : draftRecipe ? 'Chỉnh sửa công thức' : 'Tạo công thức'}
                 onClose={() => setRecipeModalOpen(false)}
                 onSecondary={recipeModalView === 'detail' ? () => startEditRecipe(selectedRecipe) : recipeModalView === 'ingredients' || recipeModalView === 'preview' ? handleRecipeBack : undefined}

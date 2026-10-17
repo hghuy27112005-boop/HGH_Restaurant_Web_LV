@@ -11,6 +11,7 @@ Artisan::command('inspire', function () {
 // Mỗi ngày lúc 6h sáng: gửi mail nhắc lịch cho các booking đặt trước (booking_date = hôm nay)
 Schedule::command('bookings:send-daily-reminders')->dailyAt('06:00');
 Schedule::command('deliveries:auto-start')->everyMinute();
+Schedule::command('users:send-unlock-mails')->everyMinute();
 
 // Gửi mail nền: các mail đưa vào hàng đợi (queue) được xử lý mỗi phút, request thanh toán không phải chờ SMTP.
 Schedule::command('queue:work --stop-when-empty --max-time=55 --tries=1')->everyMinute()->runInBackground();

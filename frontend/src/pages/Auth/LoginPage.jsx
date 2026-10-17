@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthContext } from '../../context/AuthContext';
-import { ErrorMessage, SuccessMessage } from '../../components/Shared';
+import { ErrorMessage, SuccessMessage, Modal } from '../../components/Shared';
+
+// Ảnh nền của trang đăng nhập/đăng ký: muốn đổi ảnh chỉ cần sửa dòng này
+const AUTH_BACKGROUND = '/pics/30.jpg';
+
+// Kiểu dùng chung cho nhãn và ô nhập (ô nhập tab Đăng ký thấp hơn để form khỏi dài)
+const labelClass = 'block text-xs font-semibold text-white/90 mb-0.5';
+const inputBase = 'w-full rounded-lg border border-white/30 bg-white/95 px-3 text-base text-gray-900 placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500';
+const loginInputClass = `${inputBase} h-10`;
+const regInputClass = `${inputBase} h-9`;
+
+const tabClass = (active) =>
+    `flex-1 h-10 rounded-lg text-sm sm:text-base font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${active ? 'bg-red-600 text-white shadow' : 'text-white/80 hover:text-white'}`;
 
 const LoginPage = () => {
     const { login, register, loading, error, setError } = useAuthContext();
@@ -11,7 +23,7 @@ const LoginPage = () => {
     const [activeTab, setActiveTab] = useState(getInitialTab);
     const [localError, setLocalError] = useState(null);
     const [successMessage, setSuccessMessage] = useState(null);
-
+    const [lockedMessage, setLockedMessage] = useState(null); // nội dung modal khi tài khoản bị khóa
 
     // Login Form State
     const [loginData, setLoginData] = useState({ username: '', password: '' });
@@ -37,6 +49,13 @@ const LoginPage = () => {
             window.history.replaceState({}, '', window.location.pathname);
         } else if (err === 'facebook_email_required') {
             setLocalError('Vui lòng cấp quyền email khi đăng nhập bằng Facebook.');
+            window.history.replaceState({}, '', window.location.pathname);
+        } else if (err === 'account_locked') {
+            const until = params.get('until');
+            const untilText = until
+                ? new Date(until).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
+                : '';
+            setLockedMessage(`Tài khoản của bạn đã bị khóa${untilText ? ` đến ${untilText}` : ''}. Lý do: vi phạm chính sách nội quy Nhà hàng.`);
             window.history.replaceState({}, '', window.location.pathname);
         }
     }, []);
@@ -78,6 +97,8 @@ const LoginPage = () => {
         const result = await login(loginData.username, loginData.password);
         if (result?.success) {
             window.location.href = '/';
+        } else if (result?.code === 'account_locked') {
+            setLockedMessage(result.message);
         }
     };
 
@@ -102,351 +123,228 @@ const LoginPage = () => {
     };
 
     return (
-        <div className="container auth-page">
-            <style>{`
-                .container.auth-page {
-                    display: flex;
-                    justify-content: center;
-                    align-items: flex-start;
-                    min-height: 80vh;
-                    padding: 50px 20px;
-                    background-color: #f8f8f8;
-                }
+        <>
+            {/* Ảnh nền phủ kín màn hình (cắt theo khung, không đổi tỷ lệ) + lớp phủ tối */}
+            <div
+                className="fixed inset-0 z-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${AUTH_BACKGROUND})` }}
+            ></div>
+            <div
+                className="fixed inset-0 z-0"
+                style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.68), rgba(0,0,0,0.52) 50%, rgba(0,0,0,0.68))' }}
+            ></div>
 
-                .auth-box {
-                    width: 100%;
-                    max-width: 450px;
-                    background-color: white;
-                    border-radius: 10px;
-                    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-                    overflow: hidden;
-                }
+            {/* Vùng nội dung: cao đúng phần còn lại dưới navbar; form căn giữa dọc, chừa khoảng trống phía dưới */}
+            <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl items-center justify-center gap-10 px-4 sm:px-6 pb-10 lg:justify-between">
 
-                .tab-buttons {
-                    display: flex;
-                    border-bottom: 5px solid #eee;
-                }
-
-                .tab-btn {
-                    flex-grow: 1;
-                    padding: 15px 0;
-                    background: none;
-                    border: none;
-                    font-size: 18px;
-                    font-weight: 600;
-                    color: #666;
-                    cursor: pointer;
-                    transition: color 0.3s, border-bottom 0.3s;
-                }
-
-                .tab-btn.active {
-                    color: #C0392B;
-                    border-bottom: 5px solid #C0392B;
-                }
-
-                .tab-content {
-                    padding: 30px;
-                    display: none;
-                }
-
-                .tab-content.active {
-                    display: block;
-                }
-
-                .tab-content label {
-                    display: block;
-                    margin-top: 15px;
-                    margin-bottom: 5px;
-                    font-weight: 600;
-                    font-size: 14px;
-                }
-
-                .tab-content input[type="text"],
-                .tab-content input[type="email"],
-                .tab-content input[type="tel"],
-                .tab-content input[type="password"] {
-                    width: 100%;
-                    padding: 12px;
-                    border: 2px solid #ddd;
-                    border-radius: 5px;
-                    box-sizing: border-box;
-                    font-size: 16px;
-                }
-
-                .tab-content input:focus {
-                    border-color: #C0392B;
-                    outline: none;
-                }
-
-                .btn-primary.large-btn {
-                    width: 100%;
-                    padding: 12px;
-                    background-color: #C0392B;
-                    color: white;
-                    border: none;
-                    border-radius: 5px;
-                    cursor: pointer;
-                    font-size: 17px;
-                    font-weight: 700;
-                    margin-top: 25px;
-                    transition: background-color 0.3s;
-                }
-
-                .btn-primary.large-btn:hover {
-                    background-color: #A93226;
-                }
-
-                .forgot-password {
-                    background: none;
-                    border: none;
-                    color: #C0392B;
-                    float: right;
-                    margin-top: 10px;
-                    font-size: 14px;
-                    cursor: pointer;
-                }
-
-                .social-login-divider {
-                    text-align: center;
-                    margin: 30px 0;
-                    position: relative;
-                    color: #999;
-                    font-size: 14px;
-                }
-
-                .social-login-divider::before,
-                .social-login-divider::after {
-                    content: "";
-                    position: absolute;
-                    top: 50%;
-                    width: 35%;
-                    height: 1px;
-                    background: #eee;
-                }
-
-                .social-login-divider::before {
-                    left: 0;
-                }
-
-                .social-login-divider::after {
-                    right: 0;
-                }
-
-                .social-login-buttons {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 10px;
-                }
-
-                .social-or-divider {
-                    text-align: center;
-                    font-size: 11px;
-                    color: #aaa;
-                    text-transform: uppercase;
-                    letter-spacing: 1px;
-                    margin: 2px 0;
-                }
-
-                .social-btn {
-                    flex-grow: 1;
-                    padding: 12px;
-                    border: none;
-                    border-radius: 5px;
-                    font-size: 16px;
-                    cursor: pointer;
-                    font-weight: 600;
-                    transition: opacity 0.3s;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 8px;
-                }
-
-                .social-btn:hover {
-                    opacity: 0.9;
-                }
-
-                .social-btn.google {
-                    background-color: #db4437;
-                    color: white;
-                }
-
-                .social-btn.facebook {
-                    background-color: #1877f2;
-                    color: white;
-                }
-
-                .switch-link {
-                    text-align: center;
-                    margin-top: 20px;
-                    font-size: 15px;
-                }
-
-                .switch-link button {
-                    background: none;
-                    border: none;
-                    color: #C0392B;
-                    font-weight: 600;
-                    cursor: pointer;
-                    padding: 0;
-                }
-            `}</style>
-
-            <div className="auth-box">
-                <div className="tab-buttons">
-                    <button
-                        className={`tab-btn ${activeTab === 'login' ? 'active' : ''}`}
-                        onClick={() => switchTab('login')}
-                    >
-                        <i className="fas fa-sign-in-alt"></i> Đăng nhập
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'register' ? 'active' : ''}`}
-                        onClick={() => switchTab('register')}
-                    >
-                        <i className="fas fa-user-plus"></i> Đăng ký
-                    </button>
+                {/* Bên trái: chỉ hiện từ màn hình lớn */}
+                <div className="hidden lg:block max-w-lg text-white drop-shadow-lg">
+                    <h1 className="text-5xl font-bold leading-tight">NHÀ HÀNG HGH</h1>
+                    <p className="mt-4 text-2xl text-white/90">Hương vị cơm gia đình thuần túy</p>
                 </div>
 
-                <div style={{ padding: '0 30px' }}>
-                    {successMessage && <div className="mt-4"><SuccessMessage message={successMessage} /></div>}
-                    {error && <div className="mt-4"><ErrorMessage message={error} /></div>}
-                    {localError && <div className="mt-4"><ErrorMessage message={localError} /></div>}
-                </div>
-
-                {/* LOGIN TAB */}
-                <div className={`tab-content ${activeTab === 'login' ? 'active' : ''}`}>
-                    <form onSubmit={handleLoginSubmit}>
-                        <label>Tên người dùng / Email (*):</label>
-                        <input
-                            type="text"
-                            name="username"
-                            value={loginData.username}
-                            onChange={handleLoginChange}
-                            required
-                            placeholder="Nhập tên người dùng hoặc email"
-                        />
-
-                        <label>Mật khẩu (*):</label>
-                        <input
-                            type="password"
-                            name="password"
-                            value={loginData.password}
-                            onChange={handleLoginChange}
-                            required
-                            placeholder="Nhập mật khẩu"
-                        />
-
-                        <button
-                            type="button"
-                            className="forgot-password"
-                            onClick={() => window.location.href = '/forgot-password'}
-                        >
-                            Quên mật khẩu?
+                {/* Bên phải: tấm kính mờ chứa form */}
+                <div className="w-full max-w-[440px] rounded-2xl border border-white/20 bg-black/40 p-5 shadow-2xl backdrop-blur-md">
+                    <div className="mb-3 flex gap-1 rounded-xl bg-white/10 p-1">
+                        <button type="button" className={tabClass(activeTab === 'login')} onClick={() => switchTab('login')}>
+                            <i className="fas fa-sign-in-alt"></i> Đăng nhập
                         </button>
-
-                        <button type="submit" className="btn-primary large-btn" disabled={loading}>
-                            {loading ? 'Đang xử lý...' : 'Đăng nhập'}
-                        </button>
-                    </form>
-
-                    <div className="switch-link">
-                        Chưa có tài khoản? <button type="button" onClick={() => switchTab('register')}>Đăng ký ngay!</button>
-                    </div>
-
-                    <div className="social-login-divider">
-                        Hoặc đăng nhập với
-                    </div>
-
-                    <div className="social-login-buttons">
-                        <button
-                            type="button"
-                            className="social-btn facebook"
-                            onClick={() => { window.location.href = '/auth/facebook/redirect'; }}
-                        >
-                            <i className="fab fa-facebook-f"></i> Đăng nhập bằng Facebook
-                        </button>
-
-                        <div className="social-or-divider">or</div>
-
-                        <button
-                            type="button"
-                            className="social-btn google"
-                            onClick={() => { window.location.href = '/auth/google/redirect'; }}
-                        >
-                            <i className="fab fa-google"></i> Đăng nhập bằng Google
+                        <button type="button" className={tabClass(activeTab === 'register')} onClick={() => switchTab('register')}>
+                            <i className="fas fa-user-plus"></i> Đăng ký
                         </button>
                     </div>
-                </div>
 
-                {/* REGISTER TAB */}
-                <div className={`tab-content ${activeTab === 'register' ? 'active' : ''}`}>
-                    <form onSubmit={handleRegSubmit}>
-                        <label>Tên người dùng (*):</label>
-                        <input
-                            type="text"
-                            name="username"
-                            value={regData.username}
-                            onChange={handleRegChange}
-                            required
-                            maxLength="20"
-                            placeholder="Nhập tên người dùng (tối đa 20 ký tự)"
-                        />
+                    {(successMessage || error || localError) && (
+                        <div className="space-y-1">
+                            {successMessage && <SuccessMessage message={successMessage} />}
+                            {error && <ErrorMessage message={error} />}
+                            {localError && <ErrorMessage message={localError} />}
+                        </div>
+                    )}
 
-                        <label>Email (*):</label>
-                        <input
-                            type="email"
-                            name="email"
-                            value={regData.email}
-                            onChange={handleRegChange}
-                            required
-                            maxLength="50"
-                            placeholder="ví dụ: a@gmail.com (tối đa 50 ký tự)"
-                        />
+                    {activeTab === 'login' ? (
+                        <>
+                            <form onSubmit={handleLoginSubmit} className="space-y-2">
+                                <div>
+                                    <label className={labelClass}>Tên người dùng / Email (*):</label>
+                                    <input
+                                        type="text"
+                                        name="username"
+                                        value={loginData.username}
+                                        onChange={handleLoginChange}
+                                        required
+                                        placeholder="Nhập tên người dùng hoặc email"
+                                        className={loginInputClass}
+                                    />
+                                </div>
 
-                        <label>Số điện thoại (*):</label>
-                        <input
-                            type="text"
-                            name="phone"
-                            value={regData.phone}
-                            onChange={handleRegChange}
-                            required
-                            inputMode="numeric"
-                            maxLength="10"
-                            placeholder="Nhập số điện thoại (10 số)"
-                        />
+                                <div>
+                                    <label className={labelClass}>Mật khẩu (*):</label>
+                                    <input
+                                        type="password"
+                                        name="password"
+                                        value={loginData.password}
+                                        onChange={handleLoginChange}
+                                        required
+                                        placeholder="Nhập mật khẩu"
+                                        className={loginInputClass}
+                                    />
+                                </div>
 
-                        <label>Mật khẩu (*):</label>
-                        <input
-                            type="password"
-                            name="password"
-                            value={regData.password}
-                            onChange={handleRegChange}
-                            required
-                            placeholder="Tối thiểu 6 ký tự"
-                        />
+                                <div className="flex justify-end">
+                                    <button
+                                        type="button"
+                                        className="text-sm text-red-300 hover:text-red-200"
+                                        onClick={() => window.location.href = '/forgot-password'}
+                                    >
+                                        Quên mật khẩu?
+                                    </button>
+                                </div>
 
-                        <label>Xác nhận mật khẩu (*):</label>
-                        <input
-                            type="password"
-                            name="password_confirmation"
-                            value={regData.password_confirmation}
-                            onChange={handleRegChange}
-                            required
-                            placeholder="Nhập lại mật khẩu"
-                        />
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="h-11 w-full rounded-lg bg-red-600 font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {loading ? 'Đang xử lý...' : 'Đăng nhập'}
+                                </button>
+                            </form>
 
-                        <button type="submit" className="btn-primary large-btn" disabled={loading}>
-                            {loading ? 'Đang xử lý...' : 'Đăng ký'}
-                        </button>
-                    </form>
+                            <div className="mt-4 flex items-center gap-3 text-xs text-white/70">
+                                <span className="h-px flex-1 bg-white/25"></span>
+                                Hoặc đăng nhập với
+                                <span className="h-px flex-1 bg-white/25"></span>
+                            </div>
 
-                    <div className="switch-link">
-                        Đã có tài khoản? <button type="button" onClick={() => switchTab('login')}>Đăng nhập ngay!</button>
-                    </div>
+                            <div className="mt-3 flex justify-center gap-4">
+                                <button
+                                    type="button"
+                                    aria-label="Đăng nhập bằng Facebook"
+                                    title="Đăng nhập bằng Facebook"
+                                    onClick={() => { window.location.href = '/auth/facebook/redirect'; }}
+                                    className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1877f2] text-lg text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                >
+                                    <i className="fab fa-facebook-f"></i>
+                                </button>
+                                <button
+                                    type="button"
+                                    aria-label="Đăng nhập bằng Google"
+                                    title="Đăng nhập bằng Google"
+                                    onClick={() => { window.location.href = '/auth/google/redirect'; }}
+                                    className="flex h-11 w-11 items-center justify-center rounded-full bg-[#db4437] text-lg text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                >
+                                    <i className="fab fa-google"></i>
+                                </button>
+                            </div>
+
+                            <p className="mt-4 text-center text-sm text-white/80">
+                                Chưa có tài khoản?{' '}
+                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('register')}>
+                                    Đăng ký ngay!
+                                </button>
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <form onSubmit={handleRegSubmit} className="space-y-2">
+                                <div>
+                                    <label className={labelClass}>Tên người dùng (*):</label>
+                                    <input
+                                        type="text"
+                                        name="username"
+                                        value={regData.username}
+                                        onChange={handleRegChange}
+                                        required
+                                        maxLength="20"
+                                        placeholder="Nhập tên người dùng (tối đa 20 ký tự)"
+                                        className={regInputClass}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Email (*):</label>
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        value={regData.email}
+                                        onChange={handleRegChange}
+                                        required
+                                        maxLength="50"
+                                        placeholder="ví dụ: a@gmail.com (tối đa 50 ký tự)"
+                                        className={regInputClass}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Số điện thoại (*):</label>
+                                    <input
+                                        type="text"
+                                        name="phone"
+                                        value={regData.phone}
+                                        onChange={handleRegChange}
+                                        required
+                                        inputMode="numeric"
+                                        maxLength="10"
+                                        placeholder="Nhập số điện thoại (10 số)"
+                                        className={regInputClass}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Mật khẩu (*):</label>
+                                    <input
+                                        type="password"
+                                        name="password"
+                                        value={regData.password}
+                                        onChange={handleRegChange}
+                                        required
+                                        placeholder="Tối thiểu 6 ký tự"
+                                        className={regInputClass}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className={labelClass}>Xác nhận mật khẩu (*):</label>
+                                    <input
+                                        type="password"
+                                        name="password_confirmation"
+                                        value={regData.password_confirmation}
+                                        onChange={handleRegChange}
+                                        required
+                                        placeholder="Nhập lại mật khẩu"
+                                        className={regInputClass}
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="mt-1 h-10 w-full rounded-lg bg-red-600 font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {loading ? 'Đang xử lý...' : 'Đăng ký'}
+                                </button>
+                            </form>
+
+                            <p className="mt-3 text-center text-sm text-white/80">
+                                Đã có tài khoản?{' '}
+                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('login')}>
+                                    Đăng nhập ngay!
+                                </button>
+                            </p>
+                        </>
+                    )}
                 </div>
             </div>
-        </div>
+
+            <Modal
+                isOpen={!!lockedMessage}
+                title="Tài khoản bị khóa"
+                onClose={() => setLockedMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{lockedMessage}</p>
+            </Modal>
+        </>
     );
 };
 

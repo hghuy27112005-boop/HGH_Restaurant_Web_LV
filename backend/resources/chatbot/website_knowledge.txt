@@ -1,14 +1,14 @@
 === THÔNG TIN CHUNG ===
 - Trang web hoạt động 24/24.
 - Có 2 hình thức đặt: Đặt bàn ăn tại quán, Đặt ship giao tận nơi.
-- Mỗi hóa đơn có 1 mã hóa đơn riêng, dùng để tra cứu. Có thể tra cứu ở cả trang Đặt bàn và trang Đặt ship, nhưng tra cứu chi tiết đầy đủ nhất là ở trang Lịch sử giao dịch.
-- Trang Lịch sử giao dịch cho phép xem lại toàn bộ đơn hàng đã đặt, xem chi tiết và xuất hóa đơn PDF cho từng đơn.
+- Mỗi hóa đơn có 1 mã hóa đơn riêng, dùng để tra cứu. Có thể tra cứu ở cả mục Đặt bàn và mục Đặt ship (trong Giỏ hàng), nhưng tra cứu chi tiết đầy đủ nhất là ở mục Lịch sử giao dịch (trong trang cá nhân).
+- Mục Lịch sử giao dịch (trong trang cá nhân) cho phép xem lại toàn bộ đơn hàng đã đặt, xem chi tiết và xuất hóa đơn PDF cho từng đơn.
 - Sau khi thanh toán xong, người dùng có thể lưu lại mã hóa đơn để khi tìm lại hóa đơn cũ thì có thể tìm theo mã hóa đơn sẽ nhanh hơn.
 
 === ĐẶT BÀN ===
 - Chỉ nhận đặt bàn trong khung giờ nhà hàng mở cửa: 07:00 đến 22:00 mỗi ngày.
 - Đặt bàn tối đa 90 phút mỗi lượt.
-- Giờ đến phải sớm hơn thời điểm đặt ít nhất 60 phút.
+- Giờ đến phải sau thời điểm đặt ít nhất 60 phút.
 - Chỉ đặt được trong vòng 60 ngày tới.
 - Tối đa 3 bàn mỗi lần đặt, chia theo 3 loại: bàn nhỏ (≤5 người), vừa (≤10 người), lớn (≤15 người).
 - Sau khi đặt và thanh toán, có thể hủy đơn nếu thời điểm hủy sớm hơn giờ đặt (booking_date + start_time) ít nhất 60 phút. Không cần chờ admin duyệt mới được hủy.
@@ -17,11 +17,11 @@
 === ĐẶT SHIP ===
 - Không giới hạn khung giờ đặt, có thể đặt bất cứ lúc nào.
 - Nhập địa chỉ giao hàng, hệ thống tự tính khoảng cách, thời gian giao thực tế và phí ship. Thời gian giao không bao gồm 15 phút chuẩn bị hàng.
-- Sau khi thanh toán, đơn cần được duyệt để bắt đầu giao. Thời điểm duyệt sớm nhất là 15 phút sau khi thanh toán để nhà hàng chuẩn bị hàng.
-- Đơn không chọn giờ nhận sẽ được duyệt sau 15 phút kể từ khi thanh toán, nhưng không sớm hơn 07:30. Nếu không thể hoàn tất giao trước 22:00, đơn sẽ được lưu lại và tự động duyệt lúc 07:30 sáng hôm sau.
-- Với đơn có chọn giờ nhận, thời điểm bắt đầu được tính bằng giờ nhận mong muốn trừ thời gian giao thực tế và 15 phút chuẩn bị. Nếu giờ nhận đã qua hoặc chưa đủ thời gian chuẩn bị và giao hàng, hệ thống sẽ yêu cầu khách chọn giờ khác. Nếu chọn giờ sau 22:00, khách vẫn có thể đặt đơn và đơn sẽ được tự động duyệt lúc 07:30 sáng hôm sau.
+- Đơn ship tự động chuyển trạng thái theo thời gian: Chờ thanh toán → Đã lên lịch → Đang chuẩn bị → Đang giao hàng → Đã giao hàng. Nhà hàng không cần duyệt tay.
+- Đơn không chọn giờ nhận sẽ bắt đầu chuẩn bị (nấu) ngay sau khi thanh toán, mất khoảng 15 phút chuẩn bị rồi mới giao. Nếu không thể hoàn tất giao trước 22:00, đơn sẽ được giữ lại và bắt đầu chuẩn bị lúc 07:30 sáng hôm sau.
+- Với đơn có chọn giờ nhận (chỉ trong hôm nay), hệ thống bắt đầu chuẩn bị vào thời điểm: giờ nhận mong muốn trừ thời gian giao thực tế và 15 phút chuẩn bị. Giờ nhận phải cách thời điểm đặt ít nhất 60 phút cộng thời gian giao, nếu không hệ thống sẽ yêu cầu khách chọn giờ khác. Nếu chọn giờ sau 22:00, khách vẫn đặt được và đơn sẽ bắt đầu chuẩn bị lúc 07:30 sáng hôm sau.
 - Khi bắt đầu giao, thời điểm hàng tới = thời điểm bắt đầu giao + thời gian giao thực tế; 15 phút chuẩn bị không bị cộng lặp vào thời gian giao.
-- Có thể hủy đơn sau khi thanh toán nhưng trước khi nhà hàng chúng tôi duyệt bắt đầu giao.
+- Đơn ship chỉ hủy được khi đang ở trạng thái Chờ thanh toán hoặc Đã lên lịch, tức là trước khi nhà hàng bắt đầu chuẩn bị. Từ lúc Đang chuẩn bị trở đi không hủy được. Đơn không chọn giờ nhận sẽ bắt đầu chuẩn bị ngay sau khi thanh toán nên không thể hủy.
 - Thanh toán bằng VNPay hoặc bằng Điểm tích lũy.
 
 === ĐIỂM TÍCH LŨY & THÀNH VIÊN ===
@@ -48,15 +48,22 @@
 - Hoàn tiền qua VNPay: xử lý qua cổng thanh toán VNPay.
 
 === XEM MÓN ĂN (TẠI TRANG MENU) ===
-- Tại trang Menu, khách có thể xem các món ăn, bao gồm số lượng còn lại của món đó.
+- Tại trang Menu, khách có thể xem các món ăn. Mỗi lần thêm một món vào giỏ tối đa 50 phần, và mỗi nguyên liệu tối đa 50 phần cho một đơn (cộng dồn giữa các món trong giỏ), vượt quá hệ thống sẽ báo lỗi.
+- Nếu hệ thống báo kho đang bổ sung nguyên liệu thì khách chờ một chút rồi đặt lại.
 - Có thể lọc/xem món theo từng loại món, bao gồm cả bestseller.
 - Nếu khách hỏi về nguyên liệu, thành phần, công thức, cách nấu hoặc các bước chế biến của một món ăn cụ thể, hãy dẫn khách đến trang chi tiết món đó để xem đầy đủ thông tin.
 - Khi dẫn khách tới trang chi tiết món, nhắc: "Bạn có thể tự do bỏ bớt các nguyên liệu mà bạn không thích, sau đó xác nhận nguyên liệu để tạo 1 công thức mới."
 - Khi khách hàng đặt món thì cũng có thể đặt theo các công thức thay thế mà khách đã tạo.
 - Ngoài ra, các món bestseller cũng được hiển thị trực tiếp ngay tại trang chủ của nhà hàng (nhưng khi tư vấn thì ưu tiên dẫn khách tới trang thực đơn cho nhanh gọn)
 - Sau khi đã đặt và thanh toán đơn hàng, khách có thể đánh giá món ăn theo số sao và viết nhận xét góp ý cho từng món.
+- Trang đánh giá nằm trong trang cá nhân, mục "Đánh giá dịch vụ". Tại đây khách thấy các món đã đặt và thanh toán, chọn số sao, viết nhận xét rồi gửi, và có thể sửa lại đánh giá đã gửi. Có thể lọc theo "Chưa đánh giá", "Đã đánh giá" hoặc "Tất cả" và xem tiến độ số món đã đánh giá.
 - Món được khách đánh giá cao hoặc khen ngợi (từ 4 sao trở lên) sẽ được tự động thêm hoặc ưu tiên trong danh sách món yêu thích của khách.
 - Món bị khách đánh giá thấp hoặc chê (từ 3 sao trở xuống) sẽ bị loại khỏi danh sách đề xuất của chính khách hàng đó và không xuất hiện lại trong các món được đề xuất.
 - Trang Menu có mục lọc "Đề xuất cho bạn": khách có thể chọn vài món yêu thích, hệ thống sẽ gợi ý thêm các món khác có khẩu vị tương đồng.
 - Các món bị đánh giá thấp hoặc bị loại khỏi đề xuất sẽ không được dùng làm kết quả đề xuất, nên danh sách có thể có ít hơn 6 món nếu không còn đủ món phù hợp.
 - Khách có thể chọn lại danh sách món yêu thích bất cứ lúc nào ở mục "Đề xuất cho bạn".
+
+=== BỐ CỤC WEBSITE ===
+- Thanh điều hướng phía trên gồm: logo nhà hàng (bấm vào để về trang chủ), Menu, Giỏ hàng, và ảnh đại diện để vào trang cá nhân.
+- Giỏ hàng gồm 2 mục là Đặt bàn và Đặt ship, chuyển qua lại bằng nút ở góc trên bên phải.
+- Trang cá nhân gồm 3 mục: Thông tin, Lịch sử giao dịch, Đánh giá dịch vụ.

@@ -350,13 +350,13 @@ const MenuPage = () => {
         <>
         <style>{numberInputNoSpinnerCSS}</style>
         <div className="min-h-screen bg-gray-50">
-            <div className="max-w-7xl mx-auto px-4 py-8">
-                <h1 className="text-4xl font-bold mb-8 text-red-600">Thực đơn</h1>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+                <h1 className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8 text-red-600">Thực đơn</h1>
 
                 {error && <ErrorMessage message={error} />}
 
                 {/* Filters */}
-                <div className="bg-white rounded-lg shadow p-6 mb-8">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 mb-6 sm:mb-8">
                     <div className="grid md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-semibold mb-2">Tìm kiếm</label>
@@ -458,15 +458,15 @@ const MenuPage = () => {
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {favoriteDishes.map(dish => (
-                                                <div key={dish.dish_id} className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition flex flex-col h-full">
-                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={dish.dish_name} className="w-full h-48 object-cover cursor-pointer" />
+                                                <div key={dish.dish_id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
+                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={dish.dish_name} className="w-full h-44 sm:h-48 object-cover cursor-pointer" />
                                                     <div className="p-4 flex flex-col flex-grow">
-                                                        <h3 className="font-semibold text-lg mb-2">{dish.dish_name}</h3>
-                                                        <p className="text-red-600 font-bold text-xl mb-4">
+                                                        <h3 className="font-semibold text-lg text-gray-800 mb-1">{dish.dish_name}</h3>
+                                                        <p className="text-red-600 font-bold text-xl mb-3">
                                                             {Number(dish.price).toLocaleString('vi-VN')}đ
                                                         </p>
                                                         <div className="mb-3 flex items-center justify-end">
-                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="w-2/5 rounded border border-amber-600 py-2 px-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">
+                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">
                                                                 Xem chi tiết món
                                                             </button>
                                                         </div>
@@ -507,15 +507,15 @@ const MenuPage = () => {
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {recommendedDishes.map(dish => (
-                                                <div key={dish.dish_id} className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition flex flex-col h-full">
-                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={dish.dish_name} className="w-full h-48 object-cover cursor-pointer" />
+                                                <div key={dish.dish_id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
+                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={dish.dish_name} className="w-full h-44 sm:h-48 object-cover cursor-pointer" />
                                                     <div className="p-4 flex flex-col flex-grow">
-                                                        <h3 className="font-semibold text-lg mb-2">{dish.dish_name}</h3>
-                                                        <p className="text-red-600 font-bold text-xl mb-4">
+                                                        <h3 className="font-semibold text-lg text-gray-800 mb-1">{dish.dish_name}</h3>
+                                                        <p className="text-red-600 font-bold text-xl mb-3">
                                                             {Number(dish.price).toLocaleString('vi-VN')}đ
                                                         </p>
                                                         <div className="mb-3 flex items-center justify-end">
-                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="w-2/5 rounded border border-amber-600 py-2 px-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">
+                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">
                                                                 Xem chi tiết món
                                                             </button>
                                                         </div>
@@ -557,16 +557,16 @@ const MenuPage = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredDishes.map(dish => (
-                            <div key={dish.dish_id} className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition flex flex-col h-full">
+                            <div key={dish.dish_id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
                                 <img
                                     onClick={() => navigate(`/dish-details/${dish.dish_id}`)}
                                     src={dish.image_url}
                                     alt={dish.dish_name}
-                                    className="w-full h-48 object-cover cursor-pointer"
+                                    className="w-full h-44 sm:h-48 object-cover cursor-pointer"
                                 />
                                 <div className="p-4 flex flex-col flex-grow">
-                                    <h3 className="font-semibold text-lg mb-2">{dish.dish_name}</h3>
-                                    <p className="text-red-600 font-bold text-xl mb-4">
+                                    <h3 className="font-semibold text-lg text-gray-800 mb-1">{dish.dish_name}</h3>
+                                    <p className="text-red-600 font-bold text-xl mb-3">
                                         {Number(dish.price).toLocaleString('vi-VN')}đ
                                     </p>
                                     <div className="mb-3 flex items-center justify-between gap-3">
@@ -580,7 +580,7 @@ const MenuPage = () => {
                                                 Tối đa 50 phần
                                             </span>
                                         </div>
-                                        <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="w-2/5 shrink-0 rounded border border-amber-600 py-2 px-1.5 text-sm font-semibold text-amber-700 hover:bg-amber-50">
+                                        <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">
                                             Xem chi tiết món
                                         </button>
                                     </div>
@@ -646,7 +646,7 @@ const MenuPage = () => {
 
                     <div>
                         <label className="block font-semibold mb-1 text-gray-700">Nhập số lượng</label>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
                             <button
                                 type="button"
                                 onClick={handleDecrease10Qty}
@@ -672,7 +672,7 @@ const MenuPage = () => {
                                 type="number"
                                 value={quantity}
                                 onChange={(e) => setQuantity(e.target.value)}
-                                className="no-spinner flex-1 min-w-0 border border-gray-300 rounded px-3 py-2 text-center focus:outline-none focus:border-red-600"
+                                className="no-spinner order-first w-full sm:order-none sm:w-auto sm:flex-1 min-w-0 border border-gray-300 rounded px-3 py-2 text-center focus:outline-none focus:border-red-600"
                             />
                             <button
                                 type="button"

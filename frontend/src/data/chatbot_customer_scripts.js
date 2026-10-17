@@ -28,7 +28,7 @@ const chatbotCustomerScripts = {
         id: "view_history",
         label: "Xem lịch sử giao dịch",
         intent: "Khách muốn xem lại lịch sử các đơn hàng đã đặt, hoặc xem/xuất hóa đơn",
-        action: { type: "navigate", path: "/orders" },
+        action: { type: "navigate", path: "/profile/orders" },
       },
       { id: "cancel_order", label: "Hủy đơn hàng", intent: "Khách muốn hủy 1 đơn hàng đã đặt" },
       {
@@ -103,7 +103,7 @@ const chatbotCustomerScripts = {
         id: "order_food.booking.goto_table",
         label: "Rồi, tôi đã chọn món xong",
         intent: "Khách đã chọn món xong ở trang menu rồi",
-        action: { type: "navigate", path: "/bookings" },
+        action: { type: "navigate", path: "/cart/bookings" },
       },
     ],
   },
@@ -116,7 +116,7 @@ const chatbotCustomerScripts = {
         id: "order_food.booking.goto_table",
         label: "Tôi đã chọn món xong",
         intent: "Khách xác nhận đã hoàn tất chọn món ở trang menu",
-        action: { type: "navigate", path: "/bookings" },
+        action: { type: "navigate", path: "/cart/bookings" },
       },
     ],
   },
@@ -158,7 +158,7 @@ const chatbotCustomerScripts = {
         id: "order_food.delivery.goto_delivery",
         label: "Rồi, tôi đã chọn món xong",
         intent: "Khách đã chọn món xong ở trang menu rồi",
-        action: { type: "navigate", path: "/deliveries" },
+        action: { type: "navigate", path: "/cart/deliveries" },
       },
     ],
   },
@@ -171,7 +171,7 @@ const chatbotCustomerScripts = {
         id: "order_food.delivery.goto_delivery",
         label: "Tôi đã chọn món xong",
         intent: "Khách xác nhận đã hoàn tất chọn món ở trang menu",
-        action: { type: "navigate", path: "/deliveries" },
+        action: { type: "navigate", path: "/cart/deliveries" },
       },
     ],
   },
@@ -182,7 +182,7 @@ const chatbotCustomerScripts = {
     stepsList: [
       "Chỉnh sửa số lượng của mỗi món nếu cần",
       "Nhập địa chỉ giao hàng",
-      "Chọn giờ hàng tới nếu muốn (giờ sau 22:00 sẽ được chuyển sang duyệt lúc 07:30 sáng hôm sau)",
+      "Chọn giờ hàng tới nếu muốn (giờ sau 22:00 sẽ bắt đầu chuẩn bị lúc 07:30 sáng hôm sau)",
       "Xác nhận thông tin đặt hàng",
       "Thanh toán",
     ],
@@ -195,7 +195,7 @@ const chatbotCustomerScripts = {
   // ===================== CÁC CHỨC NĂNG KHÁC =====================
   view_history: {
     intentSummary:
-      "Đã đưa khách tới trang lịch sử giao dịch. Cho khách biết ở đây có thể xem lại tất cả đơn hàng đã đặt, đồng thời xem và xuất hóa đơn PDF cho từng đơn.",
+      "Đã đưa khách tới mục Lịch sử giao dịch trong trang cá nhân. Cho khách biết ở đây có thể xem lại tất cả đơn hàng đã đặt, đồng thời xem và xuất hóa đơn PDF cho từng đơn.",
     options: [
       { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
@@ -209,13 +209,13 @@ const chatbotCustomerScripts = {
         id: "cancel_order.booking",
         label: "Hủy đơn đặt bàn",
         intent: "Khách muốn hủy đơn đặt bàn tại quán",
-        action: { type: "navigate", path: "/bookings" },
+        action: { type: "navigate", path: "/cart/bookings" },
       },
       {
         id: "cancel_order.delivery",
         label: "Hủy đơn đặt ship",
         intent: "Khách muốn hủy đơn đặt ship đồ ăn",
-        action: { type: "navigate", path: "/deliveries" },
+        action: { type: "navigate", path: "/cart/deliveries" },
       },
       { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính, không hủy đơn nữa" },
     ],
@@ -239,7 +239,7 @@ const chatbotCustomerScripts = {
 
   view_profile: {
     intentSummary:
-      "Đã đưa khách tới trang cá nhân. Cho khách biết ngoài việc xem các thông tin cơ bản, khách cũng có thể xem điểm tích lũy và bậc thành viên hiện tại ngay ở trang này.",
+      "Đã đưa khách tới trang cá nhân. Cho khách biết ngoài việc xem các thông tin cơ bản, khách cũng có thể xem điểm tích lũy và bậc thành viên hiện tại ngay ở trang này, và chuyển sang các mục Lịch sử giao dịch, Đánh giá dịch vụ.",
     options: [
       { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],

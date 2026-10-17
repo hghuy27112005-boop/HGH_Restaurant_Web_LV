@@ -21,7 +21,7 @@ const IngredientLimitModal = ({
             title={hasOverLimit ? 'Vượt định lượng tối đa' : 'Kho đang bổ sung nguyên liệu'}
             onClose={onClose}
             cancelText="Đóng"
-            className="max-w-2xl max-h-[90vh] overflow-y-auto"
+            className="max-w-2xl"
         >
             <div className="space-y-4 text-sm text-gray-700">
                 {message && <p>{message}</p>}

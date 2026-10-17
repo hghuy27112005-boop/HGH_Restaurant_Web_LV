@@ -187,9 +187,10 @@ PROMPT;
         $routesText = <<<ROUTES
 - Trang chủ: /
 - Menu (xem/chọn món): /menu
-- Đặt bàn (đặt bàn, xem/hủy đơn đặt bàn): /bookings
-- Đặt ship (đặt ship, xem/hủy đơn đặt ship): /deliveries
-- Lịch sử giao dịch (xem lại các đơn hàng đã đặt, xem/xuất hóa đơn PDF): /orders
+- Đặt bàn (đặt bàn, xem/hủy đơn đặt bàn): /cart/bookings
+- Đặt ship (đặt ship, xem/hủy đơn đặt ship): /cart/deliveries
+- Lịch sử giao dịch (xem lại các đơn hàng đã đặt, xem/xuất hóa đơn PDF; nằm trong trang cá nhân): /profile/orders
+- Đánh giá dịch vụ (đánh giá món ăn đã đặt, sửa lại đánh giá đã gửi; nằm trong trang cá nhân): /profile/ratings
 - Trang cá nhân (xem/sửa thông tin cá nhân, đổi mật khẩu, xem điểm tích lũy, xem bậc thành viên): /profile
 ROUTES;
 

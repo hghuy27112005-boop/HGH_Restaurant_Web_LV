@@ -315,7 +315,7 @@ const PaymentResultPage = () => {
                         Về trang chủ
                     </Link>
                     <Link
-                        to={orderType === 'booking_table' ? '/bookings' : '/deliveries'}
+                        to={orderType === 'booking_table' ? '/cart/bookings' : '/cart/deliveries'}
                         className="px-5 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition"
                     >
                         Xem đơn hàng

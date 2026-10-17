@@ -2,18 +2,15 @@ import React from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext';
 
+// Sidebar chỉ dùng cho admin (khách và người dùng thường dùng Navbar ở trên cùng)
 const Sidebar = ({ collapsed, setCollapsed }) => {
-    const { user, isAuthenticated } = useAuthContext();
+    const { user } = useAuthContext();
     const navigate = useNavigate();
     const location = useLocation();
 
-    const isActive = (path) => {
-        if (path === '/menu' && location.pathname.startsWith('/menu')) return true;
-        if (path === '/dish-details' && location.pathname.startsWith('/dish-details')) return true;
-        return location.pathname === path;
-    };
+    const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
 
-    const adminLinks = [
+    const links = [
         { path: '/admin/dashboard', label: 'Dashboard' },
         { path: '/admin/revenue', label: 'Doanh thu' },
         { path: '/admin/reports', label: 'Báo cáo' },
@@ -22,38 +19,12 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
         { path: '/admin/stocks', label: 'Quản lý kho hàng' },
         { path: '/admin/menu', label: 'Quản lý thực đơn' },
         { path: '/admin/orders', label: 'Quản lý đơn hàng' },
-        { path: '/admin/deliveries', label: 'Quản lý giao hàng' },
     ];
 
-    const userLinks = [
-        { path: '/gioi-thieu', label: 'Giới Thiệu' },
-        { path: '/menu', label: 'Menu' },
-        { path: '/dish-details', label: 'Chi tiết món ăn' },
-        { path: '/orders', label: 'Lịch sử giao dịch' },
-        { path: '/ratings', label: 'Đánh giá dịch vụ' },
-        { path: '/bookings', label: 'Đặt bàn' },
-        { path: '/deliveries', label: 'Đặt ship' },
-    ];
-
-    const guestLinks = [
-        { path: '/gioi-thieu', label: 'Giới Thiệu' },
-        { path: '/menu', label: 'Menu' },
-    ];
-
-    let links = guestLinks;
-    if (isAuthenticated) {
-        links = user?.role === 'admin' ? adminLinks : userLinks;
-    }
-
-    const goTo = (path) => navigate(path);
-
-    const displayName = user?.username || user?.name || '';
     const roleLabel = user?.role
         ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
         : '';
-    const displayAvatarUrl =
-        user?.avatar_url || (user?.role === 'admin' ? '/hgh-apple.png' : null);
-    const initials = user?.username?.[0]?.toUpperCase() ?? '?';
+    const displayAvatarUrl = user?.avatar_url || '/hgh-apple.png';
 
     return (
         <aside
@@ -97,7 +68,7 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
                     {links.map((item) => (
                         <button
                             key={item.path}
-                            onClick={() => goTo(item.path)}
+                            onClick={() => navigate(item.path)}
                             className={`w-full text-left px-4 py-3 rounded-lg transition ${isActive(item.path)
                                 ? 'bg-red-600 text-white'
                                 : 'text-red-600 hover:bg-red-50'
@@ -115,59 +86,33 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
             {collapsed ? (
                 <div className="flex justify-center py-4">
                     <Link
-                        to={isAuthenticated ? '/profile' : '/login'}
-                        className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${isAuthenticated && displayAvatarUrl ? '' : 'bg-red-600'
-                            }`}
+                        to="/profile"
+                        className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
                     >
-                        {isAuthenticated && displayAvatarUrl ? (
+                        <img
+                            src={displayAvatarUrl}
+                            alt="Avatar"
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                        />
+                    </Link>
+                </div>
+            ) : (
+                <div className="p-3 border-t border-gray-200">
+                    <Link
+                        to="/profile"
+                        className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-red-50"
+                    >
+                        <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0">
                             <img
                                 src={displayAvatarUrl}
                                 alt="Avatar"
                                 className="w-full h-full object-cover"
                                 referrerPolicy="no-referrer"
                             />
-                        ) : isAuthenticated ? (
-                            <span className="text-white font-bold text-sm">{initials}</span>
-                        ) : (
-                            <i className="fas fa-user text-white"></i>
-                        )}
+                        </div>
+                        <span className="text-sm text-red-600">{roleLabel}</span>
                     </Link>
-                </div>
-            ) : (
-                <div className="p-3 border-t border-gray-200">
-                    {isAuthenticated ? (
-                        <Link
-                            to="/profile"
-                            className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-red-50"
-                        >
-                            <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${displayAvatarUrl ? '' : 'bg-red-600'
-                                }`}>
-                                {displayAvatarUrl ? (
-                                    <img
-                                        src={displayAvatarUrl}
-                                        alt="Avatar"
-                                        className="w-full h-full object-cover"
-                                        referrerPolicy="no-referrer"
-                                    />
-                                ) : (
-                                    <span className="text-white font-bold text-sm">{initials}</span>
-                                )}
-                            </div>
-                            <span className="text-sm text-red-600">
-                                {user?.role === 'admin' || user?.role === 'staff'
-                                    ? roleLabel
-                                    : displayName}
-                            </span>
-                        </Link>
-                    ) : (
-                        <Link
-                            to="/login"
-                            className="flex items-center gap-3 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
-                        >
-                            <i className="fas fa-user-circle"></i>
-                            <span className="text-sm">Đăng nhập/Đăng ký</span>
-                        </Link>
-                    )}
                 </div>
             )}
         </aside>

@@ -790,14 +790,13 @@ const DeliveriesPage = () => {
 );
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8">
-            <div className="max-w-6xl mx-auto px-4">
-                <h1 className="text-4xl font-bold mb-8 text-red-600">Giao hàng</h1>
+        <div className="bg-gray-50 pb-6 sm:pb-8">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6">
 
                 {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
                 {/* Upper Half: Đặt hàng cố định */}
-                <div className="bg-white rounded-lg shadow p-6 mb-8 border-t-4 border-red-600">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 border-t-4 border-t-red-600 p-4 sm:p-6 mb-8">
                     <h2 className="text-2xl font-bold mb-4">Góc đặt hàng (Ship)</h2>
 
                     {deliveryCart.length === 0 ? (
@@ -807,22 +806,22 @@ const DeliveriesPage = () => {
                             <button onClick={() => window.location.href = '/menu'} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">Đến Menu</button>
                         </div>
                     ) : (
-                        <div className="grid md:grid-cols-2 gap-8">
+                        <div className="grid md:grid-cols-2 gap-6 md:gap-8">
                             <div>
                                 <h3 className="font-semibold mb-2">Món đã chọn:</h3>
-                                <table className="w-full mb-4 text-sm bg-white border border-black border-t-4 border-t-red-600">
+                                <table className="w-full mb-4 text-sm bg-white border border-gray-300 border-t-4 border-t-red-600">
                                     <thead>
                                         <tr>
-                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">Món</th>
-                                            <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-black">Số lượng</th>
-                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-black">Thành tiền</th>
+                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">Món</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-gray-300">Số lượng</th>
+                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">Thành tiền</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {deliveryCart.map((item, idx) => (
                                             <tr key={idx}>
-                                                <td className="py-2 px-3 border border-black">{renderCartItemName(item)}</td>
-                                                <td className="py-2 px-3 border border-black">
+                                                <td className="py-2 px-3 border border-gray-300">{renderCartItemName(item)}</td>
+                                                <td className="py-2 px-3 border border-gray-300">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, -1)}
@@ -843,7 +842,7 @@ const DeliveriesPage = () => {
                                                         </button>
                                                     </div>
                                                 </td>
-                                                <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
+                                                <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
                                                     {(item.price * item.quantity).toLocaleString('vi-VN')}đ
                                                 </td>
                                             </tr>
@@ -851,8 +850,8 @@ const DeliveriesPage = () => {
                                     </tbody>
                                     <tfoot>
                                         <tr>
-                                            <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-black">Tổng cộng:</td>
-                                            <td className="py-2 px-3 text-right font-bold text-lg text-red-600 border border-black">
+                                            <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-gray-300">Tổng cộng:</td>
+                                            <td className="py-2 px-3 text-right font-bold text-lg text-red-600 border border-gray-300">
                                                 {cartTotal.toLocaleString('vi-VN')}đ
                                             </td>
                                         </tr>
@@ -936,7 +935,7 @@ const DeliveriesPage = () => {
                                             </div>
                                         )}
 
-                                        <div className="flex items-start justify-between gap-4 pt-3">
+                                        <div className="flex flex-wrap items-start justify-between gap-4 pt-3">
                                             <div>
                                                 <div className="flex items-center gap-3">
                                                     <span className="font-semibold text-gray-700">Thời điểm giao hàng mong muốn</span>
@@ -958,7 +957,7 @@ const DeliveriesPage = () => {
                                                         <span className="font-bold text-gray-500">:</span>
                                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="30" value={preferredTimeM} onChange={e => setPreferredTimeM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                                     </div>
-                                                    <p className="mt-1 text-xs text-gray-500 whitespace-nowrap">Sớm nhất: {getMinimumPreferredTime()} — muộn nhất: 22:00</p>
+                                                    <p className="mt-1 text-xs text-gray-500">Sớm nhất: {getMinimumPreferredTime()} — muộn nhất: 22:00</p>
                                                 </div>
                                             )}
                                         </div>
@@ -1066,15 +1065,15 @@ const DeliveriesPage = () => {
                 </div>
 
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                    <h2 className="text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
+                    <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                         <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
                         <input
                             type="text"
                             value={searchBillId}
                             onChange={e => setSearchBillId(e.target.value)}
                             placeholder="Nhập mã hóa đơn..."
-                            className="border rounded px-3 py-2 text-sm w-48 focus:outline-none focus:border-red-600"
+                            className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                         />
                         <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="delivery-created-date">
                             Ngày:
@@ -1084,7 +1083,7 @@ const DeliveriesPage = () => {
                             type="date"
                             value={createdDateFilter}
                             onChange={e => setCreatedDateFilter(e.target.value)}
-                            className="border rounded px-3 py-2 text-sm focus:outline-none focus:border-red-600"
+                            className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-auto focus:outline-none focus:border-red-600"
                         />
                     </div>
                 </div>
@@ -1097,7 +1096,7 @@ const DeliveriesPage = () => {
                         onMouseDown={handleTimeWarningBackdropMouseDown}
                         onMouseUp={handleTimeWarningBackdropMouseUp}
                     >
-                        <div className="bg-white rounded-lg w-full max-w-md overflow-hidden">
+                        <div className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto">
                             <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
                                 Thông báo
                             </div>
@@ -1138,7 +1137,7 @@ const DeliveriesPage = () => {
                         style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     >
                         <div
-                            className="bg-white rounded-lg w-full max-w-md overflow-hidden"
+                            className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto"
                             onClick={e => e.stopPropagation()}
                         >
                             <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
@@ -1278,7 +1277,7 @@ const DeliveriesPage = () => {
                 {/* Cancel Order Modal */}
                 {cancelModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                        <div className="bg-white rounded-lg w-full max-w-md overflow-hidden">
+                        <div className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto">
                             <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
                                 Hủy đơn hàng
                             </div>
@@ -1329,12 +1328,12 @@ const DeliveriesPage = () => {
                 </Modal>
 
                 {/* Filter Buttons */}
-                <div className="flex gap-2 mb-8 overflow-x-auto">
+                <div className="flex flex-wrap gap-2 mb-8">
                     {DELIVERY_STATUS_FILTERS.map(f => (
                         <button
                             key={f.id}
                             onClick={() => setFilter(f.id)}
-                            className={`px-4 py-2 rounded font-semibold whitespace-nowrap ${filter === f.id
+                            className={`px-3 sm:px-4 py-2 rounded text-sm sm:text-base font-semibold whitespace-nowrap ${filter === f.id
                                 ? 'bg-red-600 text-white'
                                 : 'bg-white border border-gray-300 text-gray-700 hover:border-red-600'
                                 }`}
@@ -1364,7 +1363,7 @@ const DeliveriesPage = () => {
                                 title={
                                     <div className="flex items-baseline flex-wrap">
                                         <span>{`Đơn hàng ${bill.order_stt || bill.order_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}</span>
-                                        <span className="ml-[2.5cm] text-sm font-normal text-gray-500">Mã hóa đơn: {bill.bill_id || '—'}</span>
+                                        <span className="sm:ml-[2.5cm] w-full sm:w-auto text-sm font-normal text-gray-500">Mã hóa đơn: {bill.bill_id || '—'}</span>
                                     </div>
                                 }
                             >
@@ -1441,7 +1440,7 @@ const DeliveriesPage = () => {
                                     </div>
                                 )}
 
-                                <div className="mt-4 flex justify-between items-center gap-4">
+                                <div className="mt-4 flex flex-wrap justify-between items-center gap-4">
                                     <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                                         <Badge variant={getStatusColor(bill)}>
                                             {getStatusLabel(bill)}
@@ -1452,7 +1451,7 @@ const DeliveriesPage = () => {
                                     </div>
 
                                     {bill.delivery?.delivery_status === 'shipping' && bill.delivery?.delivery_started_at && bill.delivery?.estimated_completion_at && (
-                                        <div className="flex-1">
+                                        <div className="flex-1 min-w-[12rem]">
                                             <ShippingProgressBar
                                                 startTime={bill.delivery.delivery_started_at}
                                                 endTime={bill.delivery.estimated_completion_at}

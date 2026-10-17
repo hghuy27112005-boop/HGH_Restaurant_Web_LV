@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { adminSaleOffAPI, extractListData } from '../../services/api';
-import { Loading, ErrorMessage, EmptyState } from '../../components/Shared';
+import { adminSaleOffAPI, extractListData, serverTimeAPI } from '../../services/api';
+import { TableLoading, EmptyState, Modal } from '../../components/Shared';
+import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
 
 const PERCENTAGE_OPTIONS = [10, 20, 30, 40, 50];
 
@@ -15,10 +16,30 @@ const emptyForm = {
     endM: '',
 };
 
+const STATUS_INFO = {
+    ongoing: { label: 'Đang diễn ra', badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
+    upcoming: { label: 'Sắp diễn ra', badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' },
+    ended: { label: 'Đã kết thúc', badge: 'bg-gray-200 text-gray-600', bar: 'bg-gray-400' },
+};
+
+const STATUS_ORDER = { ongoing: 0, upcoming: 1, ended: 2 };
+
+const STATUS_FILTERS = [
+    { id: 'all', label: 'Tất cả' },
+    { id: 'ongoing', label: 'Đang diễn ra' },
+    { id: 'upcoming', label: 'Sắp diễn ra' },
+    { id: 'ended', label: 'Đã kết thúc' },
+];
+
+// Chấp nhận cả "YYYY-MM-DD HH:mm:ss" lẫn ISO "...T...Z"
+const parseDate = (value) => new Date(String(value).includes('T') ? value : String(value).replace(' ', 'T'));
+
 const AdminSaleOffPage = () => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const [errorMessage, setErrorMessage] = useState(null);
+
+    const [statusFilter, setStatusFilter] = useState('all');
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState(null); // null = đang tạo mới
@@ -28,18 +49,35 @@ const AdminSaleOffPage = () => {
 
     const [deletingEvent, setDeletingEvent] = useState(null);
 
+    // Giờ server thật (offset giữa giờ server và giờ máy), làm mới trạng thái mỗi 30 giây
+    const [serverOffsetMs, setServerOffsetMs] = useState(0);
+    const [, setClock] = useState(Date.now());
+    const getServerNow = () => new Date(Date.now() + serverOffsetMs);
+
     useEffect(() => {
         fetchEvents();
+        (async () => {
+            try {
+                const res = await serverTimeAPI.get();
+                setServerOffsetMs(new Date(res.data.now).getTime() - Date.now());
+            } catch (err) {
+                console.warn('Không thể lấy giờ server, tạm dùng giờ máy:', err);
+            }
+        })();
+    }, []);
+
+    useEffect(() => {
+        const timer = setInterval(() => setClock(Date.now()), 30000);
+        return () => clearInterval(timer);
     }, []);
 
     const fetchEvents = async () => {
         try {
             setLoading(true);
-            setError(null);
-            const response = await adminSaleOffAPI.getAll();
+            const response = await adminSaleOffAPI.getAll({ per_page: 200 });
             setEvents(extractListData(response));
         } catch (err) {
-            setError(err.response?.data?.message || 'Không thể tải danh sách sự kiện giảm giá.');
+            setErrorMessage(err.response?.data?.message || 'Không thể tải danh sách sự kiện giảm giá.');
             console.error(err);
         } finally {
             setLoading(false);
@@ -48,9 +86,7 @@ const AdminSaleOffPage = () => {
 
     const splitDateTime = (isoString) => {
         if (!isoString) return { date: '', h: '', m: '' };
-        // Chấp nhận cả "YYYY-MM-DD HH:mm:ss" lẫn ISO "...T...Z"
-        const normalized = isoString.includes('T') ? isoString : isoString.replace(' ', 'T');
-        const d = new Date(normalized);
+        const d = parseDate(isoString);
         if (isNaN(d.getTime())) return { date: '', h: '', m: '' };
         const pad = (n) => String(n).padStart(2, '0');
         const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -139,6 +175,7 @@ const AdminSaleOffPage = () => {
                 await adminSaleOffAPI.create(payload);
             }
             await fetchEvents();
+            setSaving(false);
             closeForm();
         } catch (err) {
             setFormError(err.response?.data?.message || 'Lỗi lưu sự kiện giảm giá. Vui lòng thử lại.');
@@ -154,7 +191,7 @@ const AdminSaleOffPage = () => {
             setDeletingEvent(null);
             await fetchEvents();
         } catch (err) {
-            setError(err.response?.data?.message || 'Lỗi xóa sự kiện giảm giá.');
+            setErrorMessage(err.response?.data?.message || 'Lỗi xóa sự kiện giảm giá.');
             setDeletingEvent(null);
         }
     };
@@ -163,102 +200,134 @@ const AdminSaleOffPage = () => {
         const { date, h, m } = splitDateTime(isoString);
         if (!date) return '—';
         const [y, mo, d] = date.split('-');
-        return `${h}:${m} - ${d}/${mo}/${y}`;
+        return `${h}:${m} ${d}/${mo}/${y}`;
     };
 
-    const getEventStatus = (event) => {
-        const now = new Date();
-        const start = new Date(event.start_time.includes('T') ? event.start_time : event.start_time.replace(' ', 'T'));
-        const end = new Date(event.end_time.includes('T') ? event.end_time : event.end_time.replace(' ', 'T'));
-        if (now < start) return { label: 'Sắp diễn ra', color: 'bg-blue-100 text-blue-700' };
-        if (now > end) return { label: 'Đã kết thúc', color: 'bg-gray-200 text-gray-600' };
-        return { label: 'Đang diễn ra', color: 'bg-green-100 text-green-700' };
+    // Trạng thái theo giờ server
+    const getStatusKey = (event) => {
+        const now = getServerNow();
+        if (now < parseDate(event.start_time)) return 'upcoming';
+        if (now > parseDate(event.end_time)) return 'ended';
+        return 'ongoing';
     };
 
-    if (loading) return <Loading />;
+    const withStatus = events.map((event) => ({ event, statusKey: getStatusKey(event) }));
+
+    const counts = { all: withStatus.length, ongoing: 0, upcoming: 0, ended: 0 };
+    withStatus.forEach((item) => { counts[item.statusKey] += 1; });
+
+    // Đang diễn ra lên đầu; sắp diễn ra gần nhất trước; đã kết thúc mới nhất trước
+    const visible = withStatus
+        .filter((item) => statusFilter === 'all' || item.statusKey === statusFilter)
+        .sort((a, b) => {
+            if (a.statusKey !== b.statusKey) return STATUS_ORDER[a.statusKey] - STATUS_ORDER[b.statusKey];
+            const aStart = parseDate(a.event.start_time).getTime();
+            const bStart = parseDate(b.event.start_time).getTime();
+            return a.statusKey === 'upcoming' ? aStart - bStart : bStart - aStart;
+        });
+
+    const chipClass = (active) =>
+        `whitespace-nowrap px-3 py-2 rounded text-sm font-medium transition ${active
+            ? 'bg-red-600 text-white'
+            : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`;
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8">
-            <div className="max-w-6xl mx-auto px-4">
-                <div className="flex items-center justify-between mb-8">
-                    <h1 className="text-4xl font-bold text-red-600">Quản lý sự kiện</h1>
-                    <button
-                        onClick={openCreateForm}
-                        className="bg-red-600 text-white font-bold px-5 py-3 rounded hover:bg-red-700 transition flex items-center gap-2"
-                    >
-                        <i className="fas fa-plus"></i> Tạo sự kiện giảm giá
+        <AdminPageShell
+            title="Quản lý sự kiện"
+            actions={
+                <button
+                    onClick={openCreateForm}
+                    className="bg-red-600 text-white font-bold px-4 py-2 rounded hover:bg-red-700 transition flex items-center gap-2"
+                >
+                    <i className="fas fa-plus"></i> Tạo sự kiện giảm giá
+                </button>
+            }
+        >
+            <StatGrid>
+                <StatCard label="Tổng sự kiện" value={counts.all} icon="fa-tags" tone="red" />
+                <StatCard label="Đang diễn ra" value={counts.ongoing} icon="fa-play" tone="green" />
+                <StatCard label="Sắp diễn ra" value={counts.upcoming} icon="fa-hourglass-half" tone="blue" />
+                <StatCard label="Đã kết thúc" value={counts.ended} icon="fa-flag-checkered" tone="gray" />
+            </StatGrid>
+
+            {/* Lọc theo trạng thái */}
+            <div className="flex gap-2 overflow-x-auto mb-4">
+                {STATUS_FILTERS.map((f) => (
+                    <button key={f.id} onClick={() => setStatusFilter(f.id)} className={chipClass(statusFilter === f.id)}>
+                        {f.label}
                     </button>
-                </div>
+                ))}
+            </div>
 
-                {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
+            {loading ? (
+                <TableLoading />
+            ) : events.length === 0 ? (
+                <EmptyState
+                    icon="🏷️"
+                    title="Chưa có sự kiện giảm giá nào"
+                    description="Bấm 'Tạo sự kiện giảm giá' để bắt đầu."
+                />
+            ) : visible.length === 0 ? (
+                <EmptyState
+                    icon="🔍"
+                    title="Không có sự kiện phù hợp"
+                    description="Thử chọn trạng thái khác."
+                />
+            ) : (
+                <div className="space-y-3">
+                    {visible.map(({ event, statusKey }) => {
+                        const status = STATUS_INFO[statusKey];
+                        return (
+                            <div
+                                key={event.sale_off_id}
+                                className="bg-white rounded-xl shadow-sm overflow-hidden flex items-stretch border border-gray-100"
+                            >
+                                <div className={`w-1.5 flex-shrink-0 ${status.bar}`}></div>
 
-                {events.length === 0 ? (
-                    <EmptyState
-                        icon="🏷️"
-                        title="Chưa có sự kiện giảm giá nào"
-                        description="Bấm 'Tạo sự kiện giảm giá' để bắt đầu."
-                    />
-                ) : (
-                    <div className="space-y-4">
-                        {events.map((event) => {
-                            const status = getEventStatus(event);
-                            return (
-                                <div
-                                    key={event.sale_off_id}
-                                    className="bg-white rounded-lg shadow overflow-hidden flex items-stretch border border-gray-100"
-                                >
-                                    {/* Dải màu bên trái kiểu banner */}
-                                    <div className="w-2 bg-red-600 flex-shrink-0"></div>
-
-                                    <div className="flex-1 flex flex-wrap items-center justify-between gap-4 px-6 py-5">
-                                        {/* Bên trái: tên sự kiện */}
-                                        <div className="min-w-[180px]">
-                                            <span className={`inline-block mb-2 px-3 py-1 rounded-full text-xs font-bold ${status.color}`}>
+                                <div className="flex-1 flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                                    <div className="min-w-[200px] flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <h3 className="text-lg font-bold text-gray-800">{event.name}</h3>
+                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${status.badge}`}>
                                                 {status.label}
                                             </span>
-                                            <h3 className="text-xl font-bold text-gray-800">{event.name}</h3>
                                         </div>
+                                        <p className="mt-1 text-sm text-gray-500">
+                                            <i className="far fa-clock mr-1"></i>
+                                            {formatDateTime(event.start_time)} <span className="mx-1">→</span> {formatDateTime(event.end_time)}
+                                        </p>
+                                    </div>
 
-                                        {/* Bên phải: ngày giờ + % giảm */}
-                                        <div className="flex flex-wrap items-center gap-6 md:gap-10">
-                                            <div className="text-sm">
-                                                <p className="text-gray-500">Bắt đầu</p>
-                                                <p className="font-semibold text-gray-800">{formatDateTime(event.start_time)}</p>
-                                            </div>
-                                            <div className="text-sm">
-                                                <p className="text-gray-500">Kết thúc</p>
-                                                <p className="font-semibold text-gray-800">{formatDateTime(event.end_time)}</p>
-                                            </div>
-                                            <div className="text-sm text-center">
-                                                <p className="text-gray-500">Giảm giá</p>
-                                                <p className="font-bold text-red-600 text-lg">{Number(event.sale_off_percentage)}%</p>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                {status.label === 'Sắp diễn ra' && (
-                                                    <button
-                                                        onClick={() => openEditForm(event)}
-                                                        className="px-3 py-2 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
-                                                    >
-                                                        Sửa
-                                                    </button>
-                                                )}
-                                                {status.label !== 'Đang diễn ra' && (
-                                                    <button
-                                                        onClick={() => setDeletingEvent(event)}
-                                                        className="px-3 py-2 text-sm font-bold rounded bg-red-600 text-white hover:bg-red-700 transition"
-                                                    >
-                                                        Xóa
-                                                    </button>
-                                                )}
-                                            </div>
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-1.5 text-center">
+                                            <p className="text-xs text-gray-500 leading-none">Giảm giá</p>
+                                            <p className="font-bold text-red-600 text-xl leading-tight">{Number(event.sale_off_percentage)}%</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {statusKey === 'upcoming' && (
+                                                <button
+                                                    onClick={() => openEditForm(event)}
+                                                    className="px-3 py-1.5 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
+                                                >
+                                                    Sửa
+                                                </button>
+                                            )}
+                                            {statusKey !== 'ongoing' && (
+                                                <button
+                                                    onClick={() => setDeletingEvent(event)}
+                                                    className="px-3 py-1.5 text-sm font-bold rounded bg-red-600 text-white hover:bg-red-700 transition"
+                                                >
+                                                    Xóa
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
 
             {/* Form tạo/sửa sự kiện */}
             {isFormOpen && (
@@ -270,12 +339,6 @@ const AdminSaleOffPage = () => {
                             </h2>
                         </div>
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                            {formError && (
-                                <div className="text-sm font-semibold text-red-700 bg-red-100 border border-red-200 p-3 rounded">
-                                    {formError}
-                                </div>
-                            )}
-
                             <div>
                                 <label className="block text-sm font-semibold mb-1">Tên sự kiện</label>
                                 <input
@@ -397,7 +460,29 @@ const AdminSaleOffPage = () => {
                     </div>
                 </div>
             )}
-        </div>
+
+            {/* Modal lỗi trong form tạo/sửa */}
+            <Modal
+                isOpen={!!formError}
+                title="Thông báo"
+                showHeaderClose
+                showFooterClose={false}
+                onClose={() => setFormError(null)}
+            >
+                <p className="text-gray-700">{formError}</p>
+            </Modal>
+
+            {/* Modal lỗi chung (tải danh sách, xóa) */}
+            <Modal
+                isOpen={!!errorMessage}
+                title="Thông báo"
+                showHeaderClose
+                showFooterClose={false}
+                onClose={() => setErrorMessage(null)}
+            >
+                <p className="text-gray-700">{errorMessage}</p>
+            </Modal>
+        </AdminPageShell>
     );
 };
 

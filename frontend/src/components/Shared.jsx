@@ -6,6 +6,12 @@ export const Loading = () => (
     </div>
 );
 
+export const TableLoading = () => (
+    <div className="flex justify-center items-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
+    </div>
+);
+
 export const ErrorMessage = ({ message, onClose }) => {
     const [showDetails, setShowDetails] = useState(false);
     const isJsonLike = typeof message === 'string' && /[\{\[]/.test(message);
@@ -98,8 +104,8 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
             onMouseDown={handleBackdropMouseDown}
             onMouseUp={handleBackdropMouseUp}
         >
-            <div className={`bg-white rounded-lg shadow-lg p-6 w-full mx-4 ${className || 'max-w-md'}`}>
-                <h2 className={`-mx-6 -mt-6 mb-4 flex items-center justify-between gap-4 rounded-t-lg bg-red-600 px-6 py-4 text-xl font-bold ${titleClassName} text-white`}>
+            <div className={`bg-white rounded-lg shadow-lg p-6 w-full mx-4 flex flex-col max-h-[90dvh] ${className || 'max-w-md'}`}>
+                <h2 className={`-mx-6 -mt-6 mb-4 flex shrink-0 items-center justify-between gap-4 rounded-t-lg bg-red-600 px-6 py-4 text-xl font-bold ${titleClassName} text-white`}>
                     <span>{title}</span>
                     {showHeaderClose && (
                         <button type="button" onClick={onClose} aria-label="Đóng" className="text-2xl leading-none text-white hover:text-red-100">
@@ -107,8 +113,8 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                         </button>
                     )}
                 </h2>
-                <div className="mb-6">{children}</div>
-                <div className="flex gap-2 justify-end">
+                <div className="mb-6 min-h-0 flex-1 overflow-y-auto">{children}</div>
+                <div className="flex flex-wrap shrink-0 gap-2 justify-end">
                     {onSecondary && (
                         <button
                             onClick={onSecondary}
@@ -173,7 +179,7 @@ export const Button = ({ variant = 'primary', size = 'md', children, disabled, .
 };
 
 export const Card = ({ title, children, footer, className = '' }) => (
-    <div className={`bg-white rounded-lg shadow p-6 ${className}`}>
+    <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 ${className}`}>
         {title && <h3 className="text-lg font-semibold mb-4">{title}</h3>}
         {children}
         {footer && <div className="mt-4 pt-4 border-t">{footer}</div>}

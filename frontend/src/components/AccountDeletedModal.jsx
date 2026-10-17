@@ -3,21 +3,32 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext';
 
 const AccountDeletedModal = () => {
-    const { accountDeleted, logout } = useAuthContext();
+    const { accountDeleted, accountLocked, logout } = useAuthContext();
     const navigate = useNavigate();
+    const visible = accountDeleted || !!accountLocked;
 
     useEffect(() => {
-        if (!accountDeleted) return;
+        if (!visible) return;
 
         const timer = setTimeout(async () => {
             await logout();
             navigate('/login', { replace: true });
-        }, 3000);
+        }, 4000);
 
         return () => clearTimeout(timer);
-    }, [accountDeleted, logout, navigate]);
+    }, [visible, logout, navigate]);
 
-    if (!accountDeleted) return null;
+    if (!visible) return null;
+
+    const untilText = accountLocked?.until
+        ? new Date(accountLocked.until).toLocaleString('vi-VN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+        })
+        : '';
 
     return (
         <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}>
@@ -26,7 +37,15 @@ const AccountDeletedModal = () => {
                     <h2 className="text-xl font-bold">Thông báo</h2>
                 </div>
                 <div className="p-6">
-                    <p>Tài khoản của bạn đã bị xóa. Đang đăng xuất...</p>
+                    {accountLocked ? (
+                        <p>
+                            Tài khoản của bạn đã bị khóa đến <strong>{untilText}</strong>.
+                            <br />
+                            Lý do: vi phạm chính sách nội quy Nhà hàng. Đang đăng xuất...
+                        </p>
+                    ) : (
+                        <p>Tài khoản của bạn đã bị xóa. Đang đăng xuất...</p>
+                    )}
                 </div>
             </div>
         </div>
