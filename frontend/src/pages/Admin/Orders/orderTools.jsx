@@ -213,8 +213,8 @@ export const Pagination = ({ currentPage, lastPage, onChange }) => {
     );
 };
 
-// ===== Xuất CSV =====
-export const CSV_LIMIT = 2000; // quá số đơn này thì báo trước, không cho xuất
+// ===== Xuất Excel =====
+export const EXPORT_LIMIT = 2000; // quá số đơn này thì báo trước, không cho xuất
 
 // Lấy toàn bộ đơn khớp bộ lọc (lặp qua các trang, mỗi trang 200 đơn)
 export const fetchAllRows = async (fetchPage) => {
@@ -230,14 +230,50 @@ export const fetchAllRows = async (fetchPage) => {
     return rows;
 };
 
-// Tải file CSV, thêm BOM để Excel đọc đúng tiếng Việt
-export const downloadCsv = (filename, headers, rows) => {
-    const esc = (v) => {
-        const s = v == null ? '' : String(v);
-        return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const lines = [headers, ...rows].map((r) => r.map(esc).join(','));
-    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+// ===== Xuất XLSX =====
+// columns: [{ header, width, type }], type: 'text' | 'number' | 'money' | 'datetime'
+const XLSX_FORMATS = {
+    text: '@',
+    number: '0',
+    money: '#,##0 "VNĐ"',
+    datetime: 'dd/mm/yyyy hh:mm:ss',
+};
+
+const toXlsxValue = (value, type) => {
+    if (value == null || value === '') return null;
+    if (type === 'datetime') {
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return null;
+        // Excel không có múi giờ nên phải bù để hiển thị đúng giờ địa phương
+        return new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    }
+    if (type === 'number' || type === 'money') {
+        const n = Number(value);
+        return isNaN(n) ? null : n;
+    }
+    return String(value);
+};
+
+export const downloadXlsx = async (filename, sheetName, columns, rows) => {
+    const mod = await import('exceljs');
+    const ExcelJS = mod.default || mod;
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(sheetName);
+
+    sheet.columns = columns.map((c) => ({ header: c.header, width: c.width || 15 }));
+    sheet.getRow(1).font = { bold: true };
+
+    rows.forEach((r) => {
+        const row = sheet.addRow(r.map((v, i) => toXlsxValue(v, columns[i].type)));
+        columns.forEach((c, i) => {
+            row.getCell(i + 1).numFmt = XLSX_FORMATS[c.type] || '@';
+        });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

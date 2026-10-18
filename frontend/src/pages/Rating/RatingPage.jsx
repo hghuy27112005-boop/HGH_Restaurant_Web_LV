@@ -19,23 +19,27 @@ const getTodayDateKey = () => {
 };
 
 const StarPicker = ({ value, onChange }) => {
+    const [hoverValue, setHoverValue] = useState(0);
+    const displayValue = hoverValue || value; // rê chuột thì xem trước, không thì dùng giá trị đã chọn
+
     return (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <div className="flex gap-1">
+            <div className="flex gap-1" onMouseLeave={() => setHoverValue(0)}>
                 {[1, 2, 3, 4, 5].map((star) => (
                     <button
                         key={star}
                         type="button"
                         onClick={() => onChange(star)}
-                        className={`text-3xl leading-none transition ${star <= value ? 'text-yellow-400' : 'text-gray-300'} hover:scale-110`}
+                        onMouseEnter={() => setHoverValue(star)}
+                        className={`text-3xl leading-none transition ${star <= displayValue ? 'text-yellow-400' : 'text-gray-300'} hover:scale-110`}
                         aria-label={`${star} sao`}
                     >
                         ★
                     </button>
                 ))}
             </div>
-            <span className={`text-sm font-semibold ${value ? 'text-gray-700' : 'text-gray-400'}`}>
-                {value ? STAR_LABELS[value] : 'Chạm vào sao để chọn'}
+            <span className={`text-sm font-semibold ${displayValue ? 'text-gray-700' : 'text-gray-400'}`}>
+                {displayValue ? STAR_LABELS[displayValue] : 'Bấm vào sao để đánh giá'}
             </span>
         </div>
     );

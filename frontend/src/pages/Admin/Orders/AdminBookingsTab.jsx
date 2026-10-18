@@ -4,7 +4,7 @@ import { TableLoading, Card, Badge, Modal } from '../../../components/Shared';
 import { StatGrid, StatCard } from '../../../components/AdminUI';
 import {
     DateFilter, Pagination, todayDateFilter, emptyDateFilter, dateFilterToParams,
-    CSV_LIMIT, fetchAllRows, downloadCsv,
+    EXPORT_LIMIT, fetchAllRows, downloadXlsx,
 } from './orderTools';
 
 const BOOKING_STATUS = {
@@ -162,16 +162,29 @@ const AdminBookingsTab = () => {
 
     const handleExport = async () => {
         if (exporting) return;
-        if ((pagination.total || 0) > CSV_LIMIT) {
-            setErrorMessage(`Có ${pagination.total} đơn khớp bộ lọc, vượt giới hạn xuất ${CSV_LIMIT} đơn. Vui lòng thu hẹp bộ lọc (ví dụ chọn ít ngày hơn) rồi xuất lại.`);
+        if ((pagination.total || 0) > EXPORT_LIMIT) {
+            setErrorMessage(`Có ${pagination.total} đơn khớp bộ lọc, vượt giới hạn xuất ${EXPORT_LIMIT} đơn. Vui lòng thu hẹp bộ lọc (ví dụ chọn ít ngày hơn) rồi xuất lại.`);
             return;
         }
         try {
             setExporting(true);
             const rows = await fetchAllRows((p, per) => adminAPI.bookings.getAll(listParams(p, per)));
-            downloadCsv(
-                'don-dat-ban.csv',
-                ['Mã hóa đơn', 'ID người dùng', 'Tên người dùng', 'Số điện thoại', 'Bàn', 'Ngày khách đến', 'Giờ', 'Trạng thái', 'Phương thức', 'Tổng tiền', 'Ngày tạo'],
+            await downloadXlsx(
+                'don-dat-ban.xlsx',
+                'Đặt bàn',
+                [
+                    { header: 'Mã hóa đơn', width: 16, type: 'text' },
+                    { header: 'ID người dùng', width: 14, type: 'number' },
+                    { header: 'Tên người dùng', width: 18, type: 'text' },
+                    { header: 'Số điện thoại', width: 15, type: 'text' },
+                    { header: 'Bàn', width: 12, type: 'text' },
+                    { header: 'Ngày khách đến', width: 16, type: 'text' },
+                    { header: 'Giờ', width: 15, type: 'text' },
+                    { header: 'Trạng thái', width: 16, type: 'text' },
+                    { header: 'Phương thức', width: 14, type: 'text' },
+                    { header: 'Tổng tiền', width: 16, type: 'money' },
+                    { header: 'Ngày tạo', width: 21, type: 'datetime' },
+                ],
                 rows.map((b) => [
                     b.bill?.bill_id,
                     b.user_id,
@@ -183,11 +196,11 @@ const AdminBookingsTab = () => {
                     BOOKING_STATUS[b.booking_status]?.label || b.booking_status,
                     methodLabel(b.bill?.payment_method),
                     b.bill?.total_price,
-                    formatDateTime(b.created_at),
+                    b.created_at,
                 ]),
             );
         } catch (err) {
-            setErrorMessage(err.response?.data?.message || 'Xuất CSV thất bại. Vui lòng thử lại.');
+            setErrorMessage(err.response?.data?.message || 'Xuất Excel thất bại. Vui lòng thử lại.');
         } finally {
             setExporting(false);
         }
@@ -291,7 +304,7 @@ const AdminBookingsTab = () => {
                     disabled={exporting}
                     className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
                 >
-                    {exporting ? 'Đang xuất...' : 'Xuất CSV'}
+                    {exporting ? 'Đang xuất...' : 'Xuất Excel'}
                 </button>
             </div>
 
