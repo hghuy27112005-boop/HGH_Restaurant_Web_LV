@@ -94,7 +94,8 @@ const DeliveriesPage = () => {
     const [paymentModalError, setPaymentModalError] = useState(null); // lỗi hiện trong modal thanh toán
     const [closingPayment, setClosingPayment] = useState(false); // đang xóa đơn khi đóng modal thanh toán
     const [pointsErrorMessage, setPointsErrorMessage] = useState(null); // lỗi thanh toán bằng điểm (hiện trong modal, không tự ẩn)
-    const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit, shortage } = hiện modal lỗi nguyên liệu
+    const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit } = hiện modal lỗi vượt 50 phần
+    const [stockError, setStockError] = useState(null); // null = ẩn, { message, status, suggestions } = lỗi kho lúc thanh toán
     const [searchBillId, setSearchBillId] = useState('');
     const [createdDateFilter, setCreatedDateFilter] = useState(getTodayDateKey);
 
@@ -476,11 +477,10 @@ const DeliveriesPage = () => {
             setCheckoutStage('payment');
         } catch (err) {
             const data = err.response?.data;
-            if (err.response?.status === 422 && (data?.over_limit || data?.exceeded)) {
+            if (err.response?.status === 422 && data?.over_limit) {
                 setIngredientError({
                     message: data.message,
                     overLimit: data.over_limit || [],
-                    shortage: data.exceeded || [],
                 });
             } else {
                 showError(err.response?.data?.message || 'Lỗi tạo đơn hàng');
@@ -569,7 +569,12 @@ const DeliveriesPage = () => {
             window.location.href = vnpayRes.data.payment_url;
 
         } catch (err) {
-            setPaymentModalError(err.response?.data?.message || 'Lỗi đặt hàng');
+            const data = err.response?.data;
+            if (err.response?.status === 422 && data?.stock_status) {
+                setStockError({ message: data.message, status: data.stock_status, suggestions: data.suggestions || [] });
+            } else {
+                setPaymentModalError(data?.message || 'Lỗi đặt hàng');
+            }
             setPayingWith(null);
         }
     };
@@ -612,7 +617,12 @@ const DeliveriesPage = () => {
             if (fetchUser) fetchUser(); // update user points
             window.location.href = `/payment-result?status=success&code=00&order_type=delivery&bill_id=${billId}`;
         } catch (err) {
-            setPointsErrorMessage(err.response?.data?.message || err.message || 'Không thể thanh toán bằng điểm. Vui lòng thử lại.');
+            const data = err.response?.data;
+            if (err.response?.status === 422 && data?.stock_status) {
+                setStockError({ message: data.message, status: data.stock_status, suggestions: data.suggestions || [] });
+            } else {
+                setPointsErrorMessage(data?.message || err.message || 'Không thể thanh toán bằng điểm. Vui lòng thử lại.');
+            }
             setPointsModalType(null);
             setPayingWith(null);
         }
@@ -1477,13 +1487,39 @@ const DeliveriesPage = () => {
                 )}
             </div>
 
+            {/* Lỗi kho lúc thanh toán: chờ refill hoặc cần giảm số lượng */}
+            <Modal
+                isOpen={!!stockError}
+                title="Không đủ nguyên liệu"
+                onClose={() => setStockError(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{stockError?.message}</p>
+                {stockError?.status === 'insufficient' && (
+                    <>
+                        {stockError.suggestions.length > 0 && (
+                            <ul className="mt-3 list-disc pl-5 text-sm text-gray-700 space-y-1">
+                                {stockError.suggestions.map((s, i) => (
+                                    <li key={i}>
+                                        <span className="font-semibold">{s.dish_name}</span>:{' '}
+                                        {s.max_quantity > 0 ? `tối đa ${s.max_quantity} phần` : 'hiện đã hết'}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        <p className="mt-3 text-sm text-gray-500">
+                            Hãy bấm "Quay lại sửa thông tin" để giảm số lượng món rồi đặt lại.
+                        </p>
+                    </>
+                )}
+            </Modal>
+
             {/* Ingredient Error Modal */}
             <IngredientLimitModal
                 isOpen={ingredientError !== null}
                 onClose={() => setIngredientError(null)}
                 message={ingredientError?.message}
                 overLimit={ingredientError?.overLimit}
-                shortage={ingredientError?.shortage}
                 formatIngredient={translateIngredients}
             />
         </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { adminSaleOffAPI, extractListData, serverTimeAPI } from '../../services/api';
 import { TableLoading, EmptyState, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
@@ -34,12 +34,117 @@ const STATUS_FILTERS = [
 // Chấp nhận cả "YYYY-MM-DD HH:mm:ss" lẫn ISO "...T...Z"
 const parseDate = (value) => new Date(String(value).includes('T') ? value : String(value).replace(' ', 'T'));
 
+// Sự kiện có giao với tháng key ('MM/YYYY') hay không (sự kiện kéo qua nhiều tháng thì hiện ở mọi tháng nó đi qua)
+const overlapsMonth = (event, key) => {
+    const [m, y] = key.split('/').map(Number);
+    const monthStart = new Date(y, m - 1, 1);
+    const nextMonthStart = new Date(y, m, 1);
+    return parseDate(event.start_time) < nextMonthStart && parseDate(event.end_time) >= monthStart;
+};
+
+// Bộ lọc tháng (chỉ cho chọn từ minYear tới maxYear). value: '' hoặc 'MM/YYYY'
+const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
+    const [open, setOpen] = useState(false);
+    const [viewYear, setViewYear] = useState(maxYear);
+    const ref = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const toggleOpen = () => {
+        if (!open) setViewYear(value ? Number(value.split('/')[1]) : maxYear);
+        setOpen((v) => !v);
+    };
+
+    const pickMonth = (m) => {
+        const key = `${String(m + 1).padStart(2, '0')}/${viewYear}`;
+        onChange(value === key ? '' : key);
+    };
+
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                type="button"
+                onClick={toggleOpen}
+                className="flex items-center gap-2 border border-gray-300 rounded px-3 py-2 bg-white text-sm hover:border-red-600"
+            >
+                <i className="far fa-calendar text-red-600"></i>
+                <span className="text-gray-500">Thời gian:</span>
+                <span className="font-semibold text-gray-800">{value ? `Tháng ${value}` : 'Tất cả'}</span>
+            </button>
+
+            {open && (
+                <div className="absolute left-0 top-full mt-2 z-30 w-72 bg-white border border-gray-200 rounded-lg shadow-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <button
+                            type="button"
+                            onClick={() => setViewYear((y) => y - 1)}
+                            disabled={viewYear <= minYear}
+                            className="w-8 h-8 rounded hover:bg-gray-100 font-bold disabled:opacity-30 disabled:hover:bg-transparent"
+                        >
+                            ‹
+                        </button>
+                        <span className="font-semibold text-gray-800">Năm {viewYear}</span>
+                        <button
+                            type="button"
+                            onClick={() => setViewYear((y) => y + 1)}
+                            disabled={viewYear >= maxYear}
+                            className="w-8 h-8 rounded hover:bg-gray-100 font-bold disabled:opacity-30 disabled:hover:bg-transparent"
+                        >
+                            ›
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                        {Array.from({ length: 12 }, (_, m) => {
+                            const selected = value === `${String(m + 1).padStart(2, '0')}/${viewYear}`;
+                            return (
+                                <button
+                                    key={m}
+                                    type="button"
+                                    onClick={() => pickMonth(m)}
+                                    className={`py-2 rounded text-sm ${selected ? 'bg-red-600 text-white font-bold' : 'hover:bg-red-50 text-gray-700 border border-gray-200'}`}
+                                >
+                                    Tháng {m + 1}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className="flex justify-between items-center mt-3 pt-3 border-t text-sm">
+                        <button
+                            type="button"
+                            onClick={() => onChange('')}
+                            className="text-gray-500 hover:text-red-600 font-semibold"
+                        >
+                            Xóa chọn
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setOpen(false)}
+                            className="px-3 py-1 rounded bg-red-600 text-white font-semibold hover:bg-red-700"
+                        >
+                            Xong
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const AdminSaleOffPage = () => {
     const [events, setEvents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState(null);
 
     const [statusFilter, setStatusFilter] = useState('all');
+    const [monthFilter, setMonthFilter] = useState(''); // '' = tất cả, hoặc 'MM/YYYY'
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState(null); // null = đang tạo mới
@@ -211,7 +316,10 @@ const AdminSaleOffPage = () => {
         return 'ongoing';
     };
 
-    const withStatus = events.map((event) => ({ event, statusKey: getStatusKey(event) }));
+    // Lọc theo tháng trước, các thẻ thống kê và bộ lọc trạng thái đều tính trên kết quả đã lọc tháng
+    const withStatus = events
+        .filter((event) => !monthFilter || overlapsMonth(event, monthFilter))
+        .map((event) => ({ event, statusKey: getStatusKey(event) }));
 
     const counts = { all: withStatus.length, ongoing: 0, upcoming: 0, ended: 0 };
     withStatus.forEach((item) => { counts[item.statusKey] += 1; });
@@ -250,8 +358,14 @@ const AdminSaleOffPage = () => {
                 <StatCard label="Đã kết thúc" value={counts.ended} icon="fa-flag-checkered" tone="gray" />
             </StatGrid>
 
-            {/* Lọc theo trạng thái */}
-            <div className="flex gap-2 overflow-x-auto mb-4">
+            {/* Lọc theo tháng + trạng thái (không dùng overflow-x-auto vì sẽ cắt mất bảng chọn tháng) */}
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+                <MonthFilter
+                    value={monthFilter}
+                    onChange={setMonthFilter}
+                    minYear={getServerNow().getFullYear() - 1}
+                    maxYear={getServerNow().getFullYear()}
+                />
                 {STATUS_FILTERS.map((f) => (
                     <button key={f.id} onClick={() => setStatusFilter(f.id)} className={chipClass(statusFilter === f.id)}>
                         {f.label}
@@ -271,7 +385,7 @@ const AdminSaleOffPage = () => {
                 <EmptyState
                     icon="🔍"
                     title="Không có sự kiện phù hợp"
-                    description="Thử chọn trạng thái khác."
+                    description="Thử đổi tháng hoặc trạng thái khác."
                 />
             ) : (
                 <div className="space-y-3">

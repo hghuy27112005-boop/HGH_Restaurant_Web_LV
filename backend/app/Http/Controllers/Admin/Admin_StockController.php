@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Dish;
 use App\Models\IngredientStock;
 use App\Models\IngredientStockTransaction;
+use App\Models\IngredientReservation;
+use App\Models\Stock;
 use Illuminate\Http\Request;
 
 class Admin_StockController extends Controller
@@ -31,6 +33,17 @@ class Admin_StockController extends Controller
         $stocks = collect($names)->map(function ($name) use ($date) {
             return IngredientStock::getOrCreateForDate($name, $date);
         })->values();
+
+        $reservedByIngredient = IngredientReservation::where('stock_date', $date)
+            ->selectRaw('ingredient_id, SUM(quantity) as total')
+            ->groupBy('ingredient_id')
+            ->pluck('total', 'ingredient_id');
+
+        $stocks->each(function ($stock) use ($reservedByIngredient) {
+            $reserved = (int) ($reservedByIngredient[$stock->ingredient_id] ?? 0);
+            $stock->setAttribute('reserved', $reserved);
+            $stock->setAttribute('reserve_fund', max(0, Stock::DAILY_CAP - (int) $stock->quantity_start - $reserved));
+        });
 
         return response()->json([
             'data' => $stocks,

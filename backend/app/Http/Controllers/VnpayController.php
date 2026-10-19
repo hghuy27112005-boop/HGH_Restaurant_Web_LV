@@ -55,6 +55,12 @@ class VnpayController extends Controller
             }
         }
 
+        // Trừ nháp kho trước khi tạo link VNPay: thiếu thì báo khách, chưa thu tiền.
+        $stockCheck = \App\Models\Stock::checkOrder($order);
+        if ($stockCheck) {
+            return response()->json(\App\Models\Stock::shortagePayload($stockCheck), 422);
+        }
+
         // Luôn tự xác thực sự kiện giảm giá ở server, không tin trực tiếp
         // giá trị use_sale_off từ client.
         $saleOffPercentage = null;
@@ -579,6 +585,8 @@ class VnpayController extends Controller
                 ]);
             }
 
+            \App\Models\Stock::commitAtPayment($order);
+
             $bill->payment_method = 'vnpay';
             $bill->save();
 
@@ -607,6 +615,13 @@ class VnpayController extends Controller
 
             DB::commit();
             return true;
+        } catch (\App\Exceptions\StockUnavailableException $e) {
+            DB::rollBack();
+            Log::critical('VNPay đã thu tiền nhưng kho không còn đủ, cần hoàn tiền thủ công', [
+                'bill_id' => $billId,
+                'order_id' => $order->order_id,
+            ]);
+            return false;
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error('VNPay payment update failed', [

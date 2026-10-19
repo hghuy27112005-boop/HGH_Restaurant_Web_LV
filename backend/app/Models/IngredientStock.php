@@ -11,6 +11,7 @@ class IngredientStock extends Model
     protected $primaryKey = 'ingredient_stock_id';
 
     protected $fillable = [
+        'ingredient_id',
         'ingredient_key',
         'ingredient_name',
         'stock_date',
@@ -25,6 +26,11 @@ class IngredientStock extends Model
         'quantity_left' => 'integer',
         'refill_count' => 'integer',
     ];
+
+    public function ingredient()
+    {
+        return $this->belongsTo(Ingredient::class, 'ingredient_id', 'ingredient_id');
+    }
 
     public function transactions()
     {
@@ -79,9 +85,15 @@ class IngredientStock extends Model
     {
         $key = self::keyFor($name);
 
+        $ingredient = Ingredient::firstOrCreate(
+            ['ingredient_key' => $key],
+            ['ingredient_name' => trim($name)]
+        );
+
         return self::firstOrCreate(
-            ['ingredient_key' => $key, 'stock_date' => $date],
+            ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date],
             [
+                'ingredient_key' => $key,
                 'ingredient_name' => trim($name),
                 'quantity_start' => 50,
                 'quantity_left' => 50,

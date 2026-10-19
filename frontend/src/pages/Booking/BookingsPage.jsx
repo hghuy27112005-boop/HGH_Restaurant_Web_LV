@@ -58,7 +58,8 @@ const BookingsPage = () => {
     const [pointsNeeded, setPointsNeeded] = useState(0);
     const [currentPoints, setCurrentPoints] = useState(0);
     const [pointsErrorMessage, setPointsErrorMessage] = useState(null); // lỗi thanh toán bằng điểm (hiện trong modal, không tự ẩn)
-    const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit, shortage } = hiện modal lỗi nguyên liệu
+    const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit } = hiện modal lỗi vượt 50 phần
+    const [stockError, setStockError] = useState(null); // null = ẩn, { message, status, suggestions } = lỗi kho lúc thanh toán
     const [searchBillId, setSearchBillId] = useState('');
     const [arrivalDateFilter, setArrivalDateFilter] = useState(getTodayDateKey);
     const [filter, setFilter] = useState('all');
@@ -452,14 +453,13 @@ const BookingsPage = () => {
             setBookingConfirmModalStep(2);
         } catch (err) {
             const data = err.response?.data;
-            if (err.response?.status === 422 && (data?.over_limit || data?.exceeded)) {
+            if (err.response?.status === 422 && data?.over_limit) {
                 // Lỗi nguyên liệu: đóng modal xác nhận, hiện modal chi tiết.
                 // Đơn chưa được tạo (backend chặn trước khi tạo) nên không cần dọn gì.
                 handleCloseBookingConfirmModal();
                 setIngredientError({
                     message: data.message,
                     overLimit: data.over_limit || [],
-                    shortage: data.exceeded || [],
                 });
                 return;
             }
@@ -543,7 +543,12 @@ const BookingsPage = () => {
             });
             window.location.href = vnpayRes.data.payment_url;
         } catch (err) {
-            setBookingConfirmError(err.response?.data?.message || 'Lỗi khởi tạo VNPay.');
+            const data = err.response?.data;
+            if (err.response?.status === 422 && data?.stock_status) {
+                setStockError({ message: data.message, status: data.stock_status, suggestions: data.suggestions || [] });
+            } else {
+                setBookingConfirmError(data?.message || 'Lỗi khởi tạo VNPay.');
+            }
             setPayingWith(null);
         }
     };
@@ -706,7 +711,12 @@ const BookingsPage = () => {
             if (fetchUser) fetchUser(); // update user points
             window.location.href = `/payment-result?status=success&code=00&order_type=booking_table&bill_id=${billId}`;
         } catch (err) {
-            setPointsErrorMessage(err.response?.data?.message || err.message || 'Không thể thanh toán bằng điểm. Vui lòng thử lại.');
+            const data = err.response?.data;
+            if (err.response?.status === 422 && data?.stock_status) {
+                setStockError({ message: data.message, status: data.stock_status, suggestions: data.suggestions || [] });
+            } else {
+                setPointsErrorMessage(data?.message || err.message || 'Không thể thanh toán bằng điểm. Vui lòng thử lại.');
+            }
             setPointsModalType(null);
             setPayingWith(null);
         }
@@ -1545,13 +1555,44 @@ const BookingsPage = () => {
                 <p className="text-gray-700">{pointsErrorMessage}</p>
             </Modal>
 
-            {/* Lỗi nguyên liệu (vượt 50 / kho đang bổ sung) */}
+            {/* Lỗi kho lúc thanh toán: chờ refill hoặc cần giảm số lượng */}
+            <Modal
+                isOpen={!!stockError}
+                title="Không đủ nguyên liệu"
+                onClose={() => {
+                    const wasInsufficient = stockError?.status === 'insufficient';
+                    setStockError(null);
+                    // Hết hàng: đơn đã tạo mang số lượng cũ nên hủy đơn, quay về bước 1 (giỏ hàng vẫn giữ).
+                    if (wasInsufficient) handleClosePaymentModal();
+                }}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{stockError?.message}</p>
+                {stockError?.status === 'insufficient' && (
+                    <>
+                        {stockError.suggestions.length > 0 && (
+                            <ul className="mt-3 list-disc pl-5 text-sm text-gray-700 space-y-1">
+                                {stockError.suggestions.map((s, i) => (
+                                    <li key={i}>
+                                        <span className="font-semibold">{s.dish_name}</span>:{' '}
+                                        {s.max_quantity > 0 ? `tối đa ${s.max_quantity} phần` : 'hiện đã hết'}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                        <p className="mt-3 text-sm text-gray-500">
+                            Đơn đặt bàn này sẽ được hủy khi bạn đóng thông báo. Vui lòng giảm số lượng món trong giỏ rồi đặt lại.
+                        </p>
+                    </>
+                )}
+            </Modal>
+
+            {/* Lỗi vượt 50 phần mỗi nguyên liệu */}
             <IngredientLimitModal
                 isOpen={ingredientError !== null}
                 onClose={() => setIngredientError(null)}
                 message={ingredientError?.message}
                 overLimit={ingredientError?.overLimit}
-                shortage={ingredientError?.shortage}
                 formatIngredient={translateIngredients}
             />
 

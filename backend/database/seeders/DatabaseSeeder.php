@@ -62,8 +62,10 @@ class DatabaseSeeder extends Seeder
             'recommendation_exclusions',
             'favorite_dishes',
             'dish_similarities',
+            'ingredient_stock_reservations',
             'ingredient_stock_transactions',
             'ingredient_stocks',
+            'ingredients',
             'order_items',
             'deliveries',
             'booking_tables',
@@ -730,20 +732,17 @@ class DatabaseSeeder extends Seeder
             }
         }
 
-        $today = now()->format('Y-m-d');
+        // Chỉ tạo danh mục nguyên liệu (mã cố định). Dòng kho theo ngày do OrdersSeeder tạo.
         foreach ($ingredientNames as $key => $name) {
-            DB::table('ingredient_stocks')->insert([
+            DB::table('ingredients')->insert([
                 'ingredient_key' => $key,
                 'ingredient_name' => $name,
-                'stock_date' => $today,
-                'quantity_start' => 50,
-                'quantity_left' => 50,
-                'refill_count' => 0,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
         }
 
+        $this->call(SaleOffEventSeeder::class);
         $this->call(OrdersSeeder::class);
         $this->call(DishSimilaritySeeder::class);
 

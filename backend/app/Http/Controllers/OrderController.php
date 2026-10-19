@@ -14,15 +14,6 @@ use App\Services\OrderCodeGenerator;
 
 class OrderController extends Controller
 {
-    private function resolveStockDate(array $validated): string
-    {
-        if (($validated['order_type'] ?? null) === 'booking_table' && !empty($validated['booking_table']['start_date'])) {
-            return $validated['booking_table']['start_date'];
-        }
-
-        return now()->format('Y-m-d');
-    }
-
     
     public function store(Request $request, \App\Services\DeliveryDistanceService $distanceService)
     {
@@ -47,27 +38,12 @@ class OrderController extends Controller
             'booking_table.end_time' => 'required_if:order_type,booking_table|string',
         ]);
 
-        $stockDate = $this->resolveStockDate($validated);
-
         $over50 = \App\Models\Stock::findIngredientDemandOver50($validated['items']);
         if ($over50) {
             return response()->json([
                 'message' => 'Một số nguyên liệu bị yêu cầu vượt quá định lượng tối đa (50). Vui lòng chọn món khác thay thế.',
                 'over_limit' => $over50,
             ], 422);
-        }
-
-        $isImmediateCook = $validated['order_type'] === 'delivery'
-            && empty($validated['delivery']['preferred_delivery_time'] ?? null);
-
-        if ($isImmediateCook) {
-            $shortage = \App\Models\Stock::checkAndRefillShortage($validated['items'], $stockDate);
-            if ($shortage) {
-                return response()->json([
-                    'message' => 'Một số nguyên liệu không đủ định lượng trong kho. Quý khách vui lòng đợi một chút để chúng tôi bổ sung hàng vào kho. Sau đó quý khách có thể tiếp tục thực hiện đặt hàng.',
-                    'exceeded' => $shortage,
-                ], 422);
-            }
         }
 
         DB::beginTransaction();

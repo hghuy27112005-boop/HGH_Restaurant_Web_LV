@@ -79,21 +79,6 @@ class BillController extends Controller
             ], 422);
         }
 
-        if ($validated['order_type'] === 'booking_table') {
-            $bookingDateTime = \Carbon\Carbon::parse($validated['booking_table']['start_date'] . ' ' . $validated['booking_table']['start_time']);
-            $isNearCookWindow = $bookingDateTime->betweenIncluded(now()->addMinutes(60), now()->addMinutes(70));
-
-            if ($isNearCookWindow) {
-                $shortage = \App\Models\Stock::checkAndRefillShortage($validated['items'], $validated['booking_table']['start_date']);
-                if ($shortage) {
-                    return response()->json([
-                        'message' => 'Một số nguyên liệu không đủ định lượng trong kho. Quý khách vui lòng đợi một chút để chúng tôi bổ sung hàng vào kho. Sau đó quý khách có thể tiếp tục thực hiện đặt hàng.',
-                        'exceeded' => $shortage,
-                    ], 422);
-                }
-            }
-        }
-
         DB::beginTransaction();
         try {
             // Lấy giá thật từ bảng dishes — KHÔNG tin price_at_order do client gửi lên,
@@ -342,6 +327,12 @@ class BillController extends Controller
             }
         }
 
+        // Trừ nháp kho trước khi thanh toán: thiếu thì báo khách (không ghi gì vào đơn).
+        $stockCheck = \App\Models\Stock::checkOrder($order);
+        if ($stockCheck) {
+            return response()->json(\App\Models\Stock::shortagePayload($stockCheck), 422);
+        }
+
         // Luôn tự xác thực sự kiện giảm giá ở server, không tin trực tiếp
         // giá trị use_sale_off từ client.
         $saleOffPercentage = null;
@@ -447,6 +438,18 @@ class BillController extends Controller
                     ]);
                 }
                 $firstBt = $bookingTables->first();
+            }
+
+            // Ghi kho: nấu ngay thì trừ luôn, nấu sau thì giữ chỗ. Nếu hàng vừa bị khách khác
+            // lấy mất thì rollback toàn bộ, khách không mất điểm.
+            try {
+                \App\Models\Stock::commitAtPayment($order);
+            } catch (\App\Exceptions\StockUnavailableException $e) {
+                DB::rollBack();
+                return response()->json(
+                    \App\Models\Stock::shortagePayload(['status' => 'insufficient', 'suggestions' => $e->suggestions]),
+                    422
+                );
             }
 
             Points::create([

@@ -18,9 +18,11 @@ const normalize = (text) => String(text || '')
     .replace(/đ/g, 'd');
 
 // Màu theo mức tồn: hết hàng / sắp hết / đủ
-const getLevel = (quantityLeft) => {
-    if (quantityLeft === 0) return { bar: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50' };
-    if (quantityLeft <= LOW_LIMIT) return { bar: 'bg-yellow-400', text: 'text-yellow-600', bg: 'bg-yellow-50' };
+const isOutOfStock = (item) => item.quantity_left + (item.reserve_fund ?? 0) === 0;
+
+const getLevel = (item) => {
+    if (isOutOfStock(item)) return { bar: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50' };
+    if (item.quantity_left <= LOW_LIMIT) return { bar: 'bg-yellow-400', text: 'text-yellow-600', bg: 'bg-yellow-50' };
     return { bar: 'bg-green-500', text: 'text-green-600', bg: 'bg-white' };
 };
 
@@ -79,12 +81,7 @@ const AdminStockPage = () => {
                 return normalize(raw).includes(keyword) || normalize(translateIngredients(raw)).includes(keyword);
             });
         }
-        const byCode = (first, second) =>
-            String(first.ingredient_stock_id).localeCompare(
-                String(second.ingredient_stock_id),
-                undefined,
-                { numeric: true, sensitivity: 'base' },
-            );
+        const byCode = (first, second) => first.ingredient_id - second.ingredient_id;
         const dir = sortDir === 'asc' ? 1 : -1;
         return [...list].sort((first, second) => {
             if (sortBy === 'stock') return ((first.quantity_left - second.quantity_left) * dir) || byCode(first, second);
@@ -93,7 +90,7 @@ const AdminStockPage = () => {
     };
 
     const lowStockCount = stocks.filter(s => s.quantity_left <= LOW_LIMIT).length;
-    const outOfStockCount = stocks.filter(s => s.quantity_left === 0).length;
+    const outOfStockCount = stocks.filter(isOutOfStock).length;
     const filtered = getFiltered();
 
     const formatOrderItemName = (item) => {
@@ -201,7 +198,7 @@ const AdminStockPage = () => {
                     ) : (
                         <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                             {filtered.map(item => {
-                                const level = getLevel(item.quantity_left);
+                                const level = getLevel(item);
                                 return (
                                     <div
                                         key={item.ingredient_stock_id}
@@ -209,18 +206,19 @@ const AdminStockPage = () => {
                                     >
                                         <div className={`w-1.5 flex-shrink-0 ${level.bar}`}></div>
                                         <div className="flex-1 min-w-0 px-3 py-2">
-                                            <p className="font-mono text-[11px] text-gray-400">{item.ingredient_stock_id}</p>
+                                            <p className="font-mono text-[11px] text-gray-400">{item.ingredient_id}</p>
                                             <p className="font-semibold text-gray-800 truncate" title={item.ingredient_name ? translateIngredients(item.ingredient_name) : ''}>
                                                 {item.ingredient_name ? translateIngredients(item.ingredient_name) : 'N/A'}
                                             </p>
                                             <p className={`text-xl font-bold leading-tight ${level.text}`}>
                                                 {item.quantity_left} / {item.quantity_start}
                                             </p>
-                                            <p className="mt-1 text-[11px] text-gray-500">
-                                                Refill: {item.refill_count ?? 0}
-                                                {' · '}
-                                                {item.updated_at ? new Date(item.updated_at).toLocaleString('vi-VN') : '-'}
-                                            </p>
+                                            <div className="mt-1 text-[11px] text-gray-500 leading-4">
+                                                <p>Refill: {item.refill_count ?? 0} · Giữ chỗ: {item.reserved ?? 0}</p>
+                                                <p className="whitespace-nowrap">
+                                                    {item.updated_at ? new Date(item.updated_at).toLocaleString('vi-VN') : '-'}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
                                 );

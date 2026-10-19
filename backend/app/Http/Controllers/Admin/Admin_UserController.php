@@ -23,7 +23,8 @@ class Admin_UserController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('username', 'like', '%' . $search . '%')
-                    ->orWhere('email', 'like', '%' . $search . '%');
+                    ->orWhere('email', 'like', '%' . $search . '%')
+                    ->orWhere('tele_number', 'like', '%' . $search . '%');
             });
         }
 
@@ -41,7 +42,8 @@ class Admin_UserController extends Controller
             });
         }
 
-        $perPage = 25;
+        // Mặc định 25/trang; xuất Excel gửi per_page (tối đa 200) để lấy nhiều dòng mỗi lần
+        $perPage = min(max((int) $request->get('per_page', 25), 1), 200);
 
         // Gắn STT theo vị trí thật trong danh sách (không dựa vào user_id, vì
         // user_id có thể bị nhảy số sau khi xóa/tạo lại tài khoản nhiều lần).

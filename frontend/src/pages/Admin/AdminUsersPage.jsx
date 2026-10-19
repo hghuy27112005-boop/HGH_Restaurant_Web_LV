@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { adminAPI } from '../../services/api';
 import { TableLoading, Button, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
+// Các hàm xuất Excel dùng chung, import từ orderTools (nằm trong thư mục Orders)
+import { EXPORT_LIMIT, fetchAllRows, downloadXlsx } from './Orders/orderTools';
 
 const MEMBERSHIP_LABELS = {
     bronze: 'Bronze',
@@ -59,6 +61,8 @@ const AdminUsersPage = () => {
     const [lockUnit, setLockUnit] = useState('day');
     const [unlockTarget, setUnlockTarget] = useState(null);
     const [busy, setBusy] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    const [total, setTotal] = useState(0); // tổng số người khớp bộ lọc, dùng kiểm tra giới hạn xuất
     const [mailState, setMailState] = useState(null); // { status: 'sending' | 'done' | 'error', message }
 
     const fetchStats = useCallback(async () => {
@@ -84,6 +88,7 @@ const AdminUsersPage = () => {
             setUsers(payload.data || []);
             setCurrentPage(payload.pagination.current_page);
             setLastPage(payload.pagination.last_page);
+            setTotal(payload.pagination.total);
             setPageInput(String(payload.pagination.current_page));
         } catch (err) {
             setErrorMessage('Lỗi tải danh sách người dùng');
@@ -102,8 +107,10 @@ const AdminUsersPage = () => {
         fetchStats();
     }, [fetchStats]);
 
+    const applySearch = () => setAppliedSearch(searchInput.trim());
+
     const handleSearchKeyDown = (e) => {
-        if (e.key === 'Enter') setAppliedSearch(searchInput.trim());
+        if (e.key === 'Enter') applySearch();
     };
 
     const handleGoToPage = () => {
@@ -111,6 +118,49 @@ const AdminUsersPage = () => {
         if (isNaN(page) || page < 1) page = 1;
         if (page > lastPage) page = lastPage;
         fetchUsers(page);
+    };
+
+    // Xuất Excel theo bộ lọc đang áp dụng (giống dữ liệu bảng đang hiển thị)
+    const handleExport = async () => {
+        if (exporting) return;
+        if (total > EXPORT_LIMIT) {
+            setErrorMessage(`Có ${total} người dùng khớp bộ lọc, vượt giới hạn xuất ${EXPORT_LIMIT} người. Vui lòng thu hẹp bộ lọc rồi xuất lại.`);
+            return;
+        }
+        try {
+            setExporting(true);
+            const rows = await fetchAllRows((p, per) => {
+                const params = { page: p, per_page: per };
+                if (appliedSearch) params.search = appliedSearch;
+                if (membership) params.membership = membership;
+                if (status) params.status = status;
+                return adminAPI.users.getAll(params);
+            });
+            await downloadXlsx(
+                'danh-sach-nguoi-dung.xlsx',
+                'Người dùng',
+                [
+                    { header: 'STT', width: 8, type: 'number' },
+                    { header: 'Tên người dùng', width: 22, type: 'text' },
+                    { header: 'SĐT', width: 15, type: 'text' },
+                    { header: 'Gmail', width: 32, type: 'text' },
+                    { header: 'Bậc thành viên', width: 16, type: 'text' },
+                    { header: 'Trạng thái', width: 32, type: 'text' },
+                ],
+                rows.map((u) => [
+                    u.stt,
+                    u.username,
+                    u.tele_number,
+                    u.email,
+                    MEMBERSHIP_LABELS[u.membership] || u.membership,
+                    u.is_locked ? `Bị khóa đến ${formatDateTime(u.locked_until)}` : 'Hoạt động',
+                ]),
+            );
+        } catch (err) {
+            setErrorMessage(err.response?.data?.message || 'Xuất Excel thất bại. Vui lòng thử lại.');
+        } finally {
+            setExporting(false);
+        }
     };
 
     const openLockModal = (user) => {
@@ -194,17 +244,22 @@ const AdminUsersPage = () => {
             </StatGrid>
 
             {/* Thanh công cụ */}
-            <div className="mb-4 flex flex-wrap items-center gap-2 bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-                <div className="relative flex-1 min-w-[240px]">
-                    <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
-                    <input
-                        type="text"
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        onKeyDown={handleSearchKeyDown}
-                        placeholder="Tìm theo tên đăng nhập hoặc email, nhấn Enter..."
-                        className="w-full border border-gray-300 rounded pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-red-600"
-                    />
+            <div className="mb-4 flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm p-3">
+                <div className="flex flex-1 min-w-[260px] gap-2">
+                    <div className="relative flex-1">
+                        <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                        <input
+                            type="text"
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            onKeyDown={handleSearchKeyDown}
+                            placeholder="Tìm theo tên, email hoặc SDT, nhấn Enter..."
+                            className="w-full border border-gray-300 rounded pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-red-600"
+                        />
+                    </div>
+                    <button onClick={applySearch} className="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700">
+                        Tìm
+                    </button>
                 </div>
                 <select
                     value={membership}
@@ -225,6 +280,13 @@ const AdminUsersPage = () => {
                     <option value="active">Đang hoạt động</option>
                     <option value="locked">Đang bị khóa</option>
                 </select>
+                <button
+                    onClick={handleExport}
+                    disabled={exporting}
+                    className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+                >
+                    {exporting ? 'Đang xuất...' : 'Xuất Excel'}
+                </button>
             </div>
 
             {/* Bảng + phân trang */}
@@ -235,6 +297,7 @@ const AdminUsersPage = () => {
                             <tr className="bg-red-600 text-white">
                                 <th className="px-4 py-2.5 text-left w-16">STT</th>
                                 <th className="px-4 py-2.5 text-left">Tên người dùng</th>
+                                <th className="px-4 py-2.5 text-left">SĐT</th>
                                 <th className="px-4 py-2.5 text-left">Gmail</th>
                                 <th className="px-4 py-2.5 text-left">Bậc thành viên</th>
                                 <th className="px-4 py-2.5 text-left">Trạng thái</th>
@@ -244,11 +307,11 @@ const AdminUsersPage = () => {
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan={6}><TableLoading /></td>
+                                    <td colSpan={7}><TableLoading /></td>
                                 </tr>
                             ) : users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                                         Không tìm thấy người dùng nào
                                     </td>
                                 </tr>
@@ -257,6 +320,7 @@ const AdminUsersPage = () => {
                                     <tr key={user.user_id} className="border-b last:border-b-0 hover:bg-gray-50">
                                         <td className="px-4 py-1.5 text-gray-500">{user.stt}</td>
                                         <td className="px-4 py-1.5 font-semibold">{user.username}</td>
+                                        <td className="px-4 py-1.5 text-gray-600">{user.tele_number || '—'}</td>
                                         <td className="px-4 py-1.5 text-gray-600">{user.email}</td>
                                         <td className="px-4 py-1.5">
                                             <span className={`inline-block px-2 py-0.5 text-xs font-semibold rounded ${MEMBERSHIP_STYLE[user.membership]?.badge || 'bg-gray-100 text-gray-700'}`}>
