@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
@@ -10,11 +10,37 @@ const Layout = ({ children }) => {
     const { user, isAuthenticated } = useAuthContext();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [chatbotOpen, setChatbotOpen] = useState(false);
+    const [theme, setTheme] = useState(() => {
+        try {
+            return window.localStorage.getItem('hgh-theme') === 'dark' ? 'dark' : 'light';
+        } catch (error) {
+            console.error('Không thể đọc tùy chọn giao diện:', error);
+            return 'light';
+        }
+    });
 
     // Admin dùng Sidebar bên trái; khách và người dùng thường dùng Navbar trên cùng
     const location = useLocation();
     const isAdmin = isAuthenticated && user?.role === 'admin';
     const isHome = location.pathname === '/';
+    const isThemeExcludedPage = isHome
+        || location.pathname === '/login'
+        || location.pathname === '/forgot-password';
+    const isDarkMode = !isThemeExcludedPage && theme === 'dark';
+
+    useLayoutEffect(() => {
+        const activeTheme = isDarkMode ? 'dark' : 'light';
+        document.documentElement.dataset.theme = activeTheme;
+        document.documentElement.style.colorScheme = activeTheme;
+
+        try {
+            window.localStorage.setItem('hgh-theme', theme);
+        } catch (error) {
+            console.error('Không thể lưu tùy chọn giao diện:', error);
+        }
+    }, [isDarkMode, theme]);
+
+    const toggleTheme = () => setTheme((current) => current === 'dark' ? 'light' : 'dark');
 
     return (
         <div className="flex min-h-screen">
@@ -46,10 +72,27 @@ const Layout = ({ children }) => {
                 </button>
             )}
 
+            {isAdmin && !isThemeExcludedPage && (
+                <button
+                    type="button"
+                    onClick={toggleTheme}
+                    className="fixed top-3 right-3 z-30 flex h-10 w-10 items-center justify-center rounded-lg bg-red-600 text-white shadow transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2"
+                    aria-label={isDarkMode ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+                    title={isDarkMode ? 'Giao diện sáng' : 'Giao diện tối'}
+                >
+                    <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`} aria-hidden="true"></i>
+                </button>
+            )}
+
             <div
                 className={`flex flex-col flex-1 min-h-screen transition-all duration-300 ${isAdmin ? '' : 'min-w-0 overflow-x-clip'} ${chatbotOpen ? 'xl:mr-[clamp(320px,24vw,420px)] md:max-xl:pb-[clamp(300px,50dvh,560px)]' : ''}`}
             >
-                {!isAdmin && <Navbar />}
+                {!isAdmin && (
+                    <Navbar
+                        isDarkMode={isDarkMode}
+                        onToggleTheme={toggleTheme}
+                    />
+                )}
                 {isAdmin && !isHome && <div className="h-14" aria-hidden="true" />}
                 <main className="flex-1">
                     {children}

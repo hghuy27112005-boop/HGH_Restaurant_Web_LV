@@ -49,6 +49,11 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
 
     // User Profile
     Route::get('/user', [\App\Http\Controllers\UserController::class, 'profile']);
+    Route::get('/notifications', [\App\Http\Controllers\UserNotificationController::class, 'index']);
+    Route::patch('/notifications/{notificationId}/read', [\App\Http\Controllers\UserNotificationController::class, 'markRead']);
+    Route::post('/notifications/read-all', [\App\Http\Controllers\UserNotificationController::class, 'markAllRead']);
+    Route::get('/notification-preferences', [\App\Http\Controllers\UserNotificationController::class, 'preferences']);
+    Route::put('/notification-preferences', [\App\Http\Controllers\UserNotificationController::class, 'updatePreferences']);
     Route::get('/my-bills', [\App\Http\Controllers\OrderController::class, 'myBillsJson']);
     Route::put('/user', [\App\Http\Controllers\UserController::class, 'updateProfile']);
     Route::post('/user/avatar', [\App\Http\Controllers\UserController::class, 'uploadAvatar']);

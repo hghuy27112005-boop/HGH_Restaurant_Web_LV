@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use Barryvdh\DomPDF\Facade\Pdf;
-use App\Mail\OrderNotificationMail;
 use App\Models\Bill;
 use App\Models\Order;
 use App\Models\Dish;
@@ -14,7 +13,6 @@ use App\Models\BookingTable;
 use App\Services\OrderCodeGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 
 class BillController extends Controller
 {
@@ -437,7 +435,6 @@ class BillController extends Controller
                         'booking_status'   => 'scheduled',
                     ]);
                 }
-                $firstBt = $bookingTables->first();
             }
 
             // Ghi kho: nấu ngay thì trừ luôn, nấu sau thì giữ chỗ. Nếu hàng vừa bị khách khác
@@ -469,22 +466,6 @@ class BillController extends Controller
                 $stats->increment('delivery_orders');
             }
             $stats->save();
-
-            // Gửi mail thông báo đặt bàn HÔM NAY — chỉ tại đây, khi thanh toán bằng
-            // điểm đã xác nhận thành công thật sự.
-            if ($order->order_type === 'booking_table') {
-                $firstBt = $firstBt ?? BookingTable::where('order_id', $order->order_id)->first();
-                if ($firstBt && \Carbon\Carbon::parse($firstBt->booking_date)->toDateString() === today()->toDateString()) {
-                    try {
-                        $startTime = substr($firstBt->start_time, 0, 5);
-                        $endTime = substr($firstBt->end_time, 0, 5);
-                        $bodyLine = "Quý khách có 1 đơn đặt bàn tại nhà hàng chúng tôi trong hôm nay vào lúc ({$startTime} tới {$endTime}).";
-                        Mail::to($user->email)->queue(new OrderNotificationMail($bill, $bodyLine));
-                    } catch (\Exception $e) {
-                        \Log::error('Gửi mail thông báo đặt bàn hôm nay thất bại (thanh toán bằng điểm): ' . $e->getMessage());
-                    }
-                }
-            }
 
             DB::commit();
 

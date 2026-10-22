@@ -1397,7 +1397,7 @@ const BookingsPage = () => {
                             <div className="flex gap-4">
                                 <button
                                     onClick={() => setPointsModalType(null)}
-                                    className="flex-1 bg-gray-200 text-gray-800 font-bold py-2 rounded hover:bg-gray-300"
+                                    className="flex-1 bg-gray-200 text-gray-800 border border-gray-400 font-bold py-2 rounded hover:bg-gray-300"
                                 >
                                     Hủy
                                 </button>

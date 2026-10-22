@@ -56,6 +56,14 @@ export const userAPI = {
         }),
 };
 
+export const notificationAPI = {
+    getAll: () => axiosInstance.get('/notifications'),
+    markRead: (id) => axiosInstance.patch(`/notifications/${id}/read`),
+    markAllRead: () => axiosInstance.post('/notifications/read-all'),
+    getPreferences: () => axiosInstance.get('/notification-preferences'),
+    updatePreferences: (preferences) => axiosInstance.put('/notification-preferences', { preferences }),
+};
+
 // Bills API
 export const billAPI = {
     create: (data) => axiosInstance.post('/bills', data),

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext';
+import NotificationCenter from './NotificationCenter';
 
-const Navbar = () => {
+const Navbar = ({ isDarkMode, onToggleTheme }) => {
     const { user, isAuthenticated } = useAuthContext();
     const { pathname } = useLocation();
     const [scrolled, setScrolled] = useState(false);
@@ -10,6 +11,7 @@ const Navbar = () => {
     // Trang chủ, đăng nhập và quên mật khẩu có ảnh nền tối phủ kín: navbar trong suốt, chữ trắng (chỉ riêng các trang này)
     const isHome = pathname === '/';
     const isDarkPage = isHome || pathname === '/login' || pathname === '/forgot-password';
+    const canToggleTheme = !isHome && pathname !== '/login' && pathname !== '/forgot-password';
 
     // Ở trang chủ: khi cuộn xuống thì navbar có nền tối mờ để chữ còn đọc được trên nội dung phía sau
     useEffect(() => {
@@ -32,15 +34,18 @@ const Navbar = () => {
 
     const initials = user?.username?.[0]?.toUpperCase() ?? '?';
     const profileActive = pathname.startsWith('/profile');
+    const darkHeader = isDarkPage || isDarkMode;
 
     const headerClass = isDarkPage
         ? `sticky top-0 z-40 border-b transition-colors duration-300 ${scrolled ? 'bg-black/55 backdrop-blur-md border-white/10' : 'bg-transparent border-transparent'}`
-        : 'sticky top-0 z-40 bg-white border-b border-gray-200';
-    const brandClass = isDarkPage ? 'text-white' : 'text-red-600';
-    const linkClass = (active) => (isDarkPage
-        ? (active ? 'bg-white/20 text-white' : 'text-white hover:bg-white/10')
+        : isDarkMode
+            ? 'sticky top-0 z-40 bg-gray-900 border-b border-gray-700'
+            : 'sticky top-0 z-40 bg-white border-b border-gray-200';
+    const brandClass = darkHeader ? 'text-white' : 'text-red-600';
+    const linkClass = (active) => (darkHeader
+        ? (active ? 'bg-red-600 text-white' : 'text-white hover:bg-white/10')
         : (active ? 'bg-red-600 text-white' : 'text-red-600 hover:bg-red-50'));
-    const loginBtnClass = isDarkPage
+    const loginBtnClass = darkHeader
         ? 'border border-white/70 bg-transparent text-white hover:bg-white/10'
         : 'bg-red-600 hover:bg-red-700 text-white';
 
@@ -68,25 +73,52 @@ const Navbar = () => {
                     ))}
                 </nav>
 
-                <div className="flex-shrink-0">
+                <div className="flex flex-shrink-0 items-center gap-2">
                     {isAuthenticated ? (
-                        <Link
-                            to="/profile"
-                            title={`Trang cá nhân của ${user?.username || user?.name || ''}`}
-                            className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center ${user?.avatar_url ? '' : 'bg-red-600'} ${profileActive ? 'ring-2 ring-offset-2 ring-red-600' : ''}`}
-                        >
-                            {user?.avatar_url ? (
-                                <img src={user.avatar_url} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            ) : (
-                                <span className="text-white font-bold text-sm">{initials}</span>
+                        <>
+                            <NotificationCenter isDarkPage={darkHeader} />
+                            {canToggleTheme && (
+                                <button
+                                    type="button"
+                                    onClick={onToggleTheme}
+                                    className={`flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${darkHeader ? 'text-white hover:bg-white/10' : 'text-red-600 hover:bg-red-50'}`}
+                                    aria-label={isDarkMode ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+                                    title={isDarkMode ? 'Giao diện sáng' : 'Giao diện tối'}
+                                >
+                                    <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`} aria-hidden="true"></i>
+                                </button>
                             )}
-                        </Link>
+                            <Link
+                                to="/profile"
+                                title={`Trang cá nhân của ${user?.username || user?.name || ''}`}
+                                className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center ${user?.avatar_url ? '' : 'bg-red-600'} ${profileActive ? `ring-2 ring-offset-2 ring-red-600 ${isDarkMode ? 'ring-offset-gray-900' : ''}` : ''}`}
+                            >
+                                {user?.avatar_url ? (
+                                    <img src={user.avatar_url} alt="Avatar" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                ) : (
+                                    <span className="text-white font-bold text-sm">{initials}</span>
+                                )}
+                            </Link>
+                        </>
                     ) : (
-                        <Link to="/login" className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition ${loginBtnClass}`}>
-                            <i className="fas fa-user-circle"></i>
-                            <span className="hidden sm:inline">Đăng nhập/Đăng ký</span>
-                            <span className="sm:hidden">Đăng nhập</span>
-                        </Link>
+                        <>
+                            {canToggleTheme && (
+                                <button
+                                    type="button"
+                                    onClick={onToggleTheme}
+                                    className={`flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 ${darkHeader ? 'text-white hover:bg-white/10' : 'text-red-600 hover:bg-red-50'}`}
+                                    aria-label={isDarkMode ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
+                                    title={isDarkMode ? 'Giao diện sáng' : 'Giao diện tối'}
+                                >
+                                    <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`} aria-hidden="true"></i>
+                                </button>
+                            )}
+                            <Link to="/login" className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition ${loginBtnClass}`}>
+                                <i className="fas fa-user-circle"></i>
+                                <span className="hidden sm:inline">Đăng nhập/Đăng ký</span>
+                                <span className="sm:hidden">Đăng nhập</span>
+                            </Link>
+                        </>
                     )}
                 </div>
             </div>

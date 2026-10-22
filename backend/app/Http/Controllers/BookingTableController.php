@@ -386,19 +386,6 @@ class BookingTableController extends Controller
 
             DB::commit();
 
-            // Gửi mail "có đơn đặt bàn hôm nay" khi ngày mới là hôm nay (sau khi đã commit thành công)
-            if ($startDate === now()->toDateString()) {
-                try {
-                    $bill = Bill::where('order_id', $order->order_id)->first();
-                    if ($bill && $user->email) {
-                        $bodyLine = "Quý khách có 1 đơn đặt bàn tại nhà hàng chúng tôi trong hôm nay vào lúc ({$startTime} tới {$endTime}).";
-                        \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\OrderNotificationMail($bill, $bodyLine));
-                    }
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::error('Gửi mail thông báo đặt bàn hôm nay thất bại (sửa đơn): ' . $e->getMessage());
-                }
-            }
-
             return response()->json([
                 'message' => 'Chỉnh sửa đơn đặt bàn thành công',
                 'modify_attempts_left' => (int) $user->modify_attempts_left,

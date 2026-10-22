@@ -40,7 +40,7 @@ function Toast({ toast }) {
   };
   const c = colors[toast.type] || colors.success;
   return (
-    <div style={{
+    <div className={`profile-avatar-frame ${displayAvatarUrl ? "has-image" : ""}`} style={{
       position: "fixed", top: 24, right: 24, zIndex: 9999,
       background: c.bg, border: `1px solid ${c.border}`, color: c.text,
       padding: "14px 22px", borderRadius: 8,
@@ -81,7 +81,7 @@ function Modal({ show, onClose, title, children }) {
         zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
       }}
     >
-      <div style={{
+      <div className="profile-modal-panel" style={{
         background: "#fff", padding: 28, borderRadius: 10,
         width: "90%", maxWidth: 440, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
       }}>
@@ -163,7 +163,7 @@ function CropperModal({ show, imageUrl, onClose, onCrop }) {
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
       zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center",
     }}>
-      <div style={{
+      <div className="profile-modal-panel" style={{
         background: "#fff", borderRadius: 10, padding: 24,
         width: "90%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto",
         boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
@@ -209,7 +209,7 @@ function CropperModal({ show, imageUrl, onClose, onCrop }) {
         </p>
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
-          <button onClick={onClose} style={btnStyle("outline")}>Huỷ</button>
+          <button className="profile-outline-button" onClick={onClose} style={btnStyle("outline")}>Huỷ</button>
           <button onClick={handleConfirm} disabled={busy} style={btnStyle("primary", busy)}>
             {busy ? "Đang xử lý..." : "✂️ Xác nhận cắt"}
           </button>
@@ -239,7 +239,7 @@ function Btn({ children, onClick, variant = "outline", disabled, style = {}, typ
   };
   const base = variants[variant];
   return (
-    <button type={type} onClick={onClick} disabled={disabled} style={{
+    <button className={`profile-button profile-button-${variant}`} type={type} onClick={onClick} disabled={disabled} style={{
       width: "100%", padding: "11px 16px", borderRadius: 6,
       fontWeight: 700, fontSize: 15, cursor: disabled ? "not-allowed" : "pointer",
       display: "flex", alignItems: "center", justifyContent: "center", gap: 8,

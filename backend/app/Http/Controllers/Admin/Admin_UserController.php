@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\UserLockedMail;
 use App\Mail\UserUnlockedMail;
 use App\Models\User;
+use App\Services\UserNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -128,6 +129,14 @@ class Admin_UserController extends Controller
         $user->locked_until = $until;
         $user->save();
 
+        app(UserNotificationService::class)->record(
+            $user,
+            'account_locked',
+            'Tài khoản đã bị khóa',
+            'Tài khoản của bạn đã bị khóa đến ' . $until->format('H:i d/m/Y') . '.',
+            "account-locked:{$user->user_id}:{$until->timestamp}"
+        );
+
         return response()->json([
             'message' => 'Đã khóa tài khoản đến ' . $until->format('H:i d/m/Y'),
             'locked_until' => $until->toIso8601String(),
@@ -139,8 +148,17 @@ class Admin_UserController extends Controller
      */
     public function unlock(User $user)
     {
+        $previousLock = $user->locked_until;
         $user->locked_until = null;
         $user->save();
+
+        app(UserNotificationService::class)->record(
+            $user,
+            'account_unlocked',
+            'Tài khoản đã được mở khóa',
+            'Tài khoản của bạn đã được mở khóa.',
+            "account-unlocked:{$user->user_id}:" . ($previousLock?->timestamp ?? now()->timestamp)
+        );
 
         return response()->json(['message' => 'Đã mở khóa tài khoản']);
     }
@@ -148,10 +166,14 @@ class Admin_UserController extends Controller
     /**
      * Gửi mail thông báo khóa (frontend gọi sau khi khóa xong).
      */
-    public function sendLockMail(User $user)
+    public function sendLockMail(User $user, UserNotificationService $notifications)
     {
         if (!$user->isLocked()) {
             return response()->json(['message' => 'Tài khoản hiện không bị khóa nên không gửi mail khóa.'], 422);
+        }
+
+        if (!$notifications->isEnabled($user, 'account_locked', 'email')) {
+            return response()->json(['message' => 'Email thông báo khóa tài khoản đã được tắt trong cài đặt.']);
         }
 
         try {
@@ -167,10 +189,14 @@ class Admin_UserController extends Controller
     /**
      * Gửi mail thông báo mở khóa trước hạn (frontend gọi sau khi mở khóa xong).
      */
-    public function sendUnlockMail(User $user)
+    public function sendUnlockMail(User $user, UserNotificationService $notifications)
     {
         if ($user->isLocked()) {
             return response()->json(['message' => 'Tài khoản vẫn đang bị khóa nên không gửi mail mở khóa.'], 422);
+        }
+
+        if (!$notifications->isEnabled($user, 'account_unlocked', 'email')) {
+            return response()->json(['message' => 'Email thông báo mở khóa tài khoản đã được tắt trong cài đặt.']);
         }
 
         try {

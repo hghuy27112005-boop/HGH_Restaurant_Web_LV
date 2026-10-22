@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use App\Services\UserNotificationService;
 
 class Delivery extends Model
 {
@@ -393,17 +394,34 @@ class Delivery extends Model
         try {
             $delivery->loadMissing('order.bill', 'order.user');
             $bill = $delivery->order?->bill;
-            $email = $delivery->order?->user?->email;
+            $user = $delivery->order?->user;
 
-            if (!$bill || !$email) {
+            if (!$user) {
                 return;
             }
 
             $arrival = $delivery->estimated_completion_at?->format('H:i d/m/Y') ?? '—';
-            $bodyLine = "Nhà hàng đã bắt đầu chuẩn bị đơn hàng đặt ship của quý khách, mã hóa đơn là <strong>{$bill->bill_id}</strong>. "
-                . "Đơn hàng sẽ bắt đầu được giao sau 15 phút nữa và dự kiến tới nơi lúc <strong>{$arrival}</strong>.";
+            $billLabel = $bill ? ", mã hóa đơn {$bill->bill_id}" : '';
+            $message = "Nhà hàng đã bắt đầu chuẩn bị đơn đặt ship của bạn{$billLabel}. "
+                . "Đơn hàng sẽ bắt đầu được giao sau 15 phút nữa và dự kiến tới nơi lúc {$arrival}.";
+            $notifications = app(UserNotificationService::class);
+            $notifications->record(
+                $user,
+                'delivery_preparing',
+                'Đơn giao hàng đang được chuẩn bị',
+                $message,
+                "delivery-preparing:{$delivery->delivery_id}"
+            );
 
-            Mail::to($email)->queue(new OrderNotificationMail($bill, $bodyLine));
+            if (
+                $bill
+                && $user->email
+                && $notifications->isEnabled($user, 'delivery_preparing', 'email')
+            ) {
+                $bodyLine = "Nhà hàng đã bắt đầu chuẩn bị đơn hàng đặt ship của quý khách, mã hóa đơn là <strong>{$bill->bill_id}</strong>. "
+                    . "Đơn hàng sẽ bắt đầu được giao sau 15 phút nữa và dự kiến tới nơi lúc <strong>{$arrival}</strong>.";
+                Mail::to($user->email)->queue(new OrderNotificationMail($bill, $bodyLine));
+            }
         } catch (\Throwable $e) {
             Log::error('Gửi mail bắt đầu chuẩn bị đơn ship thất bại: ' . $e->getMessage());
         }

@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Mail\OrderNotificationMail;
 use App\Models\Bill;
 use App\Models\Order;
 use App\Models\Points;
@@ -10,7 +9,6 @@ use App\Services\OrderCodeGenerator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class VnpayController extends Controller
 {
@@ -703,23 +701,6 @@ class VnpayController extends Controller
             $order->save();
 
             $this->awardPointsAndStats($bill, $bill->order);
-
-            if ($bill->order->order_type === 'booking_table') {
-                $booking = $bill->order->bookings->first() ?? $bill->order->bookingTable->first();
-
-                // Gửi mail thông báo đặt bàn HÔM NAY — chỉ tại đây, khi VNPay đã xác
-                // nhận thanh toán thành công thật sự (không còn ở BillController::store()).
-                if ($booking && \Carbon\Carbon::parse($booking->booking_date)->toDateString() === now()->format('Y-m-d') && $bill->order->user) {
-                    try {
-                        $startTime = substr($booking->start_time, 0, 5);
-                        $endTime = substr($booking->end_time, 0, 5);
-                        $bodyLine = "Quý khách có 1 đơn đặt bàn tại nhà hàng chúng tôi trong hôm nay vào lúc ({$startTime} tới {$endTime}).";
-                        Mail::to($bill->order->user->email)->queue(new OrderNotificationMail($bill, $bodyLine));
-                    } catch (\Throwable $e) {
-                        Log::error('Gửi mail thông báo đặt bàn hôm nay thất bại (VNPay): ' . $e->getMessage());
-                    }
-                }
-            }
 
             DB::commit();
             return true;

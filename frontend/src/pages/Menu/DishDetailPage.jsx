@@ -538,7 +538,7 @@ const DishDetailPage = () => {
                             <p className="text-gray-700 leading-7">{displayedIngredients ? translateIngredients(displayedIngredients) : 'Món này chưa có thông tin nguyên liệu.'}</p>
                             <div className="grid grid-cols-2 gap-3 mt-6">
                                 <button onClick={() => openOrderModal('mang-ve')} className="py-2 px-3 rounded border border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition">Đặt Ship</button>
-                                <button onClick={() => openOrderModal('dat-ban')} className="py-2 px-3 rounded border border-gray-800 text-gray-800 font-semibold hover:bg-gray-800 hover:text-white transition">Đặt Bàn</button>
+                                <button onClick={() => openOrderModal('dat-ban')} className="py-2 px-3 rounded border border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition">Đặt Bàn</button>
                             </div>
                         </div>
                     </div>
