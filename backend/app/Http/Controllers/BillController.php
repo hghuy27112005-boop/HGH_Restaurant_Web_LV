@@ -11,6 +11,7 @@ use App\Models\Points;
 use App\Models\Statistics;
 use App\Models\BookingTable;
 use App\Services\OrderCodeGenerator;
+use App\Support\PreferredLanguage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -256,7 +257,7 @@ class BillController extends Controller
         }
     }
 
-    public function exportPDF(Bill $bill)
+    public function exportPDF(Request $request, Bill $bill)
     {
         $bill->load(['order.items.dish', 'order.bookings', 'order.delivery']);
 
@@ -265,21 +266,25 @@ class BillController extends Controller
             abort(403, 'Bạn không có quyền xem hóa đơn này.');
         }
 
-        $pdf = Pdf::loadView('pdf.invoice', compact('bill'));
+        $language = PreferredLanguage::fromRequest($request);
+        $pdf = Pdf::loadView('pdf.invoice', compact('bill', 'language'));
 
-        return $pdf->stream('hoa-don-' . $bill->bill_id . '.pdf');
+        $filename = ($language === 'en' ? 'invoice-' : 'hoa-don-') . $bill->bill_id . '.pdf';
+        return $pdf->stream($filename);
     }
 
     /**
      * Export PDF for admin - no owner check
      */
-    public function exportPDFAdmin(Bill $bill)
+    public function exportPDFAdmin(Request $request, Bill $bill)
     {
         $bill->load(['order.items.dish', 'order.bookings', 'order.delivery']);
 
-        $pdf = Pdf::loadView('pdf.invoice', compact('bill'));
+        $language = PreferredLanguage::fromRequest($request);
+        $pdf = Pdf::loadView('pdf.invoice', compact('bill', 'language'));
 
-        return $pdf->stream('hoa-don-' . $bill->bill_id . '.pdf');
+        $filename = ($language === 'en' ? 'invoice-' : 'hoa-don-') . $bill->bill_id . '.pdf';
+        return $pdf->stream($filename);
     }
 
     /**

@@ -17,6 +17,7 @@ axiosInstance.interceptors.request.use((config) => {
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
+    config.headers['Accept-Language'] = document.documentElement.lang === 'en' ? 'en' : 'vi';
     return config;
 });
 
@@ -54,6 +55,7 @@ export const userAPI = {
         axiosInstance.post('/user/avatar', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         }),
+    updatePreferredLanguage: (language) => axiosInstance.put('/user/language', { language }),
 };
 
 export const notificationAPI = {

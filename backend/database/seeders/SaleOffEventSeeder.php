@@ -28,65 +28,65 @@ class SaleOffEventSeeder extends Seeder
 
     // [ngày, tháng, tên, số ngày kéo dài]
     private const SOLAR_FIXED = [
-        [1, 1, 'Tết Tây', 1],
-        [9, 1, 'Ngày Truyền thống học sinh, sinh viên Việt Nam', 1],
-        [3, 2, 'Ngày thành lập Đảng Cộng sản Việt Nam', 1],
-        [14, 2, 'Valentine đỏ', 1],
-        [27, 2, 'Ngày Thầy thuốc Việt Nam', 1],
-        [3, 3, 'Ngày truyền thống Bộ đội Biên phòng', 1],
-        [8, 3, 'Quốc tế phụ nữ', 1],
-        [14, 3, 'Valentine trắng', 1],
-        [26, 3, 'Ngày thành lập Đoàn Thanh niên cộng sản Hồ Chí Minh', 1],
-        [27, 3, 'Ngày Thể thao Việt Nam', 1],
-        [28, 3, 'Ngày thành lập lực lượng Dân quân tự vệ', 1],
-        [1, 4, 'Ngày Cá tháng Tư', 1],
-        [14, 4, 'Ngày Valentine đen', 1],
-        [21, 4, 'Ngày Sách Việt Nam', 1],
-        [22, 4, 'Ngày Trái đất', 1],
-        [30, 4, 'Ngày giải phóng miền Nam', 1],
-        [1, 5, 'Quốc tế lao động', 1],
-        [7, 5, 'Ngày Chiến thắng Điện Biên Phủ', 1],
-        [9, 5, 'Ngày chiến thắng phát xít Đức', 1],
-        [15, 5, 'Ngày thành lập Đội thiếu niên Tiền phong Hồ Chí Minh', 1],
-        [19, 5, 'Ngày sinh của Chủ tịch Hồ Chí Minh', 1],
-        [1, 6, 'Quốc tế thiếu nhi', 1],
-        [21, 6, 'Ngày Báo chí Cách mạng Việt Nam', 1],
-        [28, 6, 'Ngày Gia đình Việt Nam', 1],
-        [1, 7, 'Ngày Bảo hiểm y tế Việt Nam', 1],
-        [15, 7, 'Ngày truyền thống lực lượng Thanh niên xung phong Việt Nam', 1],
-        [27, 7, 'Ngày Thương binh Liệt sỹ', 1],
-        [28, 7, 'Ngày thành lập Công đoàn Việt Nam', 1],
-        [10, 8, 'Ngày vì nạn nhân chất độc màu da cam Việt Nam', 1],
-        [19, 8, 'Ngày Cách mạng tháng Tám thành công', 1],
-        [2, 9, 'Quốc Khánh', 1],
-        [7, 9, 'Ngày thành lập Đài Tiếng nói Việt Nam', 1],
-        [10, 9, 'Ngày thành lập Mặt trận Tổ quốc Việt Nam', 1],
-        [20, 9, 'Ngày kỉ niệm Việt Nam trở thành thành viên Liên Hợp Quốc', 1],
-        [2, 10, 'Ngày Khuyến học Việt Nam', 1],
-        [10, 10, 'Ngày Giải phóng thủ đô', 1],
-        [13, 10, 'Ngày Doanh nhân Việt Nam', 1],
-        [14, 10, 'Ngày thành lập Hội Nông dân Việt Nam', 1],
-        [15, 10, 'Ngày truyền thống Hội Liên hiệp Thanh niên Việt Nam', 1],
-        [20, 10, 'Ngày Phụ nữ Việt Nam', 1],
+        [1, 1, "New Year's Day", 1],
+        [9, 1, "Vietnamese Students' Day", 1],
+        [3, 2, 'Vietnam Communist Party Foundation Day', 1],
+        [14, 2, "Valentine's Day", 1],
+        [27, 2, "Vietnamese Doctors' Day", 1],
+        [3, 3, 'Vietnam Border Guard Traditional Day', 1],
+        [8, 3, "International Women's Day", 1],
+        [14, 3, 'White Day', 1],
+        [26, 3, 'Ho Chi Minh Communist Youth Union Foundation Day', 1],
+        [27, 3, 'Vietnam Sports Day', 1],
+        [28, 3, 'Vietnam Militia and Self-Defense Force Day', 1],
+        [1, 4, "April Fools' Day", 1],
+        [14, 4, 'Black Day', 1],
+        [21, 4, 'Vietnam Book Day', 1],
+        [22, 4, 'Earth Day', 1],
+        [30, 4, 'Reunification Day', 1],
+        [1, 5, "International Workers' Day", 1],
+        [7, 5, 'Dien Bien Phu Victory Day', 1],
+        [9, 5, 'Victory in Europe Day', 1],
+        [15, 5, 'Ho Chi Minh Young Pioneer Organization Foundation Day', 1],
+        [19, 5, "Ho Chi Minh's Birthday", 1],
+        [1, 6, "International Children's Day", 1],
+        [21, 6, 'Vietnam Revolutionary Press Day', 1],
+        [28, 6, 'Vietnam Family Day', 1],
+        [1, 7, 'Vietnam Health Insurance Day', 1],
+        [15, 7, 'Vietnam Youth Volunteers Traditional Day', 1],
+        [27, 7, 'War Invalids and Martyrs Day', 1],
+        [28, 7, 'Vietnam Trade Union Foundation Day', 1],
+        [10, 8, 'Vietnam Agent Orange Victims Day', 1],
+        [19, 8, 'August Revolution Commemoration Day', 1],
+        [2, 9, 'Vietnam National Day', 1],
+        [7, 9, 'Voice of Vietnam Foundation Day', 1],
+        [10, 9, 'Vietnam Fatherland Front Foundation Day', 1],
+        [20, 9, "Vietnam's United Nations Membership Anniversary", 1],
+        [2, 10, 'Vietnam Learning Promotion Day', 1],
+        [10, 10, 'Capital Liberation Day', 1],
+        [13, 10, "Vietnam Entrepreneurs' Day", 1],
+        [14, 10, 'Vietnam Farmers’ Union Foundation Day', 1],
+        [15, 10, 'Vietnam Youth Federation Traditional Day', 1],
+        [20, 10, "Vietnamese Women's Day", 1],
         [31, 10, 'Halloween', 1],
-        [9, 11, 'Ngày Pháp luật Việt Nam', 1],
-        [18, 11, 'Ngày thành lập Mặt trận Dân tộc Thống nhất Việt Nam', 1],
-        [19, 11, 'Ngày Quốc tế Đàn ông', 1],
-        [20, 11, 'Ngày Nhà giáo Việt Nam', 1],
-        [23, 11, 'Ngày thành lập Hội Chữ thập đỏ Việt Nam', 1],
-        [6, 12, 'Ngày thành lập Hội Cựu chiến binh Việt Nam', 1],
-        [22, 12, 'Ngày thành lập Quân đội nhân dân Việt Nam', 1],
-        [24, 12, 'Giáng sinh', 2], // 24/12 → 25/12
+        [9, 11, 'Vietnam Law Day', 1],
+        [18, 11, 'Vietnam National United Front Foundation Day', 1],
+        [19, 11, "International Men's Day", 1],
+        [20, 11, "Vietnamese Teachers' Day", 1],
+        [23, 11, 'Vietnam Red Cross Foundation Day', 1],
+        [6, 12, 'Vietnam Veterans Association Foundation Day', 1],
+        [22, 12, 'Vietnam People’s Army Foundation Day', 1],
+        [24, 12, 'Christmas', 2], // 24/12 → 25/12
     ];
 
     // [ngày âm, tháng âm, tên, số ngày kéo dài]
     private const LUNAR = [
-        [1, 1, 'Tết nguyên đán', 7], // 1/1 → 7/1 âm lịch
-        [3, 3, 'Tết Hàn Thực', 1],
-        [10, 3, 'Giỗ tổ Hùng Vương', 1],
-        [7, 7, 'Thất tịch', 1],
-        [15, 12, 'Rằm tháng Chạp', 1],
-        [23, 12, 'Tết ông Công ông Táo', 1],
+        [1, 1, 'Lunar New Year', 7], // 1/1 → 7/1 âm lịch
+        [3, 3, 'Cold Food Festival', 1],
+        [10, 3, 'Hung Kings Commemoration Day', 1],
+        [7, 7, 'Qixi Festival', 1],
+        [15, 12, 'December Full Moon', 1],
+        [23, 12, 'Kitchen Gods’ Day', 1],
     ];
 
     public function run(): void
@@ -148,8 +148,8 @@ class SaleOffEventSeeder extends Seeder
             }
 
             // Ngày của Mẹ: Chủ nhật thứ 2 của tháng 5; Ngày của Cha: Chủ nhật thứ 3 của tháng 6
-            $list[] = $this->makeCandidate('Ngày của Mẹ', $this->nthSunday($year, 5, 2), 1, self::PRIORITY_FLOATING);
-            $list[] = $this->makeCandidate('Ngày của Cha', $this->nthSunday($year, 6, 3), 1, self::PRIORITY_FLOATING);
+            $list[] = $this->makeCandidate("Mother's Day", $this->nthSunday($year, 5, 2), 1, self::PRIORITY_FLOATING);
+            $list[] = $this->makeCandidate("Father's Day", $this->nthSunday($year, 6, 3), 1, self::PRIORITY_FLOATING);
         }
 
         // Năm âm lịch (firstYear - 1) có tháng Chạp rơi vào đầu năm dương firstYear nên phải quét từ đó
@@ -168,7 +168,7 @@ class SaleOffEventSeeder extends Seeder
             $eveYear = (int) $eve->format('Y');
             if ($eveYear >= $firstYear && $eveYear <= $lastYear) {
                 $list[] = $this->makeCandidate(
-                    'Ngày lễ tất niên',
+                    "Lunar New Year's Eve",
                     [$eveYear, (int) $eve->format('n'), (int) $eve->format('j')],
                     1,
                     self::PRIORITY_LUNAR

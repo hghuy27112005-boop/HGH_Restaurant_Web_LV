@@ -22,6 +22,7 @@ return new class extends Migration {
             $table->enum('membership', ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'administrator'])->default('bronze');
             $table->string('provider', 20)->nullable();
             $table->string('provider_id', 100)->nullable();
+            $table->string('preferred_language', 2)->default('vi');
             $table->unique(['provider', 'provider_id']);
             $table->timestamp('created_at')->useCurrent();
             $table->timestamp('updated_at')->useCurrent();

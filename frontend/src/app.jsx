@@ -1,10 +1,12 @@
 import './bootstrap';
 import './css/app.css';
+import './i18n';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Layout from './components/Layout';
+import LocaleAwarePage from './components/LocaleAwarePage';
 import ProtectedRoute from './components/ProtectedRoute';
 import PaymentResultPage from './pages/Payment/PaymentResultPage';
 import RefundResultPage from './pages/Refund/RefundResultPage';
@@ -62,44 +64,44 @@ function App() {
           <Layout>
             <Routes>
               {/* Home */}
-              <Route path="/" element={<HomeApp />} />
+              <Route path="/" element={<LocaleAwarePage><HomeApp /></LocaleAwarePage>} />
 
               {/* Auth */}
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/login" element={<LocaleAwarePage><LoginPage /></LocaleAwarePage>} />
+              <Route path="/forgot-password" element={<LocaleAwarePage><ForgotPasswordPage /></LocaleAwarePage>} />
 
               {/* Menu */}
-              <Route path="/menu" element={<MenuPage />} />
-              <Route path="/dish-details/:id?" element={<ProtectedRoute><DishDetailPage /></ProtectedRoute>} />
+              <Route path="/menu" element={<LocaleAwarePage><MenuPage /></LocaleAwarePage>} />
+              <Route path="/dish-details/:id?" element={<ProtectedRoute><LocaleAwarePage><DishDetailPage /></LocaleAwarePage></ProtectedRoute>} />
 
               {/* User Routes: Trang cá nhân + Lịch sử giao dịch + Đánh giá dịch vụ */}
-              <Route path="/profile" element={<ProtectedRoute><ProfileLayout /></ProtectedRoute>}>
-                <Route index element={<ProfilePage />} />
-                <Route path="orders" element={<OrdersPage />} />
-                <Route path="ratings" element={<RatingPage />} />
+              <Route path="/profile" element={<ProtectedRoute><LocaleAwarePage><ProfileLayout /></LocaleAwarePage></ProtectedRoute>}>
+                <Route index element={<LocaleAwarePage><ProfilePage /></LocaleAwarePage>} />
+                <Route path="orders" element={<LocaleAwarePage><OrdersPage /></LocaleAwarePage>} />
+                <Route path="ratings" element={<LocaleAwarePage><RatingPage /></LocaleAwarePage>} />
               </Route>
 
               {/* Cart: Đặt bàn + Đặt ship */}
-              <Route path="/cart" element={<ProtectedRoute><CartLayout /></ProtectedRoute>}>
-                <Route index element={<CartIndex />} />
-                <Route path="bookings" element={<BookingsPage />} />
-                <Route path="deliveries" element={<DeliveriesPage />} />
+              <Route path="/cart" element={<ProtectedRoute><LocaleAwarePage><CartLayout /></LocaleAwarePage></ProtectedRoute>}>
+                <Route index element={<LocaleAwarePage><CartIndex /></LocaleAwarePage>} />
+                <Route path="bookings" element={<LocaleAwarePage><BookingsPage /></LocaleAwarePage>} />
+                <Route path="deliveries" element={<LocaleAwarePage><DeliveriesPage /></LocaleAwarePage>} />
               </Route>
 
               {/* Admin Routes */}
-              <Route path="/admin/dashboard" element={<ProtectedRoute requireAdmin={true}><AdminDashboardPage /></ProtectedRoute>} />
-              <Route path="/admin/users" element={<ProtectedRoute requireAdmin={true}><AdminUsersPage /></ProtectedRoute>} />
-              <Route path="/admin/stocks" element={<ProtectedRoute requireAdmin={true}><AdminStockPage /></ProtectedRoute>} />
-              <Route path="/admin/menu" element={<ProtectedRoute requireAdmin={true}><AdminMenuManagement /></ProtectedRoute>} />
-              <Route path="/admin/orders" element={<ProtectedRoute requireAdmin={true}><AdminOrdersLayout /></ProtectedRoute>}>
+              <Route path="/admin/dashboard" element={<ProtectedRoute requireAdmin={true}><LocaleAwarePage><AdminDashboardPage /></LocaleAwarePage></ProtectedRoute>} />
+              <Route path="/admin/users" element={<ProtectedRoute requireAdmin={true}><LocaleAwarePage><AdminUsersPage /></LocaleAwarePage></ProtectedRoute>} />
+              <Route path="/admin/stocks" element={<ProtectedRoute requireAdmin={true}><LocaleAwarePage><AdminStockPage /></LocaleAwarePage></ProtectedRoute>} />
+              <Route path="/admin/menu" element={<ProtectedRoute requireAdmin={true}><LocaleAwarePage><AdminMenuManagement /></LocaleAwarePage></ProtectedRoute>} />
+              <Route path="/admin/orders" element={<ProtectedRoute requireAdmin={true}><LocaleAwarePage><AdminOrdersLayout /></LocaleAwarePage></ProtectedRoute>}>
                 <Route index element={<Navigate to="/admin/orders/bookings" replace />} />
-                <Route path="bookings" element={<AdminBookingsTab />} />
-                <Route path="deliveries" element={<AdminDeliveriesTab />} />
+                <Route path="bookings" element={<LocaleAwarePage><AdminBookingsTab /></LocaleAwarePage>} />
+                <Route path="deliveries" element={<LocaleAwarePage><AdminDeliveriesTab /></LocaleAwarePage>} />
               </Route>
-              <Route path="/admin/sale-off" element={<ProtectedRoute requireAdmin={true}><AdminSaleOffPage /></ProtectedRoute>} />
+              <Route path="/admin/sale-off" element={<ProtectedRoute requireAdmin={true}><LocaleAwarePage><AdminSaleOffPage /></LocaleAwarePage></ProtectedRoute>} />
               {/*Payment*/}
-              <Route path="/payment-result" element={<PaymentResultPage />} />
-              <Route path="/refund-result" element={<RefundResultPage />} />
+              <Route path="/payment-result" element={<LocaleAwarePage><PaymentResultPage /></LocaleAwarePage>} />
+              <Route path="/refund-result" element={<LocaleAwarePage><RefundResultPage /></LocaleAwarePage>} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" />} />

@@ -2,17 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
 import { YEAR_OPTIONS, fmtMoney, extractError } from './helpers';
+import { translatePageText, translateSeededEventName } from '../../../pageTextTranslations';
 
-// 'YYYY-MM-DD' -> 'DD/MM/YYYY'
 const fmtDate = (s) => {
     const [y, m, d] = String(s).split('-');
-    return `${d}/${m}/${y}`;
+    return new Date(Number(y), Number(m) - 1, Number(d))
+        .toLocaleDateString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN');
 };
 
 const dateText = (r) =>
     r.start_date === r.end_date
         ? fmtDate(r.start_date)
-        : `Từ ${fmtDate(r.start_date)} đến ${fmtDate(r.end_date)}`;
+        : document.documentElement.lang === 'en'
+            ? `From ${fmtDate(r.start_date)} to ${fmtDate(r.end_date)}`
+            : `Từ ${fmtDate(r.start_date)} đến ${fmtDate(r.end_date)}`;
 
 const HolidaysSection = () => {
     const [year, setYear] = useState(new Date().getFullYear());
@@ -30,7 +33,7 @@ const HolidaysSection = () => {
                 if (!cancelled) setRows(res?.data?.data || []);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, 'Lỗi tải bảng ngày lễ'));
+                    setError(extractError(err, translatePageText("Lỗi tải bảng ngày lễ")));
                     setRows([]);
                 }
             } finally {
@@ -62,27 +65,27 @@ const HolidaysSection = () => {
                         <thead className="bg-red-600 text-white">
                             <tr>
                                 <th className="px-3 py-2 text-left">STT</th>
-                                <th className="px-3 py-2 text-left">Tên ngày nghỉ lễ</th>
-                                <th className="px-3 py-2 text-left">Ngày</th>
-                                <th className="px-3 py-2 text-right">Tổng doanh thu</th>
-                                <th className="px-3 py-2 text-right">Tổng số đơn</th>
+                                <th className="px-3 py-2 text-left">{translatePageText("Tên ngày nghỉ lễ")}</th>
+                                <th className="px-3 py-2 text-left">{translatePageText("Ngày")}</th>
+                                <th className="px-3 py-2 text-right">{translatePageText("Tổng doanh thu")}</th>
+                                <th className="px-3 py-2 text-right">{translatePageText("Tổng số đơn")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {rows.map((r, idx) => (
                                 <tr key={`${r.name}-${r.start_date}`} className="border-b hover:bg-gray-50">
                                     <td className="px-3 py-2 font-bold text-red-600">{idx + 1}</td>
-                                    <td className="px-3 py-2 font-semibold">{r.name}</td>
+                                    <td className="px-3 py-2 font-semibold">{translateSeededEventName(r.name)}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{dateText(r)}</td>
                                     <td className="px-3 py-2 text-right font-bold">{fmtMoney(r.revenue)}</td>
-                                    <td className="px-3 py-2 text-right">{Number(r.orders).toLocaleString('vi-VN')}</td>
+                                    <td className="px-3 py-2 text-right">{Number(r.orders).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}</td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
             ) : (
-                <div className="p-6 text-center text-gray-500">Không có dữ liệu</div>
+                <div className="p-6 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
             )}
         </div>
     );

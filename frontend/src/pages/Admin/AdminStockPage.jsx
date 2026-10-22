@@ -3,6 +3,8 @@ import axiosInstance from '../../services/api';
 import { TableLoading, Card, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
 import { translateIngredients } from '../Menu/DishDetailPage';
+import { translatePageText } from '../../pageTextTranslations';
+import { translateDishName } from '../../dishTranslations';
 
 const LOW_LIMIT = 15;
 
@@ -101,7 +103,7 @@ const AdminStockPage = () => {
             ? ` (Bỏ: ${translateIngredients(removedIngredients.join(', '))})`
             : '';
 
-        return `${item.dish_name || 'Món không xác định'}${removedLabel} x${item.quantity}`;
+        return `${translateDishName(item)}${removedLabel} x${item.quantity}`;
     };
 
     const tabClass = (active) =>
@@ -112,26 +114,26 @@ const AdminStockPage = () => {
 
     return (
         <AdminPageShell
-            title="Quản lý kho hàng"
+            title={translatePageText("Quản lý kho hàng")}
             actions={
                 <>
-                    <button onClick={() => setView('stocks')} className={tabClass(view === 'stocks')}>Kho hàng</button>
-                    <button onClick={() => setView('history')} className={tabClass(view === 'history')}>Nhật ký kho</button>
+                    <button onClick={() => setView('stocks')} className={tabClass(view === 'stocks')}>{translatePageText("Kho hàng")}</button>
+                    <button onClick={() => setView('history')} className={tabClass(view === 'history')}>{translatePageText("Nhật ký kho")}</button>
                 </>
             }
         >
             {view === 'stocks' && (
                 <StatGrid>
-                    <StatCard label="Tổng nguyên liệu trong kho" value={stocks.length} icon="fa-boxes-stacked" tone="red" />
-                    <StatCard label="Cần nhập thêm hàng" value={lowStockCount} icon="fa-triangle-exclamation" tone="yellow" />
-                    <StatCard label="Hết hàng" value={outOfStockCount} icon="fa-ban" tone="gray" />
+                    <StatCard label={translatePageText("Tổng nguyên liệu trong kho")} value={stocks.length} icon="fa-boxes-stacked" tone="red" />
+                    <StatCard label={translatePageText("Cần nhập thêm hàng")} value={lowStockCount} icon="fa-triangle-exclamation" tone="yellow" />
+                    <StatCard label={translatePageText("Hết hàng")} value={outOfStockCount} icon="fa-ban" tone="gray" />
                 </StatGrid>
             )}
 
             {/* Thanh công cụ */}
             <div className="mb-4 flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm p-3">
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-semibold text-gray-700">Ngày:</label>
+                    <label className="text-sm font-semibold text-gray-700">{translatePageText("Ngày:")}</label>
                     <input
                         type="date"
                         value={selectedDate}
@@ -143,7 +145,7 @@ const AdminStockPage = () => {
                 {view === 'stocks' && (
                     <>
                         <div className="flex gap-2">
-                            {[['all', 'Tất cả'], ['low', `Cần nhập thêm hàng (${lowStockCount})`]].map(([key, label]) => (
+                            {[['all', translatePageText("Tất cả")], ['low', `Cần nhập thêm hàng (${lowStockCount})`]].map(([key, label]) => (
                                 <button key={key} onClick={() => setFilter(key)} className={chipClass(filter === key)}>
                                     {label}
                                 </button>
@@ -155,26 +157,26 @@ const AdminStockPage = () => {
                                 <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input
                                     type="text"
-                                    placeholder="Tìm nguyên liệu, nhấn Enter..."
+                                    placeholder={translatePageText("Tìm nguyên liệu, nhấn Enter...")}
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter') setSearchTerm(search); }}
                                     className="pl-9 pr-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-red-600 w-56"
                                 />
                             </div>
-                            <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">Sắp xếp theo:</span>
+                            <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">{translatePageText("Sắp xếp theo:")}</span>
                             <select
                                 value={sortBy}
                                 onChange={e => setSortBy(e.target.value)}
                                 className="px-3 py-1.5 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:border-red-600"
                             >
-                                <option value="code">Mã kho</option>
-                                <option value="stock">Tồn kho</option>
+                                <option value="code">{translatePageText("Mã kho")}</option>
+                                <option value="stock">{translatePageText("Tồn kho")}</option>
                             </select>
                             <button
                                 type="button"
                                 onClick={() => setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))}
-                                title={sortDir === 'asc' ? 'Đang tăng dần, bấm để giảm dần' : 'Đang giảm dần, bấm để tăng dần'}
+                                title={sortDir === 'asc' ? translatePageText("Đang tăng dần, bấm để giảm dần") : translatePageText("Đang giảm dần, bấm để tăng dần")}
                                 className="flex items-center px-3 py-1.5 border border-gray-300 rounded bg-white hover:border-red-600 text-sm"
                             >
                                 <i className={`fas fa-arrow-up ${sortDir === 'asc' ? 'text-red-600' : 'text-gray-300'}`}></i>
@@ -187,14 +189,12 @@ const AdminStockPage = () => {
 
             {view === 'stocks' ? (
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 border-b font-semibold text-gray-800">
-                        Còn trong kho ngày {selectedDate} ({filtered.length} nguyên liệu)
-                    </div>
+                    <div className="px-4 py-3 border-b font-semibold text-gray-800">{translatePageText("Còn trong kho ngày") + " "}{selectedDate} ({filtered.length}{" " + translatePageText("nguyên liệu)") + " "}</div>
 
                     {loading ? (
                         <TableLoading />
                     ) : filtered.length === 0 ? (
-                        <p className="py-8 text-center text-gray-500">Không có dữ liệu</p>
+                        <p className="py-8 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</p>
                     ) : (
                         <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                             {filtered.map(item => {
@@ -214,9 +214,9 @@ const AdminStockPage = () => {
                                                 {item.quantity_left} / {item.quantity_start}
                                             </p>
                                             <div className="mt-1 text-[11px] text-gray-500 leading-4">
-                                                <p>Refill: {item.refill_count ?? 0} · Giữ chỗ: {item.reserved ?? 0}</p>
+                                                <p>Refill: {item.refill_count ?? 0}{" " + translatePageText("· Giữ chỗ:") + " "}{item.reserved ?? 0}</p>
                                                 <p className="whitespace-nowrap">
-                                                    {item.updated_at ? new Date(item.updated_at).toLocaleString('vi-VN') : '-'}
+                                                    {item.updated_at ? new Date(item.updated_at).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') : '-'}
                                                 </p>
                                             </div>
                                         </div>
@@ -229,18 +229,18 @@ const AdminStockPage = () => {
             ) : (
                 <div className="space-y-4">
                     {loading ? <TableLoading /> : history.length === 0 ? (
-                        <Card><p className="text-center py-8 text-gray-500">Chưa có nhật ký kho trong ngày {selectedDate}</p></Card>
+                        <Card><p className="text-center py-8 text-gray-500">{translatePageText("Chưa có nhật ký kho trong ngày") + " "}{selectedDate}</p></Card>
                     ) : history.map((order) => (
                         <Card key={order.order_id} title={
                             <div className="flex items-baseline flex-wrap">
                                 <span className="text-red-600">{`Đơn hàng ${order.order_stt || order.order_id}`}</span>
-                                <span className="ml-[2.5cm] text-sm font-normal text-gray-500">Mã hóa đơn: {order.bill_id || '—'}</span>
+                                <span className="ml-[2.5cm] text-sm font-normal text-gray-500">{translatePageText("Mã hóa đơn:") + " "}{order.bill_id || '—'}</span>
                             </div>
                         }>
                             <div className="space-y-4 text-sm">
-                                <p><span className="font-semibold">Người đặt:</span> {order.user?.username || 'Không xác định'}{order.user?.email ? ` (${order.user.email})` : ''}</p>
+                                <p><span className="font-semibold">{translatePageText("Người đặt:")}</span> {order.user?.username || translatePageText("Không xác định")}{order.user?.email ? ` (${order.user.email})` : ''}</p>
                                 <div>
-                                    <p className="font-semibold mb-2">Danh sách món:</p>
+                                    <p className="font-semibold mb-2">{translatePageText("Danh sách món:")}</p>
                                     <div className="flex flex-wrap gap-x-5 gap-y-1">
                                         {order.items.map((item) => (
                                             <span key={`${order.order_id}-${item.dish_id}-${item.customization_id ?? 'original'}`}>
@@ -253,7 +253,7 @@ const AdminStockPage = () => {
                                     <table className="w-full min-w-[720px] border-collapse border border-black text-sm">
                                         <thead className="bg-red-600 text-white">
                                             <tr>
-                                                <th className="border border-black px-3 py-2 text-left">Trạng thái</th>
+                                                <th className="border border-black px-3 py-2 text-left">{translatePageText("Trạng thái")}</th>
                                                 {order.ingredients.map((item) => (
                                                     <th key={item.ingredient_name} className="border border-black px-3 py-2 text-center">
                                                         {translateIngredients(item.ingredient_name)}
@@ -263,15 +263,15 @@ const AdminStockPage = () => {
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <th className="border border-black px-3 py-2 text-left">Số lượng trước khi đặt</th>
+                                                <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng trước khi đặt")}</th>
                                                 {order.ingredients.map((item) => <td key={`before-${item.ingredient_name}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_before}</td>)}
                                             </tr>
                                             <tr>
-                                                <th className="border border-black px-3 py-2 text-left">Số lượng đã trừ</th>
+                                                <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng đã trừ")}</th>
                                                 {order.ingredients.map((item) => <td key={`deducted-${item.ingredient_name}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_deducted}</td>)}
                                             </tr>
                                             <tr>
-                                                <th className="border border-black px-3 py-2 text-left">Số lượng còn lại</th>
+                                                <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng còn lại")}</th>
                                                 {order.ingredients.map((item) => <td key={`after-${item.ingredient_name}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_after}</td>)}
                                             </tr>
                                         </tbody>
@@ -286,7 +286,7 @@ const AdminStockPage = () => {
             {/* Modal lỗi */}
             <Modal
                 isOpen={Boolean(error)}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setError(null)}

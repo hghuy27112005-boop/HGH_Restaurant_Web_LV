@@ -1,14 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { ratingAPI } from '../../services/api';
 import { Loading, ErrorMessage, EmptyState, Modal } from '../../components/Shared';
+import { translatePageText } from '../../pageTextTranslations';
+import { translateDishName } from '../../dishTranslations';
 
 // Nhãn chữ hiển thị theo số sao đang chọn (chỉ để hiển thị, không gửi lên server)
-const STAR_LABELS = { 1: 'Rất tệ', 2: 'Chưa tốt', 3: 'Bình thường', 4: 'Tốt', 5: 'Tuyệt vời' };
+const STAR_LABELS = {
+    1: 'Rất tệ',
+    2: 'Chưa tốt',
+    3: 'Bình thường',
+    4: 'Tốt',
+    5: 'Tuyệt vời',
+};
 
 const FILTERS = [
-    { id: 'unrated', label: 'Chưa đánh giá' },
-    { id: 'rated', label: 'Đã đánh giá' },
-    { id: 'all', label: 'Tất cả' },
+    { id: 'unrated', get label() { return translatePageText("Chưa đánh giá"); } },
+    { id: 'rated', get label() { return translatePageText("Đã đánh giá"); } },
+    { id: 'all', get label() { return translatePageText("Tất cả"); } },
 ];
 
 const ORDERS_PER_PAGE = 10;
@@ -39,7 +47,7 @@ const StarPicker = ({ value, onChange }) => {
                 ))}
             </div>
             <span className={`text-sm font-semibold ${displayValue ? 'text-gray-700' : 'text-gray-400'}`}>
-                {displayValue ? STAR_LABELS[displayValue] : 'Bấm vào sao để đánh giá'}
+                {displayValue ? translatePageText(STAR_LABELS[displayValue]) : translatePageText("Bấm vào sao để đánh giá")}
             </span>
         </div>
     );
@@ -83,7 +91,7 @@ const RatingPage = () => {
             const items = response.data?.data || [];
             setModerationBlocked(Boolean(response.data?.moderation?.blocked));
             if (response.data?.moderation?.blocked) {
-                setModerationMessage('Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.');
+                setModerationMessage(translatePageText("Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay."));
             }
             setOrders(items);
 
@@ -96,7 +104,9 @@ const RatingPage = () => {
                         comment: item.existing_rating?.comment || '',
                     };
                     if (item.existing_rating?.ai_response) {
-                        initialAiResponses[item.order_item_id] = item.existing_rating.ai_response;
+                        initialAiResponses[item.order_item_id] = {
+                            [document.documentElement.lang === 'en' ? 'en' : 'vi']: item.existing_rating.ai_response,
+                        };
                     }
                 });
             });
@@ -126,7 +136,7 @@ const RatingPage = () => {
     const handleSubmit = async (orderItemId) => {
         const draft = drafts[orderItemId];
         if (!draft || !draft.rating) {
-            setErrorMessage('Vui lòng chọn số sao trước khi gửi đánh giá.');
+            setErrorMessage(translatePageText("Vui lòng chọn số sao trước khi gửi đánh giá."));
             return;
         }
 
@@ -139,7 +149,9 @@ const RatingPage = () => {
             });
             setAiResponses((prev) => ({
                 ...prev,
-                [orderItemId]: response.data?.data?.ai_response,
+                [orderItemId]: {
+                    [document.documentElement.lang === 'en' ? 'en' : 'vi']: response.data?.data?.ai_response,
+                },
             }));
             setRatedIds((prev) => ({ ...prev, [orderItemId]: true }));
             setJustRatedIds((prev) => ({ ...prev, [orderItemId]: true }));
@@ -153,7 +165,7 @@ const RatingPage = () => {
                 setModerationMessage(data.message);
                 setModerationBlocked(Boolean(data.blocked));
             } else {
-                setErrorMessage('Lỗi khi gửi đánh giá, vui lòng thử lại.');
+                setErrorMessage(translatePageText("Lỗi khi gửi đánh giá, vui lòng thử lại."));
                 console.error(err);
             }
         } finally {
@@ -161,7 +173,9 @@ const RatingPage = () => {
         }
     };
 
-    const formatDateOnly = (d) => (d ? new Date(d).toLocaleDateString('vi-VN') : '—');
+    const formatDateOnly = (d) => (
+        d ? new Date(d).toLocaleDateString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') : '—'
+    );
 
     const toggleOrder = (orderId, currentlyOpen) => {
         setExpandedIds((prev) => ({ ...prev, [orderId]: !currentlyOpen }));
@@ -224,8 +238,8 @@ const RatingPage = () => {
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
                         <EmptyState
                             icon="⭐"
-                            title="Chưa có món để đánh giá"
-                            description="Bạn cần đặt và thanh toán ít nhất 1 đơn hàng trước khi có thể đánh giá."
+                            title={translatePageText("Chưa có món để đánh giá")}
+                            description={translatePageText("Bạn cần đặt và thanh toán ít nhất 1 đơn hàng trước khi có thể đánh giá.")}
                         />
                     </div>
                 ) : (
@@ -233,17 +247,15 @@ const RatingPage = () => {
                         {/* Bộ lọc mã hóa đơn + ngày */}
                         <div className="flex items-center justify-end mb-5 flex-wrap gap-3">
                             <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-                                <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
+                                <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{translatePageText("Tìm theo mã hóa đơn")}</span>
                                 <input
                                     type="text"
                                     value={searchBillId}
                                     onChange={e => setSearchBillId(e.target.value)}
-                                    placeholder="Nhập mã hóa đơn..."
+                                    placeholder={translatePageText("Nhập mã hóa đơn...")}
                                     className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                                 />
-                                <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="rating-date-filter">
-                                    Ngày:
-                                </label>
+                                <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="rating-date-filter">{translatePageText("Ngày:") + " "}</label>
                                 <input
                                     id="rating-date-filter"
                                     type="date"
@@ -257,9 +269,7 @@ const RatingPage = () => {
                         {/* Thẻ tóm tắt tiến độ + bộ lọc */}
                         <div className="mb-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
                             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-                                <p className="font-semibold text-gray-800">
-                                    Bạn đã đánh giá <span className="text-red-600">{ratedTotal}/{totalCount}</span> món
-                                </p>
+                                <p className="font-semibold text-gray-800">{translatePageText("Bạn đã đánh giá") + " "}<span className="text-red-600">{ratedTotal}/{totalCount}</span>{" " + translatePageText("món") + " "}</p>
                                 <div className="grid grid-cols-3 w-full sm:w-auto sm:inline-flex gap-2">
                                     {FILTERS.map((f) => (
                                         <button
@@ -288,8 +298,8 @@ const RatingPage = () => {
                             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
                                 <EmptyState
                                     icon="🧾"
-                                    title="Không có đơn hàng"
-                                    description="Không tìm thấy đơn hàng phù hợp với bộ lọc."
+                                    title={translatePageText("Không có đơn hàng")}
+                                    description={translatePageText("Không tìm thấy đơn hàng phù hợp với bộ lọc.")}
                                 />
                             </div>
                         ) : visibleOrders.length === 0 ? (
@@ -297,14 +307,14 @@ const RatingPage = () => {
                                 {filter === 'unrated' ? (
                                     <EmptyState
                                         icon="🎉"
-                                        title="Bạn đã đánh giá hết các món"
-                                        description="Cảm ơn bạn đã góp ý cho nhà hàng."
+                                        title={translatePageText("Bạn đã đánh giá hết các món")}
+                                        description={translatePageText("Cảm ơn bạn đã góp ý cho nhà hàng.")}
                                     />
                                 ) : (
                                     <EmptyState
                                         icon="⭐"
-                                        title="Chưa có món nào được đánh giá"
-                                        description='Chọn số sao ở các món trong mục "Chưa đánh giá" để bắt đầu.'
+                                        title={translatePageText("Chưa có món nào được đánh giá")}
+                                        description={translatePageText("Chọn số sao ở các món trong mục \"Chưa đánh giá\" để bắt đầu.")}
                                     />
                                 )}
                             </div>
@@ -322,18 +332,15 @@ const RatingPage = () => {
                                                 onClick={() => toggleOrder(order.order_id, isOpen)}
                                                 className={`w-full text-left flex flex-wrap items-center gap-x-3 gap-y-2 px-4 sm:px-6 py-3 sm:py-4 bg-red-50 hover:bg-red-100 transition ${isOpen ? 'border-b border-red-100' : ''}`}
                                             >
-                                                <span className="text-lg font-bold text-gray-800">
-                                                    Đơn hàng {order.order_stt || order.order_id}
+                                                <span className="text-lg font-bold text-gray-800">{translatePageText("Đơn hàng") + " "}{order.order_stt || order.order_id}
                                                 </span>
                                                 <span className="rounded-full bg-white border border-gray-200 px-3 py-0.5 text-xs font-semibold text-gray-600">
                                                     {formatDateOnly(order.created_at)}
                                                 </span>
-                                                <span className="rounded-full bg-white border border-gray-200 px-3 py-0.5 text-xs font-semibold text-gray-600">
-                                                    Mã hóa đơn: {order.bill_id}
+                                                <span className="rounded-full bg-white border border-gray-200 px-3 py-0.5 text-xs font-semibold text-gray-600">{translatePageText("Mã hóa đơn:") + " "}{order.bill_id}
                                                 </span>
                                                 <span className="ml-auto text-xs sm:text-sm font-semibold text-gray-600">
-                                                    {ratedCount}/{order.items.length} món đã đánh giá
-                                                </span>
+                                                    {ratedCount}/{order.items.length}{" " + translatePageText("món đã đánh giá") + " "}</span>
                                                 <span className={`text-gray-500 text-sm transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true">▼</span>
                                             </button>
 
@@ -349,23 +356,19 @@ const RatingPage = () => {
                                                             <div className="flex items-start gap-3 sm:gap-4">
                                                                 <img
                                                                     src={item.dish_image}
-                                                                    alt={item.dish_name}
+                                                                    alt={translateDishName(item)}
                                                                     className="w-16 h-16 sm:w-24 sm:h-24 object-cover rounded-xl flex-shrink-0"
                                                                 />
                                                                 <div className="min-w-0 flex-1">
-                                                                    <p className="font-semibold text-gray-800 text-base sm:text-lg leading-snug">{item.dish_name}</p>
+                                                                    <p className="font-semibold text-gray-800 text-base sm:text-lg leading-snug">{translateDishName(item)}</p>
                                                                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
                                                                         <span className="rounded-full bg-white border border-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
                                                                             x{item.quantity}
                                                                         </span>
                                                                         {isRated ? (
-                                                                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-                                                                                ✓ Đã đánh giá
-                                                                            </span>
+                                                                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">{translatePageText("✓ Đã đánh giá") + " "}</span>
                                                                         ) : (
-                                                                            <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
-                                                                                Chưa đánh giá
-                                                                            </span>
+                                                                            <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600">{translatePageText("Chưa đánh giá") + " "}</span>
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -380,7 +383,7 @@ const RatingPage = () => {
                                                                 <textarea
                                                                     value={draft.comment}
                                                                     onChange={(e) => updateDraft(item.order_item_id, 'comment', e.target.value)}
-                                                                    placeholder="Viết vài dòng nhận xét (không bắt buộc)..."
+                                                                    placeholder={translatePageText("Viết vài dòng nhận xét (không bắt buộc)...")}
                                                                     rows={2}
                                                                     className="w-full mt-3 border border-gray-200 rounded-lg bg-white px-3 py-2 text-sm focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-100 resize-none"
                                                                 />
@@ -392,18 +395,18 @@ const RatingPage = () => {
                                                                         className="w-full sm:w-auto px-5 py-2 text-sm font-bold rounded-full bg-red-600 text-white hover:bg-red-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
                                                                     >
                                                                         {submittingId === item.order_item_id
-                                                                            ? 'Đang gửi...'
-                                                                            : isRated ? 'Cập nhật đánh giá' : 'Gửi đánh giá'}
+                                                                            ? translatePageText("Đang gửi...")
+                                                                            : isRated ? translatePageText("Cập nhật đánh giá") : translatePageText("Gửi đánh giá")}
                                                                     </button>
                                                                     {savedIds[item.order_item_id] && (
-                                                                        <span className="text-green-600 text-sm font-semibold">✓ Đã lưu!</span>
+                                                                        <span className="text-green-600 text-sm font-semibold">{translatePageText("✓ Đã lưu!")}</span>
                                                                     )}
                                                                 </div>
 
-                                                                {aiResponses[item.order_item_id] && (
+                                                                {aiResponses[item.order_item_id]?.[document.documentElement.lang === 'en' ? 'en' : 'vi'] && (
                                                                     <div className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
-                                                                        <p className="text-xs font-semibold text-red-600">Phản hồi từ nhà hàng</p>
-                                                                        <p className="mt-0.5 text-sm text-gray-700">{aiResponses[item.order_item_id]}</p>
+                                                                        <p className="text-xs font-semibold text-red-600">{translatePageText("Phản hồi từ nhà hàng")}</p>
+                                                                        <p className="mt-0.5 text-sm text-gray-700">{aiResponses[item.order_item_id][document.documentElement.lang === 'en' ? 'en' : 'vi']}</p>
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -421,9 +424,7 @@ const RatingPage = () => {
                                         type="button"
                                         onClick={() => setVisibleCount((c) => c + ORDERS_PER_PAGE)}
                                         className="w-full py-3 rounded-2xl border border-gray-300 bg-white text-sm font-semibold text-gray-700 hover:border-red-600 hover:text-red-600 transition"
-                                    >
-                                        Xem thêm ({visibleOrders.length - visibleCount} đơn)
-                                    </button>
+                                    >{translatePageText("Xem thêm (")}{visibleOrders.length - visibleCount}{" " + translatePageText("đơn)") + " "}</button>
                                 )}
                             </div>
                         )}
@@ -433,7 +434,7 @@ const RatingPage = () => {
 
             <Modal
                 isOpen={!!errorMessage}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 onClose={() => setErrorMessage(null)}
                 cancelText="Đóng"
             >

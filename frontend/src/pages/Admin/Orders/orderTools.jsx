@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { translatePageText } from '../../../pageTextTranslations';
 
 const pad = (n) => String(n).padStart(2, '0');
 
 export const formatDmy = (d) => `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+const formatDisplayDate = (value) => {
+    const [day, month, year] = value.split('/').map(Number);
+    return new Date(year, month - 1, day)
+        .toLocaleDateString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN');
+};
 
 // Bộ lọc ngày: mode 'day' (nhiều ngày lẻ, dd/mm/yyyy) hoặc 'month' (mm/yyyy)
 export const emptyDateFilter = () => ({ mode: 'day', dates: [], month: '' });
@@ -32,6 +38,9 @@ export const DateFilter = ({ label, value, onChange }) => {
 
     const year = view.getFullYear();
     const month = view.getMonth();
+    const weekdays = document.documentElement.lang === 'en'
+        ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        : WEEKDAYS;
     const firstOffset = (new Date(year, month, 1).getDay() + 6) % 7; // tuần bắt đầu từ T2
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const cells = [
@@ -65,13 +74,15 @@ export const DateFilter = ({ label, value, onChange }) => {
 
     let summary;
     if (value.mode === 'month') {
-        summary = value.month ? `Tháng ${value.month}` : 'Tất cả';
+        summary = value.month ? `${translatePageText("Tháng")} ${value.month}` : translatePageText("Tất cả");
     } else if (value.dates.length === 0) {
-        summary = 'Tất cả';
+        summary = translatePageText("Tất cả");
     } else if (value.dates.length === 1) {
-        summary = value.dates[0];
+        summary = formatDisplayDate(value.dates[0]);
     } else {
-        summary = `${value.dates.length} ngày đã chọn`;
+        summary = document.documentElement.lang === 'en'
+            ? `${value.dates.length} dates selected`
+            : `${value.dates.length} ngày đã chọn`;
     }
 
     return (
@@ -79,7 +90,7 @@ export const DateFilter = ({ label, value, onChange }) => {
             <button
                 type="button"
                 onClick={() => setOpen((v) => !v)}
-                title={value.mode === 'day' ? value.dates.join(', ') : undefined}
+                title={value.mode === 'day' ? value.dates.map(formatDisplayDate).join(', ') : undefined}
                 className="flex items-center gap-2 border border-gray-300 rounded px-3 py-2 bg-white text-sm hover:border-red-600"
             >
                 <i className="far fa-calendar text-red-600"></i>
@@ -90,9 +101,9 @@ export const DateFilter = ({ label, value, onChange }) => {
             {open && (
                 <div className="absolute left-0 top-full mt-2 z-30 w-72 bg-white border border-gray-200 rounded-lg shadow-xl p-4">
                     <div className="flex items-center gap-2 mb-3 text-sm">
-                        <span className="text-gray-600">Lọc theo:</span>
+                        <span className="text-gray-600">{translatePageText("Lọc theo:")}</span>
                         <div className="inline-flex rounded border border-red-600 overflow-hidden">
-                            {[['day', 'Ngày'], ['month', 'Tháng']].map(([mode, text]) => (
+                            {[['day', translatePageText("Ngày")], ['month', translatePageText("Tháng")]].map(([mode, text]) => (
                                 <button
                                     key={mode}
                                     type="button"
@@ -108,7 +119,9 @@ export const DateFilter = ({ label, value, onChange }) => {
                     <div className="flex items-center justify-between mb-2">
                         <button type="button" onClick={() => move(-1)} className="w-8 h-8 rounded hover:bg-gray-100 font-bold">‹</button>
                         <span className="font-semibold text-gray-800">
-                            {value.mode === 'month' ? `Năm ${year}` : `Tháng ${month + 1}/${year}`}
+                            {value.mode === 'month'
+                                ? `${translatePageText("Năm")} ${year}`
+                                : `${translatePageText("Tháng")} ${month + 1}/${year}`}
                         </span>
                         <button type="button" onClick={() => move(1)} className="w-8 h-8 rounded hover:bg-gray-100 font-bold">›</button>
                     </div>
@@ -116,7 +129,7 @@ export const DateFilter = ({ label, value, onChange }) => {
                     {value.mode === 'day' ? (
                         <>
                             <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-500 mb-1">
-                                {WEEKDAYS.map((w) => <div key={w}>{w}</div>)}
+                                {weekdays.map((w) => <div key={w}>{w}</div>)}
                             </div>
                             <div className="grid grid-cols-7 gap-1">
                                 {cells.map((day, idx) => {
@@ -145,8 +158,7 @@ export const DateFilter = ({ label, value, onChange }) => {
                                         type="button"
                                         onClick={() => pickMonth(m)}
                                         className={`py-2 rounded text-sm ${selected ? 'bg-red-600 text-white font-bold' : 'hover:bg-red-50 text-gray-700 border border-gray-200'}`}
-                                    >
-                                        Tháng {m + 1}
+                                    >{translatePageText("Tháng") + " "}{m + 1}
                                     </button>
                                 );
                             })}
@@ -158,15 +170,13 @@ export const DateFilter = ({ label, value, onChange }) => {
                             type="button"
                             onClick={() => onChange({ ...value, dates: [], month: '' })}
                             className="text-gray-500 hover:text-red-600 font-semibold"
-                        >
-                            Xóa chọn
-                        </button>
+                        >{translatePageText("Xóa chọn") + " "}</button>
                         <button
                             type="button"
                             onClick={() => setOpen(false)}
                             className="px-3 py-1 rounded bg-red-600 text-white font-semibold hover:bg-red-700"
                         >
-                            Xong
+                            {translatePageText("Xong")}
                         </button>
                     </div>
                 </div>
@@ -206,9 +216,7 @@ export const Pagination = ({ currentPage, lastPage, onChange }) => {
                 className="w-16 px-2 py-1 border border-gray-300 rounded text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
             <span>/ {lastPage}</span>
-            <button onClick={go} className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700">
-                Đi tới
-            </button>
+            <button onClick={go} className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700">{translatePageText("Đi tới") + " "}</button>
         </div>
     );
 };

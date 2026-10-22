@@ -30,6 +30,7 @@ class User extends Authenticatable
         'recommendation_reset_at',
         'skipped_recommendation_modal',
         'locked_until',
+        'preferred_language',
     ];
 
     // Số lượt hủy / sửa đơn mỗi tuần cho mỗi khách

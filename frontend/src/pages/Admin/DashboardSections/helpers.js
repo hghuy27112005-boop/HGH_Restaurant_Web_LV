@@ -6,7 +6,10 @@ export const YEAR_OPTIONS = [thisYear, thisYear - 1];
 export const DISH_COLORS = ['#dc2626', '#2563eb', '#16a34a', '#d97706', '#7c3aed'];
 export const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 
-export const fmtMoney = (v) => `${Number(v || 0).toLocaleString('vi-VN')}đ`;
+export const fmtMoney = (v) => {
+    const english = document.documentElement.lang === 'en';
+    return `${Number(v || 0).toLocaleString(english ? 'en-US' : 'vi-VN')}${english ? ' VND' : 'đ'}`;
+};
 
 export function extractError(err, fallback) {
     const resp = err?.response;

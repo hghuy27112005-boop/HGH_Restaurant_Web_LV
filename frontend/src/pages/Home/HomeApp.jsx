@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { dishAPI } from '../../services/api';
 import { Link } from 'react-router-dom';
 import Footer from '../../components/Footer';
 import { useAuthContext } from '../../context/AuthContext';
+import { translatePageText } from '../../pageTextTranslations';
+import { translateDishName } from '../../dishTranslations';
 
 // Ảnh nền của trang chủ: muốn đổi ảnh chỉ cần sửa dòng này
 const HOME_BACKGROUND = '/pics/30.jpg';
@@ -11,6 +14,7 @@ const HOME_BACKGROUND = '/pics/30.jpg';
 const glassPanel = 'rounded-2xl border border-white/20 bg-black/40 shadow-2xl backdrop-blur-md';
 
 export default function HomeApp() {
+    const { t } = useTranslation();
     const [highlights, setHighlights] = useState([]);
     const { user, isAuthenticated } = useAuthContext();
     const isAdmin = isAuthenticated && user?.role === 'admin';
@@ -46,14 +50,14 @@ export default function HomeApp() {
                 {/* Phần đầu trang: chiếm đúng phần màn hình còn lại dưới navbar */}
                 <section className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl items-center px-4 sm:px-6 pb-10">
                     <div className="mx-auto max-w-lg text-center drop-shadow-lg lg:mx-0 lg:text-left">
-                        <h1 className="text-4xl sm:text-5xl font-bold leading-tight">NHÀ HÀNG HGH</h1>
-                        <p className="mt-4 text-xl sm:text-2xl text-white/90">Hương vị cơm gia đình thuần túy</p>
+                        <h1 className="text-4xl sm:text-5xl font-bold leading-tight">{t('common.restaurantName')}</h1>
+                        <p className="mt-4 text-xl sm:text-2xl text-white/90">{t('common.homeTagline')}</p>
                         {!isAdmin && (
                             <Link
                                 to="/menu"
                                 className="mt-6 inline-block rounded-full bg-red-600 px-6 py-2.5 font-semibold text-white transition hover:bg-red-700"
                             >
-                                Xem thực đơn
+                                {t('common.viewMenu')}
                             </Link>
                         )}
                     </div>
@@ -63,18 +67,12 @@ export default function HomeApp() {
                     {/* Giới thiệu (chỉ còn phần chữ) */}
                     <section className={`${glassPanel} mx-auto max-w-4xl p-6 sm:p-10`}>
                         <h2 className="mb-6 inline-block border-b-4 border-red-600 pb-1 text-2xl font-bold text-white sm:text-3xl">
-                            Về Nhà Hàng HGH
+                            {t('common.aboutRestaurant')}
                         </h2>
                         <div className="space-y-4 text-base leading-relaxed text-white/90 sm:text-lg">
-                            <p>
-                                Tọa lạc tại trung tâm TP. Cần Thơ, Nhà hàng HGH là điểm đến lý tưởng cho những ai yêu thích hương vị cơm gia đình thuần túy.
-                            </p>
-                            <p>
-                                Chúng tôi tự hào mang đến những món ăn không chỉ ngon miệng mà còn đảm bảo vệ sinh, được chế biến từ nguồn nguyên liệu tươi sạch đặc trưng của vùng sông nước miền Tây.
-                            </p>
-                            <p>
-                                Với không gian ấm cúng và đội ngũ nhân viên nhiệt tình, HGH mong muốn mỗi bữa ăn của quý khách đều mang lại cảm giác thân thuộc như tại chính ngôi nhà của mình.
-                            </p>
+                            <p>{translatePageText("Tọa lạc tại trung tâm TP. Cần Thơ, Nhà hàng HGH là điểm đến lý tưởng cho những ai yêu thích hương vị cơm gia đình thuần túy.") + " "}</p>
+                            <p>{translatePageText("Chúng tôi tự hào mang đến những món ăn không chỉ ngon miệng mà còn đảm bảo vệ sinh, được chế biến từ nguồn nguyên liệu tươi sạch đặc trưng của vùng sông nước miền Tây.") + " "}</p>
+                            <p>{translatePageText("Với không gian ấm cúng và đội ngũ nhân viên nhiệt tình, HGH mong muốn mỗi bữa ăn của quý khách đều mang lại cảm giác thân thuộc như tại chính ngôi nhà của mình.") + " "}</p>
                         </div>
                     </section>
 
@@ -94,13 +92,12 @@ export default function HomeApp() {
                                     <img
                                         src={dish.image_url || '/pics/01.jpg'}
                                         className="h-40 w-full rounded-xl object-cover sm:h-44"
-                                        alt={dish.dish_name || dish.name}
+                                        alt={translateDishName(dish)}
                                     />
                                     <div className="px-1 pb-1 pt-3 text-center">
-                                        <h3 className="text-lg font-semibold text-gray-800">{dish.dish_name || dish.name}</h3>
+                                        <h3 className="text-lg font-semibold text-gray-800">{translateDishName(dish)}</h3>
                                         <p className="mt-1 text-xl font-bold text-red-600">
-                                            {Number(dish.price).toLocaleString('vi-VN')}đ
-                                        </p>
+                                            {Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
                                     </div>
                                 </div>
                             ))}

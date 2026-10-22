@@ -6,6 +6,9 @@ import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from './DishDetailPage';
 import { getCartKey } from '../../utils/cartStorage';
+import { translatePageText } from '../../pageTextTranslations';
+import { translateDishName } from '../../dishTranslations';
+import i18n from '../../i18n';
 
 // Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
 const MAX_ORDER_QTY = 50;
@@ -115,7 +118,7 @@ const MenuPage = () => {
                 return prev.filter(id => id !== dishId);
             }
             if (prev.length >= 8) {
-                setErrorMessage('Chỉ được chọn tối đa 8 món');
+                setErrorMessage(translatePageText("Chỉ được chọn tối đa 8 món"));
                 return prev;
             }
             return [...prev, dishId];
@@ -138,7 +141,7 @@ const MenuPage = () => {
             setIsRecommendModalOpen(false);
             loadRecommendations();
         } catch (err) {
-            setErrorMessage('Lỗi khi lưu món yêu thích, vui lòng thử lại');
+            setErrorMessage(translatePageText("Lỗi khi lưu món yêu thích, vui lòng thử lại"));
             console.error(err);
         }
     };
@@ -151,7 +154,7 @@ const MenuPage = () => {
             const items = response.data?.data || response.data || [];
             setDishes(items);
         } catch (err) {
-            setError('Lỗi tải danh sách món ăn');
+            setError(translatePageText("Lỗi tải danh sách món ăn"));
             console.error(err);
         } finally {
             setLoading(false);
@@ -280,12 +283,12 @@ const MenuPage = () => {
         const maxQty = MAX_ORDER_QTY;
 
         if (isNaN(qty) || qty < 1) {
-            setErrorMessage('Vui lòng nhập số lượng hợp lệ!');
+            setErrorMessage(translatePageText("Vui lòng nhập số lượng hợp lệ!"));
             return;
         }
 
         if (qty > maxQty) {
-            setErrorMessage('Mỗi lần chỉ được đặt tối đa 50 phần cho một món.');
+            setErrorMessage(translatePageText("Mỗi lần chỉ được đặt tối đa 50 phần cho một món."));
             return;
         }
 
@@ -332,7 +335,9 @@ const MenuPage = () => {
 
         localStorage.setItem(cartKey, JSON.stringify(currentCart));
         setIsModalOpen(false);
-        setSuccessMessage(`Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'Giao hàng' : 'Đặt bàn'}.`);
+        setSuccessMessage(i18n.resolvedLanguage?.startsWith('en')
+            ? `Added ${qty} ${translateDishName(selectedDish)} to your ${orderType === 'mang-ve' ? 'Delivery' : 'Booking'} cart.`
+            : `Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'Giao hàng' : 'Đặt bàn'}.`);
     };
 
     if (loading) return <Loading />;
@@ -351,7 +356,7 @@ const MenuPage = () => {
         <style>{numberInputNoSpinnerCSS}</style>
         <div className="min-h-screen bg-gray-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-                <h1 className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8 text-red-600">Thực đơn</h1>
+                <h1 className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8 text-red-600">{translatePageText("Thực đơn")}</h1>
 
                 {error && <ErrorMessage message={error} />}
 
@@ -359,12 +364,12 @@ const MenuPage = () => {
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 mb-6 sm:mb-8">
                     <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-semibold mb-2">Tìm kiếm</label>
+                            <label className="block text-sm font-semibold mb-2">{translatePageText("Tìm kiếm")}</label>
 
                             <div className="relative">
                                 <input
                                     type="text"
-                                    placeholder="Tìm kiếm món ăn..."
+                                    placeholder={translatePageText("Tìm kiếm món ăn...")}
                                     value={search}
                                     onChange={handleSearchChange}
                                     onKeyDown={handleSearchSubmit}
@@ -401,7 +406,7 @@ const MenuPage = () => {
                                                 }}
                                                 className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
                                             >
-                                                {dish.dish_name}
+                                                {translateDishName(dish)}
                                             </div>
                                         ))}
                                     </div>
@@ -409,18 +414,18 @@ const MenuPage = () => {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold mb-2">Bộ lọc</label>
+                            <label className="block text-sm font-semibold mb-2">{translatePageText("Bộ lọc")}</label>
                             <select
                                 value={selectedType}
                                 onChange={(e) => setSelectedType(e.target.value)}
                                 className="w-full border border-gray-300 rounded px-4 py-2 focus:outline-none focus:border-red-600"
                             >
-                                <option value="">Tất cả loại</option>
-                                <option value="bestseller">⭐ Bestseller</option>
-                                <option value="recommended">🎯 Đề xuất cho bạn</option>
+                                <option value="">{translatePageText("Tất cả loại")}</option>
+                                <option value="bestseller">{translatePageText("⭐ Bestseller")}</option>
+                                <option value="recommended">{translatePageText("🎯 Đề xuất cho bạn")}</option>
                                 {types.map(type => (
                                     <option key={type.type_id} value={type.type_id}>
-                                        {type.type_name}
+                                        {translatePageText(type.type_name)}
                                     </option>
                                 ))}
                             </select>
@@ -435,10 +440,10 @@ const MenuPage = () => {
                     ) : recommendedDishes.length === 0 && favoriteDishes.length === 0 ? (
                         <EmptyState
                             icon="🎯"
-                            title="Chưa có món đề xuất"
-                            description="Chọn vài món bạn thích để AI gợi ý món phù hợp"
+                            title={translatePageText("Chưa có món đề xuất")}
+                            description={translatePageText("Chọn vài món bạn thích để AI gợi ý món phù hợp")}
                             action={
-                                <Button onClick={openRecommendModal}>Chọn món yêu thích</Button>
+                                <Button onClick={openRecommendModal}>{translatePageText("Chọn món yêu thích")}</Button>
                             }
                         />
                     ) : (
@@ -449,40 +454,33 @@ const MenuPage = () => {
                                     onClick={() => setShowFavoritesSection(prev => !prev)}
                                     className="w-full flex items-center justify-start gap-3 text-left py-2 mb-4"
                                 >
-                                    <h2 className="text-xl font-bold text-red-600">Các món ăn yêu thích</h2>
+                                    <h2 className="text-xl font-bold text-red-600">{translatePageText("Các món ăn yêu thích")}</h2>
                                     <span className="text-red-600 text-lg">{showFavoritesSection ? '▲' : '▼'}</span>
                                 </button>
                                 {showFavoritesSection && (
                                     favoriteDishes.length === 0 ? (
-                                        <p className="text-gray-500 text-sm">Chưa có món yêu thích nào.</p>
+                                        <p className="text-gray-500 text-sm">{translatePageText("Chưa có món yêu thích nào.")}</p>
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {favoriteDishes.map(dish => (
                                                 <div key={dish.dish_id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
-                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={dish.dish_name} className="w-full h-44 sm:h-48 object-cover cursor-pointer" />
+                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={translateDishName(dish)} className="w-full h-44 sm:h-48 object-cover cursor-pointer" />
                                                     <div className="p-4 flex flex-col flex-grow">
-                                                        <h3 className="font-semibold text-lg text-gray-800 mb-1">{dish.dish_name}</h3>
+                                                        <h3 className="font-semibold text-lg text-gray-800 mb-1">{translateDishName(dish)}</h3>
                                                         <p className="text-red-600 font-bold text-xl mb-3">
-                                                            {Number(dish.price).toLocaleString('vi-VN')}đ
-                                                        </p>
+                                                            {Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
                                                         <div className="mb-3 flex items-center justify-end">
-                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">
-                                                                Xem chi tiết món
-                                                            </button>
+                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">{translatePageText("Xem chi tiết món") + " "}</button>
                                                         </div>
                                                         <div className="mt-auto grid grid-cols-2 gap-2">
                                                             <button
                                                                 onClick={() => handleAddToCart(dish, 'mang-ve')}
                                                                 className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                                            >
-                                                                Đặt Ship
-                                                            </button>
+                                                            >{translatePageText("Đặt Ship") + " "}</button>
                                                             <button
                                                                 onClick={() => handleAddToCart(dish, 'dat-ban')}
                                                                 className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                                            >
-                                                                Đặt Bàn
-                                                            </button>
+                                                            >{translatePageText("Đặt Bàn") + " "}</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -498,40 +496,33 @@ const MenuPage = () => {
                                     onClick={() => setShowRecommendedSection(prev => !prev)}
                                     className="w-full flex items-center justify-start gap-3 text-left py-2 mb-4"
                                 >
-                                    <h2 className="text-xl font-bold text-red-600">Các món ăn được đề xuất</h2>
+                                    <h2 className="text-xl font-bold text-red-600">{translatePageText("Các món ăn được đề xuất")}</h2>
                                     <span className="text-red-600 text-lg">{showRecommendedSection ? '▲' : '▼'}</span>
                                 </button>
                                 {showRecommendedSection && (
                                     recommendedDishes.length === 0 ? (
-                                        <p className="text-gray-500 text-sm">Chưa đủ dữ liệu để đề xuất món phù hợp.</p>
+                                        <p className="text-gray-500 text-sm">{translatePageText("Chưa đủ dữ liệu để đề xuất món phù hợp.")}</p>
                                     ) : (
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                             {recommendedDishes.map(dish => (
                                                 <div key={dish.dish_id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
-                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={dish.dish_name} className="w-full h-44 sm:h-48 object-cover cursor-pointer" />
+                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={translateDishName(dish)} className="w-full h-44 sm:h-48 object-cover cursor-pointer" />
                                                     <div className="p-4 flex flex-col flex-grow">
-                                                        <h3 className="font-semibold text-lg text-gray-800 mb-1">{dish.dish_name}</h3>
+                                                        <h3 className="font-semibold text-lg text-gray-800 mb-1">{translateDishName(dish)}</h3>
                                                         <p className="text-red-600 font-bold text-xl mb-3">
-                                                            {Number(dish.price).toLocaleString('vi-VN')}đ
-                                                        </p>
+                                                            {Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
                                                         <div className="mb-3 flex items-center justify-end">
-                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">
-                                                                Xem chi tiết món
-                                                            </button>
+                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">{translatePageText("Xem chi tiết món") + " "}</button>
                                                         </div>
                                                         <div className="mt-auto grid grid-cols-2 gap-2">
                                                             <button
                                                                 onClick={() => handleAddToCart(dish, 'mang-ve')}
                                                                 className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                                            >
-                                                                Đặt Ship
-                                                            </button>
+                                                            >{translatePageText("Đặt Ship") + " "}</button>
                                                             <button
                                                                 onClick={() => handleAddToCart(dish, 'dat-ban')}
                                                                 className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                                            >
-                                                                Đặt Bàn
-                                                            </button>
+                                                            >{translatePageText("Đặt Bàn") + " "}</button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -542,17 +533,15 @@ const MenuPage = () => {
                             </div>
 
                             <div className="text-center mt-6">
-                                <Button variant="primary" onClick={openRecommendModal}>
-                                    Chọn lại món yêu thích
-                                </Button>
+                                <Button variant="primary" onClick={openRecommendModal}>{translatePageText("Chọn lại món yêu thích") + " "}</Button>
                             </div>
                         </>
                     )
                 ) : filteredDishes.length === 0 ? (
                     <EmptyState
                         icon="🔍"
-                        title="Không tìm thấy"
-                        description="Không có món ăn phù hợp với tìm kiếm của bạn"
+                        title={translatePageText("Không tìm thấy")}
+                        description={translatePageText("Không có món ăn phù hợp với tìm kiếm của bạn")}
                     />
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -561,42 +550,31 @@ const MenuPage = () => {
                                 <img
                                     onClick={() => navigate(`/dish-details/${dish.dish_id}`)}
                                     src={dish.image_url}
-                                    alt={dish.dish_name}
+                                    alt={translateDishName(dish)}
                                     className="w-full h-44 sm:h-48 object-cover cursor-pointer"
                                 />
                                 <div className="p-4 flex flex-col flex-grow">
-                                    <h3 className="font-semibold text-lg text-gray-800 mb-1">{dish.dish_name}</h3>
+                                    <h3 className="font-semibold text-lg text-gray-800 mb-1">{translateDishName(dish)}</h3>
                                     <p className="text-red-600 font-bold text-xl mb-3">
-                                        {Number(dish.price).toLocaleString('vi-VN')}đ
-                                    </p>
+                                        {Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
                                     <div className="mb-3 flex items-center justify-between gap-3">
                                         <div className="min-w-0 flex flex-1 flex-col items-start gap-2">
                                             {dish.is_bestseller && (
-                                                <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-3 py-1 rounded-full">
-                                                    ⭐ Bán chạy
-                                                </span>
+                                                <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-3 py-1 rounded-full">{translatePageText("⭐ Bán chạy") + " "}</span>
                                             )}
-                                            <span className="text-xs font-semibold text-green-700">
-                                                Tối đa 50 phần
-                                            </span>
+                                            <span className="text-xs font-semibold text-green-700">{translatePageText("Tối đa 50 phần") + " "}</span>
                                         </div>
-                                        <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">
-                                            Xem chi tiết món
-                                        </button>
+                                        <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">{translatePageText("Xem chi tiết món") + " "}</button>
                                     </div>
                                     <div className="mt-auto grid grid-cols-2 gap-2">
                                         <button
                                             onClick={() => handleAddToCart(dish, 'mang-ve')}
                                             className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                        >
-                                            Đặt Ship
-                                        </button>
+                                        >{translatePageText("Đặt Ship") + " "}</button>
                                         <button
                                             onClick={() => handleAddToCart(dish, 'dat-ban')}
                                             className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                        >
-                                            Đặt Bàn
-                                        </button>
+                                        >{translatePageText("Đặt Bàn") + " "}</button>
                                     </div>
                                 </div>
                             </div>
@@ -608,29 +586,27 @@ const MenuPage = () => {
             {/* Order Modal */}
             <Modal
                 isOpen={isModalOpen}
-                title={selectedDish ? `Đặt món: ${selectedDish.dish_name}` : 'Đặt món'}
+                title={selectedDish ? `${translatePageText("Đặt món")}: ${translateDishName(selectedDish)}` : translatePageText("Đặt món")}
                 onClose={() => setIsModalOpen(false)}
                 onConfirm={confirmAddToCart}
                 confirmText="Xác nhận thêm vào giỏ hàng"
             >
                 <div className="flex flex-col gap-4">
                     <div>
-                        <span className="text-sm font-semibold text-green-700">Tối đa 50 phần mỗi món</span>
+                        <span className="text-sm font-semibold text-green-700">{translatePageText("Tối đa 50 phần mỗi món")}</span>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-2 text-gray-700">Chọn công thức thay thế</label>
+                        <label className="block font-semibold mb-2 text-gray-700">{translatePageText("Chọn công thức thay thế")}</label>
                         <div className="flex flex-col items-start gap-2">
                             <button
                                 type="button"
                                 onClick={() => setSelectedCustomization(null)}
                                 className={`rounded border px-3 py-2 text-left ${!selectedCustomization ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
-                            >
-                                Món gốc
-                            </button>
+                            >{translatePageText("Món gốc") + " "}</button>
 
                             {selectedRecipeOptions.length === 0 ? (
-                                <p className="text-sm text-gray-500">Bạn chưa lưu công thức thay thế nào cho món này.</p>
+                                <p className="text-sm text-gray-500">{translatePageText("Bạn chưa lưu công thức thay thế nào cho món này.")}</p>
                             ) : selectedRecipeOptions.map((recipe) => (
                                 <button
                                     key={recipe.dish_customization_id}
@@ -638,14 +614,14 @@ const MenuPage = () => {
                                     onClick={() => setSelectedCustomization(recipe)}
                                     className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
                                 >
-                                    {recipe.recipe_name}
+                                    {translatePageText(recipe.recipe_name)}
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-1 text-gray-700">Nhập số lượng</label>
+                        <label className="block font-semibold mb-1 text-gray-700">{translatePageText("Nhập số lượng")}</label>
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <button
                                 type="button"
@@ -702,7 +678,7 @@ const MenuPage = () => {
 
             <Modal
                 isOpen={Boolean(successMessage)}
-                title="Đặt món thành công"
+                title={translatePageText("Đặt món thành công")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setSuccessMessage('')}
@@ -722,7 +698,7 @@ const MenuPage = () => {
             {/* Thông báo lỗi chung - dùng chung component Modal */}
             <Modal
                 isOpen={!!errorMessage}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 onClose={() => setErrorMessage(null)}
                 cancelText="Đóng"
             >
@@ -732,7 +708,7 @@ const MenuPage = () => {
             {/* Recommendation Selection Modal */}
             <Modal
                 isOpen={isRecommendModalOpen}
-                title="Chọn món yêu thích"
+                title={translatePageText("Chọn món yêu thích")}
                 titleClassName="text-red-600"
                 onClose={handleSkipRecommendModal}
                 onConfirm={handleConfirmRecommendModal}
@@ -740,9 +716,7 @@ const MenuPage = () => {
                 cancelText="Quay lại"
             >
                 <div className="flex flex-col gap-4">
-                    <p className="text-sm text-gray-600">
-                        Vui lòng chọn các món yêu thích theo thứ tự giảm dần (không bắt buộc chọn hết, tối đa 8 món).
-                    </p>
+                    <p className="text-sm text-gray-600">{translatePageText("Vui lòng chọn các món yêu thích theo thứ tự giảm dần (không bắt buộc chọn hết, tối đa 8 món).") + " "}</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
                         {dishes.map(dish => {
                             const order = modalSelections.indexOf(dish.dish_id);
@@ -755,8 +729,8 @@ const MenuPage = () => {
                                         isSelected ? 'border-red-600' : 'border-transparent hover:border-gray-300'
                                     }`}
                                 >
-                                    <img src={dish.image_url} alt={dish.dish_name} className="w-full h-20 object-cover" />
-                                    <p className="text-xs p-1 truncate">{dish.dish_name}</p>
+                                    <img src={dish.image_url} alt={translateDishName(dish)} className="w-full h-20 object-cover" />
+                                    <p className="text-xs p-1 truncate">{translateDishName(dish)}</p>
                                     {isSelected && (
                                         <span className="absolute top-1 right-1 bg-red-600 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                                             {order + 1}

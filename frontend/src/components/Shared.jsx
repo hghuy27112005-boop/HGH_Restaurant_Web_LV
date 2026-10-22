@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { translatePageText } from '../pageTextTranslations';
 
 export const Loading = () => (
     <div className="flex justify-center items-center min-h-screen">
@@ -19,14 +20,14 @@ export const ErrorMessage = ({ message, onClose }) => {
     return (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
             <div className="flex items-start justify-between gap-4">
-                <span className="block flex-1">{typeof message === 'string' ? message : String(message)}</span>
+                <span className="block flex-1">{typeof message === 'string' ? translatePageText(message) : String(message)}</span>
                 <div className="flex items-center gap-2">
                     {isJsonLike && (
                         <button
                             onClick={() => setShowDetails(s => !s)}
                             className="text-sm px-3 py-1 border rounded bg-white"
                         >
-                            {showDetails ? 'Ẩn chi tiết' : 'Chi tiết'}
+                            {showDetails ? translatePageText("Ẩn chi tiết") : translatePageText("Chi tiết")}
                         </button>
                     )}
                     {onClose && (
@@ -47,7 +48,7 @@ export const ErrorMessage = ({ message, onClose }) => {
 
 export const SuccessMessage = ({ message, onClose }) => (
     <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4">
-        <span className="block">{message}</span>
+        <span className="block">{typeof message === 'string' ? translatePageText(message) : message}</span>
         {onClose && (
             <button onClick={onClose} className="absolute top-0 bottom-0 right-0 px-4 py-3">
                 ✕
@@ -58,7 +59,7 @@ export const SuccessMessage = ({ message, onClose }) => (
 
 export const WarningMessage = ({ message, onClose }) => (
     <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-4">
-        <span className="block">{message}</span>
+        <span className="block">{typeof message === 'string' ? translatePageText(message) : message}</span>
         {onClose && (
             <button onClick={onClose} className="absolute top-0 bottom-0 right-0 px-4 py-3">
                 ✕
@@ -68,6 +69,15 @@ export const WarningMessage = ({ message, onClose }) => (
 );
 
 let modalOpenCount = 0;
+
+const translateModalContent = (node) => {
+    if (typeof node === 'string') return translatePageText(node);
+    if (Array.isArray(node)) return node.map(translateModalContent);
+    if (React.isValidElement(node) && node.props.children !== undefined) {
+        return React.cloneElement(node, undefined, translateModalContent(node.props.children));
+    }
+    return node;
+};
 
 export const Modal = ({ isOpen, title, titleClassName = '', className = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng', onSecondary, secondaryText = 'Quay lại', secondaryClassName = '', onTertiary, tertiaryText = 'Quay lại', tertiaryClassName = '', showHeaderClose = false, showFooterClose = true, confirmDisabled = false }) => {
     const [zIndex, setZIndex] = useState(50);
@@ -106,21 +116,21 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
         >
             <div className={`bg-white rounded-lg shadow-lg p-6 w-full mx-4 flex flex-col max-h-[90dvh] ${className || 'max-w-md'}`}>
                 <h2 className={`-mx-6 -mt-6 mb-4 flex shrink-0 items-center justify-between gap-4 rounded-t-lg bg-red-600 px-6 py-4 text-xl font-bold ${titleClassName} text-white`}>
-                    <span>{title}</span>
+                    <span>{translatePageText(title)}</span>
                     {showHeaderClose && (
-                        <button type="button" onClick={onClose} aria-label="Đóng" className="text-2xl leading-none text-white hover:text-red-100">
+                        <button type="button" onClick={onClose} aria-label={translatePageText("Đóng")} className="text-2xl leading-none text-white hover:text-red-100">
                             ×
                         </button>
                     )}
                 </h2>
-                <div className="mb-6 min-h-0 flex-1 overflow-y-auto">{children}</div>
+                <div className="mb-6 min-h-0 flex-1 overflow-y-auto">{translateModalContent(children)}</div>
                 <div className="flex flex-wrap shrink-0 gap-2 justify-end">
                     {onSecondary && (
                         <button
                             onClick={onSecondary}
                             className={`px-4 py-2 rounded border border-gray-300 hover:bg-gray-100 ${secondaryClassName}`}
                         >
-                            {secondaryText}
+                            {translatePageText(secondaryText)}
                         </button>
                     )}
                     {onTertiary && (
@@ -128,7 +138,7 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                             onClick={onTertiary}
                             className={`px-4 py-2 rounded border border-gray-300 hover:bg-gray-100 ${tertiaryClassName}`}
                         >
-                            {tertiaryText}
+                            {translatePageText(tertiaryText)}
                         </button>
                     )}
                     {showFooterClose && (
@@ -136,7 +146,7 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                             onClick={onClose}
                             className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
                         >
-                            {cancelText}
+                            {translatePageText(cancelText)}
                         </button>
                     )}
                     {onConfirm && (
@@ -145,7 +155,7 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                             disabled={confirmDisabled}
                             className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600"
                         >
-                            {confirmText}
+                            {translatePageText(confirmText)}
                         </button>
                     )}
                 </div>
@@ -220,7 +230,7 @@ export const CountdownTimer = ({ targetTime }) => {
     }, [targetTime]);
 
     if (remaining <= 0) {
-        return <span className="text-sm font-semibold text-green-600">Sắp hoàn tất...</span>;
+        return <span className="text-sm font-semibold text-green-600">{translatePageText("Sắp hoàn tất...")}</span>;
     }
 
     const minutes = Math.floor(remaining / 60);
@@ -259,7 +269,7 @@ export const ShippingProgressBar = ({ startTime, endTime }) => {
                 {/* Xe chạy trần ngay phía trên thanh, không có nền tròn */}
                 <img
                     src="/delivery_icon.ico"
-                    alt="Đang giao"
+                    alt={translatePageText("Đang giao")}
                     className="absolute -top-6 w-6 h-6 transition-all duration-1000 ease-linear"
                     style={{ left: `calc(${percent}% * 0.92)`, transform: 'translateX(-50%)' }}
                 />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthContext } from '../../context/AuthContext';
 import { ErrorMessage, SuccessMessage, Modal } from '../../components/Shared';
+import { translatePageText } from '../../pageTextTranslations';
 
 // Ảnh nền của trang đăng nhập/đăng ký: muốn đổi ảnh chỉ cần sửa dòng này
 const AUTH_BACKGROUND = '/pics/30.jpg';
@@ -42,13 +43,13 @@ const LoginPage = () => {
         const err = params.get('error');
 
         if (err === 'google_auth_failed') {
-            setLocalError('Đăng nhập bằng Google thất bại. Vui lòng thử lại.');
+            setLocalError(translatePageText("Đăng nhập bằng Google thất bại. Vui lòng thử lại."));
             window.history.replaceState({}, '', window.location.pathname);
         } else if (err === 'facebook_auth_failed') {
-            setLocalError('Đăng nhập bằng Facebook thất bại. Vui lòng thử lại.');
+            setLocalError(translatePageText("Đăng nhập bằng Facebook thất bại. Vui lòng thử lại."));
             window.history.replaceState({}, '', window.location.pathname);
         } else if (err === 'facebook_email_required') {
-            setLocalError('Vui lòng cấp quyền email khi đăng nhập bằng Facebook.');
+            setLocalError(translatePageText("Vui lòng cấp quyền email khi đăng nhập bằng Facebook."));
             window.history.replaceState({}, '', window.location.pathname);
         } else if (err === 'account_locked') {
             const until = params.get('until');
@@ -90,7 +91,7 @@ const LoginPage = () => {
         setSuccessMessage(null);
 
         if (!loginData.username || !loginData.password) {
-            setLocalError('Vui lòng điền đầy đủ thông tin đăng nhập');
+            setLocalError(translatePageText("Vui lòng điền đầy đủ thông tin đăng nhập"));
             return;
         }
 
@@ -108,14 +109,14 @@ const LoginPage = () => {
         setSuccessMessage(null);
 
         if (regData.password !== regData.password_confirmation) {
-            setLocalError('Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại!');
+            setLocalError(translatePageText("Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại!"));
             return;
         }
 
         const result = await register(regData);
 
         if (result?.success) {
-            setSuccessMessage('Đăng ký thành công! Chuyển hướng về trang chủ...');
+            setSuccessMessage(translatePageText("Đăng ký thành công! Chuyển hướng về trang chủ..."));
             setTimeout(() => {
                 window.location.href = '/';
             }, 1500);
@@ -139,19 +140,17 @@ const LoginPage = () => {
 
                 {/* Bên trái: chỉ hiện từ màn hình lớn */}
                 <div className="hidden lg:block max-w-lg text-white drop-shadow-lg">
-                    <h1 className="text-5xl font-bold leading-tight">NHÀ HÀNG HGH</h1>
-                    <p className="mt-4 text-2xl text-white/90">Hương vị cơm gia đình thuần túy</p>
+                    <h1 className="text-5xl font-bold leading-tight">{translatePageText("NHÀ HÀNG HGH")}</h1>
+                    <p className="mt-4 text-2xl text-white/90">{translatePageText("Hương vị cơm gia đình thuần túy")}</p>
                 </div>
 
                 {/* Bên phải: tấm kính mờ chứa form */}
                 <div className="w-full max-w-[440px] rounded-2xl border border-white/20 bg-black/40 p-5 shadow-2xl backdrop-blur-md">
                     <div className="mb-3 flex gap-1 rounded-xl bg-white/10 p-1">
                         <button type="button" className={tabClass(activeTab === 'login')} onClick={() => switchTab('login')}>
-                            <i className="fas fa-sign-in-alt"></i> Đăng nhập
-                        </button>
+                            <i className="fas fa-sign-in-alt"></i>{" " + translatePageText("Đăng nhập") + " "}</button>
                         <button type="button" className={tabClass(activeTab === 'register')} onClick={() => switchTab('register')}>
-                            <i className="fas fa-user-plus"></i> Đăng ký
-                        </button>
+                            <i className="fas fa-user-plus"></i>{" " + translatePageText("Đăng ký") + " "}</button>
                     </div>
 
                     {(successMessage || error || localError) && (
@@ -166,27 +165,27 @@ const LoginPage = () => {
                         <>
                             <form onSubmit={handleLoginSubmit} className="space-y-2">
                                 <div>
-                                    <label className={labelClass}>Tên người dùng / Email (*):</label>
+                                    <label className={labelClass}>{translatePageText("Tên người dùng / Email (*):")}</label>
                                     <input
                                         type="text"
                                         name="username"
                                         value={loginData.username}
                                         onChange={handleLoginChange}
                                         required
-                                        placeholder="Nhập tên người dùng hoặc email"
+                                        placeholder={translatePageText("Nhập tên người dùng hoặc email")}
                                         className={loginInputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>Mật khẩu (*):</label>
+                                    <label className={labelClass}>{translatePageText("Mật khẩu (*):")}</label>
                                     <input
                                         type="password"
                                         name="password"
                                         value={loginData.password}
                                         onChange={handleLoginChange}
                                         required
-                                        placeholder="Nhập mật khẩu"
+                                        placeholder={translatePageText("Nhập mật khẩu")}
                                         className={loginInputClass}
                                     />
                                 </div>
@@ -196,9 +195,7 @@ const LoginPage = () => {
                                         type="button"
                                         className="text-sm text-red-300 hover:text-red-200"
                                         onClick={() => window.location.href = '/forgot-password'}
-                                    >
-                                        Quên mật khẩu?
-                                    </button>
+                                    >{translatePageText("Quên mật khẩu?") + " "}</button>
                                 </div>
 
                                 <button
@@ -206,21 +203,19 @@ const LoginPage = () => {
                                     disabled={loading}
                                     className="h-11 w-full rounded-lg bg-red-600 font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    {loading ? 'Đang xử lý...' : 'Đăng nhập'}
+                                    {loading ? translatePageText("Đang xử lý...") : translatePageText("Đăng nhập")}
                                 </button>
                             </form>
 
                             <div className="mt-4 flex items-center gap-3 text-xs text-white/70">
-                                <span className="h-px flex-1 bg-white/25"></span>
-                                Hoặc đăng nhập với
-                                <span className="h-px flex-1 bg-white/25"></span>
+                                <span className="h-px flex-1 bg-white/25"></span>{translatePageText("Hoặc đăng nhập với") + " "}<span className="h-px flex-1 bg-white/25"></span>
                             </div>
 
                             <div className="mt-3 flex justify-center gap-4">
                                 <button
                                     type="button"
-                                    aria-label="Đăng nhập bằng Facebook"
-                                    title="Đăng nhập bằng Facebook"
+                                    aria-label={translatePageText("Đăng nhập bằng Facebook")}
+                                    title={translatePageText("Đăng nhập bằng Facebook")}
                                     onClick={() => { window.location.href = '/auth/facebook/redirect'; }}
                                     className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1877f2] text-lg text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                                 >
@@ -228,8 +223,8 @@ const LoginPage = () => {
                                 </button>
                                 <button
                                     type="button"
-                                    aria-label="Đăng nhập bằng Google"
-                                    title="Đăng nhập bằng Google"
+                                    aria-label={translatePageText("Đăng nhập bằng Google")}
+                                    title={translatePageText("Đăng nhập bằng Google")}
                                     onClick={() => { window.location.href = '/auth/google/redirect'; }}
                                     className="flex h-11 w-11 items-center justify-center rounded-full bg-[#db4437] text-lg text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                                 >
@@ -237,18 +232,15 @@ const LoginPage = () => {
                                 </button>
                             </div>
 
-                            <p className="mt-4 text-center text-sm text-white/80">
-                                Chưa có tài khoản?{' '}
-                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('register')}>
-                                    Đăng ký ngay!
-                                </button>
+                            <p className="mt-4 text-center text-sm text-white/80">{translatePageText("Chưa có tài khoản?")}{' '}
+                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('register')}>{translatePageText("Đăng ký ngay!") + " "}</button>
                             </p>
                         </>
                     ) : (
                         <>
                             <form onSubmit={handleRegSubmit} className="space-y-2">
                                 <div>
-                                    <label className={labelClass}>Tên người dùng (*):</label>
+                                    <label className={labelClass}>{translatePageText("Tên người dùng (*):")}</label>
                                     <input
                                         type="text"
                                         name="username"
@@ -256,7 +248,7 @@ const LoginPage = () => {
                                         onChange={handleRegChange}
                                         required
                                         maxLength="20"
-                                        placeholder="Nhập tên người dùng (tối đa 20 ký tự)"
+                                        placeholder={translatePageText("Nhập tên người dùng (tối đa 20 ký tự)")}
                                         className={regInputClass}
                                     />
                                 </div>
@@ -270,13 +262,13 @@ const LoginPage = () => {
                                         onChange={handleRegChange}
                                         required
                                         maxLength="50"
-                                        placeholder="ví dụ: a@gmail.com (tối đa 50 ký tự)"
+                                        placeholder={translatePageText("ví dụ: a@gmail.com (tối đa 50 ký tự)")}
                                         className={regInputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>Số điện thoại (*):</label>
+                                    <label className={labelClass}>{translatePageText("Số điện thoại (*):")}</label>
                                     <input
                                         type="text"
                                         name="phone"
@@ -285,33 +277,33 @@ const LoginPage = () => {
                                         required
                                         inputMode="numeric"
                                         maxLength="10"
-                                        placeholder="Nhập số điện thoại (10 số)"
+                                        placeholder={translatePageText("Nhập số điện thoại (10 số)")}
                                         className={regInputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>Mật khẩu (*):</label>
+                                    <label className={labelClass}>{translatePageText("Mật khẩu (*):")}</label>
                                     <input
                                         type="password"
                                         name="password"
                                         value={regData.password}
                                         onChange={handleRegChange}
                                         required
-                                        placeholder="Tối thiểu 6 ký tự"
+                                        placeholder={translatePageText("Tối thiểu 6 ký tự")}
                                         className={regInputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>Xác nhận mật khẩu (*):</label>
+                                    <label className={labelClass}>{translatePageText("Xác nhận mật khẩu (*):")}</label>
                                     <input
                                         type="password"
                                         name="password_confirmation"
                                         value={regData.password_confirmation}
                                         onChange={handleRegChange}
                                         required
-                                        placeholder="Nhập lại mật khẩu"
+                                        placeholder={translatePageText("Nhập lại mật khẩu")}
                                         className={regInputClass}
                                     />
                                 </div>
@@ -321,15 +313,12 @@ const LoginPage = () => {
                                     disabled={loading}
                                     className="mt-1 h-10 w-full rounded-lg bg-red-600 font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    {loading ? 'Đang xử lý...' : 'Đăng ký'}
+                                    {loading ? translatePageText("Đang xử lý...") : translatePageText("Đăng ký")}
                                 </button>
                             </form>
 
-                            <p className="mt-3 text-center text-sm text-white/80">
-                                Đã có tài khoản?{' '}
-                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('login')}>
-                                    Đăng nhập ngay!
-                                </button>
+                            <p className="mt-3 text-center text-sm text-white/80">{translatePageText("Đã có tài khoản?")}{' '}
+                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('login')}>{translatePageText("Đăng nhập ngay!") + " "}</button>
                             </p>
                         </>
                     )}
@@ -338,7 +327,7 @@ const LoginPage = () => {
 
             <Modal
                 isOpen={!!lockedMessage}
-                title="Tài khoản bị khóa"
+                title={translatePageText("Tài khoản bị khóa")}
                 onClose={() => setLockedMessage(null)}
                 cancelText="Đóng"
             >

@@ -5,6 +5,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { RED, YEAR_OPTIONS, MONTH_OPTIONS, extractError } from './helpers';
+import { translatePageText } from '../../../pageTextTranslations';
 
 const HourTick = ({ x, y, payload }) => (
     <g transform={`translate(${x},${y})`}>
@@ -20,7 +21,14 @@ const HourChart = ({ data, height }) => (
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="hour" tick={<HourTick />} interval={0} />
             <YAxis stroke={RED} allowDecimals={false} />
-            <Tooltip formatter={(v) => `${v} đơn`} labelFormatter={(h) => `${h}h`} cursor={false} />
+            <Tooltip
+                formatter={(value) => [
+                    `${value} ${document.documentElement.lang === 'en' ? 'orders' : 'đơn'}`,
+                    translatePageText('Số đơn hàng'),
+                ]}
+                labelFormatter={(h) => `${h}h`}
+                cursor={false}
+            />
             <Bar dataKey="count" fill={RED} radius={[3, 3, 0, 0]} />
         </BarChart>
     </ResponsiveContainer>
@@ -45,7 +53,7 @@ const PeakBlock = ({ type, title }) => {
                 if (!cancelled) setData(res?.data?.data || null);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, 'Lỗi tải giờ cao điểm'));
+                    setError(extractError(err, translatePageText("Lỗi tải giờ cao điểm")));
                     setData(null);
                 }
             } finally {
@@ -64,21 +72,21 @@ const PeakBlock = ({ type, title }) => {
     } else if (mode === 'month') {
         body = Array.isArray(data) && data.length > 0
             ? <HourChart data={data} height={280} />
-            : <div className="h-full flex items-center justify-center text-gray-500">Không có dữ liệu</div>;
+            : <div className="h-full flex items-center justify-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>;
     } else {
         body = data?.weekday ? (
             <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                    <p className="text-center font-semibold text-red-600 mb-2">Ngày thường (T2 - T6)</p>
+                    <p className="text-center font-semibold text-red-600 mb-2">{translatePageText("Ngày thường (T2 - T6)")}</p>
                     <HourChart data={data.weekday} height={260} />
                 </div>
                 <div>
-                    <p className="text-center font-semibold text-red-600 mb-2">Cuối tuần (T7 - CN)</p>
+                    <p className="text-center font-semibold text-red-600 mb-2">{translatePageText("Cuối tuần (T7 - CN)")}</p>
                     <HourChart data={data.weekend} height={260} />
                 </div>
             </div>
         ) : (
-            <div className="h-full flex items-center justify-center text-gray-500">Không có dữ liệu</div>
+            <div className="h-full flex items-center justify-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
         );
     }
 
@@ -91,12 +99,10 @@ const PeakBlock = ({ type, title }) => {
                     {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={selectCls}>
-                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
+                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
                 </select>
-                <button className={tabCls(mode === 'month')} onClick={() => setMode('month')}>Theo tháng</button>
-                <button className={tabCls(mode === 'weekday_weekend')} onClick={() => setMode('weekday_weekend')}>
-                    Ngày thường - Cuối tuần
-                </button>
+                <button className={tabCls(mode === 'month')} onClick={() => setMode('month')}>{translatePageText("Theo tháng")}</button>
+                <button className={tabCls(mode === 'weekday_weekend')} onClick={() => setMode('weekday_weekend')}>{translatePageText("Ngày thường - Cuối tuần") + " "}</button>
             </div>
             <div className="min-h-[290px]">{body}</div>
         </div>
@@ -105,8 +111,8 @@ const PeakBlock = ({ type, title }) => {
 
 const PeakHoursSection = () => (
     <div>
-        <PeakBlock type="booking" title="Khung giờ cao điểm - Đặt bàn" />
-        <PeakBlock type="delivery" title="Khung giờ cao điểm - Đặt ship" />
+        <PeakBlock type="booking" title={translatePageText("Khung giờ cao điểm - Đặt bàn")} />
+        <PeakBlock type="delivery" title={translatePageText("Khung giờ cao điểm - Đặt ship")} />
     </div>
 );
 

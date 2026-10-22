@@ -8,6 +8,7 @@ use App\Models\BookingTable;
 use App\Models\Delivery;
 use App\Models\User;
 use App\Services\UserNotificationService;
+use App\Support\PreferredLanguage;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -72,6 +73,11 @@ class ProcessAutomaticNotifications extends Command
             $message = "Đơn đặt bàn của bạn vào lúc {$startTime}"
                 . ($endTime !== '' ? " đến {$endTime}" : '')
                 . ' sẽ bắt đầu sau khoảng 60 phút nữa.';
+            $language = PreferredLanguage::forUser($user);
+            $mailMessage = $language === 'en'
+                ? "Your booking at {$startTime}" . ($endTime !== '' ? "–{$endTime}" : '')
+                    . ' is scheduled to begin in about 60 minutes.'
+                : $message;
             $eventId = $bill?->bill_id ?: $first->booking_id;
             $eventKey = "booking-reminder:{$user->user_id}:{$eventId}:{$startsAt->format('YmdHi')}";
 
@@ -88,7 +94,7 @@ class ProcessAutomaticNotifications extends Command
             }
 
             try {
-                Mail::to($user->email)->send(new OrderNotificationMail($bill, $message));
+                Mail::to($user->email)->send(new OrderNotificationMail($bill, $mailMessage, $language));
             } catch (\Throwable $e) {
                 Log::error("Gửi mail nhắc booking thất bại cho bill {$bill->bill_id}: " . $e->getMessage());
             }

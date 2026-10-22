@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { adminSaleOffAPI, extractListData, serverTimeAPI } from '../../services/api';
 import { TableLoading, EmptyState, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
+import { translatePageText, translateSeededEventName } from '../../pageTextTranslations';
 
 const PERCENTAGE_OPTIONS = [10, 20, 30, 40, 50];
 
@@ -17,18 +18,18 @@ const emptyForm = {
 };
 
 const STATUS_INFO = {
-    ongoing: { label: 'Đang diễn ra', badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
-    upcoming: { label: 'Sắp diễn ra', badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' },
-    ended: { label: 'Đã kết thúc', badge: 'bg-gray-200 text-gray-600', bar: 'bg-gray-400' },
+    ongoing: { get label() { return translatePageText("Đang diễn ra"); }, badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
+    upcoming: { get label() { return translatePageText("Sắp diễn ra"); }, badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' },
+    ended: { get label() { return translatePageText("Đã kết thúc"); }, badge: 'bg-gray-200 text-gray-600', bar: 'bg-gray-400' },
 };
 
 const STATUS_ORDER = { ongoing: 0, upcoming: 1, ended: 2 };
 
 const STATUS_FILTERS = [
-    { id: 'all', label: 'Tất cả' },
-    { id: 'ongoing', label: 'Đang diễn ra' },
-    { id: 'upcoming', label: 'Sắp diễn ra' },
-    { id: 'ended', label: 'Đã kết thúc' },
+    { id: 'all', get label() { return translatePageText("Tất cả"); } },
+    { id: 'ongoing', get label() { return translatePageText("Đang diễn ra"); } },
+    { id: 'upcoming', get label() { return translatePageText("Sắp diễn ra"); } },
+    { id: 'ended', get label() { return translatePageText("Đã kết thúc"); } },
 ];
 
 // Chấp nhận cả "YYYY-MM-DD HH:mm:ss" lẫn ISO "...T...Z"
@@ -74,8 +75,10 @@ const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
                 className="flex items-center gap-2 border border-gray-300 rounded px-3 py-2 bg-white text-sm hover:border-red-600"
             >
                 <i className="far fa-calendar text-red-600"></i>
-                <span className="text-gray-500">Thời gian:</span>
-                <span className="font-semibold text-gray-800">{value ? `Tháng ${value}` : 'Tất cả'}</span>
+                <span className="text-gray-500">{translatePageText("Thời gian:")}</span>
+                <span className="font-semibold text-gray-800">
+                    {value ? `${translatePageText("Tháng")} ${value}` : translatePageText("Tất cả")}
+                </span>
             </button>
 
             {open && (
@@ -89,7 +92,7 @@ const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
                         >
                             ‹
                         </button>
-                        <span className="font-semibold text-gray-800">Năm {viewYear}</span>
+                        <span className="font-semibold text-gray-800">{translatePageText("Năm") + " "}{viewYear}</span>
                         <button
                             type="button"
                             onClick={() => setViewYear((y) => y + 1)}
@@ -109,8 +112,7 @@ const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
                                     type="button"
                                     onClick={() => pickMonth(m)}
                                     className={`py-2 rounded text-sm ${selected ? 'bg-red-600 text-white font-bold' : 'hover:bg-red-50 text-gray-700 border border-gray-200'}`}
-                                >
-                                    Tháng {m + 1}
+                                >{translatePageText("Tháng") + " "}{m + 1}
                                 </button>
                             );
                         })}
@@ -121,15 +123,13 @@ const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
                             type="button"
                             onClick={() => onChange('')}
                             className="text-gray-500 hover:text-red-600 font-semibold"
-                        >
-                            Xóa chọn
-                        </button>
+                        >{translatePageText("Xóa chọn") + " "}</button>
                         <button
                             type="button"
                             onClick={() => setOpen(false)}
                             className="px-3 py-1 rounded bg-red-600 text-white font-semibold hover:bg-red-700"
                         >
-                            Xong
+                            {translatePageText("Xong")}
                         </button>
                     </div>
                 </div>
@@ -210,7 +210,7 @@ const AdminSaleOffPage = () => {
         const end = splitDateTime(event.end_time);
         setEditingEvent(event);
         setForm({
-            name: event.name || '',
+            name: translateSeededEventName(event.name || ''),
             sale_off_percentage: String(Number(event.sale_off_percentage) ?? ''),
             start_date: start.date,
             startH: start.h,
@@ -236,23 +236,23 @@ const AdminSaleOffPage = () => {
         setFormError(null);
 
         if (!form.name.trim()) {
-            setFormError('Vui lòng nhập tên sự kiện.');
+            setFormError(translatePageText("Vui lòng nhập tên sự kiện."));
             return;
         }
         const percentage = Number(form.sale_off_percentage);
         if (!PERCENTAGE_OPTIONS.includes(percentage)) {
-            setFormError('Vui lòng chọn phần trăm giảm giá.');
+            setFormError(translatePageText("Vui lòng chọn phần trăm giảm giá."));
             return;
         }
         if (!form.start_date || !form.startH || !form.startM || !form.end_date || !form.endH || !form.endM) {
-            setFormError('Vui lòng nhập đầy đủ ngày giờ bắt đầu và kết thúc.');
+            setFormError(translatePageText("Vui lòng nhập đầy đủ ngày giờ bắt đầu và kết thúc."));
             return;
         }
 
         const hrRegex = /^([0-1]?[0-9]|2[0-3])$/;
         const minRegex = /^[0-5]?[0-9]$/;
         if (!hrRegex.test(form.startH) || !minRegex.test(form.startM) || !hrRegex.test(form.endH) || !minRegex.test(form.endM)) {
-            setFormError('Định dạng giờ không hợp lệ.');
+            setFormError(translatePageText("Định dạng giờ không hợp lệ."));
             return;
         }
 
@@ -261,7 +261,7 @@ const AdminSaleOffPage = () => {
         const endTime = `${form.end_date} ${pad(form.endH)}:${pad(form.endM)}:00`;
 
         if (new Date(endTime) <= new Date(startTime)) {
-            setFormError('Thời gian kết thúc phải sau thời gian bắt đầu.');
+            setFormError(translatePageText("Thời gian kết thúc phải sau thời gian bắt đầu."));
             return;
         }
 
@@ -302,10 +302,11 @@ const AdminSaleOffPage = () => {
     };
 
     const formatDateTime = (isoString) => {
-        const { date, h, m } = splitDateTime(isoString);
-        if (!date) return '—';
-        const [y, mo, d] = date.split('-');
-        return `${h}:${m} ${d}/${mo}/${y}`;
+        if (!isoString) return '—';
+        const date = parseDate(isoString);
+        if (isNaN(date.getTime())) return '—';
+        const locale = document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN';
+        return date.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' });
     };
 
     // Trạng thái theo giờ server
@@ -341,14 +342,13 @@ const AdminSaleOffPage = () => {
 
     return (
         <AdminPageShell
-            title="Quản lý sự kiện"
+            title={translatePageText("Quản lý sự kiện")}
             actions={
                 <button
                     onClick={openCreateForm}
                     className="bg-red-600 text-white font-bold px-4 py-2 rounded hover:bg-red-700 transition flex items-center gap-2"
                 >
-                    <i className="fas fa-plus"></i> Tạo sự kiện giảm giá
-                </button>
+                    <i className="fas fa-plus"></i>{" " + translatePageText("Tạo sự kiện giảm giá") + " "}</button>
             }
         >
             <StatGrid>
@@ -378,14 +378,14 @@ const AdminSaleOffPage = () => {
             ) : events.length === 0 ? (
                 <EmptyState
                     icon="🏷️"
-                    title="Chưa có sự kiện giảm giá nào"
-                    description="Bấm 'Tạo sự kiện giảm giá' để bắt đầu."
+                    title={translatePageText("Chưa có sự kiện giảm giá nào")}
+                    description={translatePageText("Bấm 'Tạo sự kiện giảm giá' để bắt đầu.")}
                 />
             ) : visible.length === 0 ? (
                 <EmptyState
                     icon="🔍"
-                    title="Không có sự kiện phù hợp"
-                    description="Thử đổi tháng hoặc trạng thái khác."
+                    title={translatePageText("Không có sự kiện phù hợp")}
+                    description={translatePageText("Thử đổi tháng hoặc trạng thái khác.")}
                 />
             ) : (
                 <div className="space-y-3">
@@ -401,7 +401,7 @@ const AdminSaleOffPage = () => {
                                 <div className="flex-1 flex flex-wrap items-center justify-between gap-3 px-5 py-3">
                                     <div className="min-w-[200px] flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <h3 className="text-lg font-bold text-gray-800">{event.name}</h3>
+                                            <h3 className="text-lg font-bold text-gray-800">{translateSeededEventName(event.name)}</h3>
                                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${status.badge}`}>
                                                 {status.label}
                                             </span>
@@ -414,7 +414,7 @@ const AdminSaleOffPage = () => {
 
                                     <div className="flex items-center gap-3">
                                         <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-1.5 text-center">
-                                            <p className="text-xs text-gray-500 leading-none">Giảm giá</p>
+                                            <p className="text-xs text-gray-500 leading-none">{translatePageText("Giảm giá")}</p>
                                             <p className="font-bold text-red-600 text-xl leading-tight">{Number(event.sale_off_percentage)}%</p>
                                         </div>
                                         <div className="flex gap-2">
@@ -422,17 +422,13 @@ const AdminSaleOffPage = () => {
                                                 <button
                                                     onClick={() => openEditForm(event)}
                                                     className="px-3 py-1.5 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
-                                                >
-                                                    Sửa
-                                                </button>
+                                                >{translatePageText("Sửa") + " "}</button>
                                             )}
                                             {statusKey !== 'ongoing' && (
                                                 <button
                                                     onClick={() => setDeletingEvent(event)}
                                                     className="px-3 py-1.5 text-sm font-bold rounded bg-red-600 text-white hover:bg-red-700 transition"
-                                                >
-                                                    Xóa
-                                                </button>
+                                                >{translatePageText("Xóa") + " "}</button>
                                             )}
                                         </div>
                                     </div>
@@ -449,23 +445,23 @@ const AdminSaleOffPage = () => {
                     <div className="bg-white rounded-lg shadow-2xl w-full max-w-lg overflow-hidden">
                         <div className="bg-red-600 text-white px-6 py-4">
                             <h2 className="text-lg font-bold">
-                                {editingEvent ? 'Sửa sự kiện giảm giá' : 'Tạo sự kiện giảm giá'}
+                                {editingEvent ? translatePageText("Sửa sự kiện giảm giá") : translatePageText("Tạo sự kiện giảm giá")}
                             </h2>
                         </div>
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-semibold mb-1">Tên sự kiện</label>
+                                <label className="block text-sm font-semibold mb-1">{translatePageText("Tên sự kiện")}</label>
                                 <input
                                     type="text"
                                     value={form.name}
                                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                    placeholder="VD: Sự kiện cuối tuần"
+                                    placeholder={translatePageText("VD: Sự kiện cuối tuần")}
                                     className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold mb-1">Phần trăm giảm giá (%)</label>
+                                <label className="block text-sm font-semibold mb-1">{translatePageText("Phần trăm giảm giá (%)")}</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {PERCENTAGE_OPTIONS.map((p) => (
                                         <button
@@ -485,7 +481,7 @@ const AdminSaleOffPage = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">Ngày bắt đầu</label>
+                                    <label className="block text-sm font-semibold mb-1">{translatePageText("Ngày bắt đầu")}</label>
                                     <input
                                         type="date"
                                         value={form.start_date}
@@ -494,7 +490,7 @@ const AdminSaleOffPage = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">Giờ bắt đầu</label>
+                                    <label className="block text-sm font-semibold mb-1">{translatePageText("Giờ bắt đầu")}</label>
                                     <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
                                         <input type="text" maxLength="2" placeholder="07" value={form.startH} onChange={e => setForm({ ...form, startH: e.target.value })} className="w-10 text-center outline-none bg-transparent" />
                                         <span className="font-bold text-gray-500">:</span>
@@ -505,7 +501,7 @@ const AdminSaleOffPage = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">Ngày kết thúc</label>
+                                    <label className="block text-sm font-semibold mb-1">{translatePageText("Ngày kết thúc")}</label>
                                     <input
                                         type="date"
                                         value={form.end_date}
@@ -514,7 +510,7 @@ const AdminSaleOffPage = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">Giờ kết thúc</label>
+                                    <label className="block text-sm font-semibold mb-1">{translatePageText("Giờ kết thúc")}</label>
                                     <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
                                         <input type="text" maxLength="2" placeholder="22" value={form.endH} onChange={e => setForm({ ...form, endH: e.target.value })} className="w-10 text-center outline-none bg-transparent" />
                                         <span className="font-bold text-gray-500">:</span>
@@ -529,15 +525,13 @@ const AdminSaleOffPage = () => {
                                     onClick={closeForm}
                                     disabled={saving}
                                     className="px-4 py-2 rounded border border-black text-black bg-white text-sm font-semibold disabled:opacity-50"
-                                >
-                                    Hủy
-                                </button>
+                                >{translatePageText("Hủy") + " "}</button>
                                 <button
                                     type="submit"
                                     disabled={saving}
                                     className="px-5 py-2 rounded bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50"
                                 >
-                                    {saving ? 'Đang lưu...' : editingEvent ? 'Lưu thay đổi' : 'Tạo sự kiện'}
+                                    {saving ? translatePageText("Đang lưu...") : editingEvent ? translatePageText("Lưu thay đổi") : translatePageText("Tạo sự kiện")}
                                 </button>
                             </div>
                         </form>
@@ -549,26 +543,18 @@ const AdminSaleOffPage = () => {
             {deletingEvent && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
-                        <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
-                            Xóa sự kiện giảm giá
-                        </div>
+                        <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{translatePageText("Xóa sự kiện giảm giá") + " "}</div>
                         <div className="p-6">
-                            <p className="text-gray-700 text-center mb-6">
-                                Bạn có chắc muốn xóa sự kiện <strong>{deletingEvent.name}</strong> không?
-                            </p>
+                            <p className="text-gray-700 text-center mb-6">{translatePageText("Bạn có chắc muốn xóa sự kiện") + " "}<strong>{deletingEvent.name}</strong>{" " + translatePageText("không?") + " "}</p>
                             <div className="flex gap-4">
                                 <button
                                     onClick={() => setDeletingEvent(null)}
                                     className="flex-1 bg-white border border-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-100"
-                                >
-                                    Đóng
-                                </button>
+                                >{translatePageText("Đóng") + " "}</button>
                                 <button
                                     onClick={handleDelete}
                                     className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
-                                >
-                                    Xác nhận
-                                </button>
+                                >{translatePageText("Xác nhận") + " "}</button>
                             </div>
                         </div>
                     </div>
@@ -578,7 +564,7 @@ const AdminSaleOffPage = () => {
             {/* Modal lỗi trong form tạo/sửa */}
             <Modal
                 isOpen={!!formError}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setFormError(null)}
@@ -589,7 +575,7 @@ const AdminSaleOffPage = () => {
             {/* Modal lỗi chung (tải danh sách, xóa) */}
             <Modal
                 isOpen={!!errorMessage}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setErrorMessage(null)}

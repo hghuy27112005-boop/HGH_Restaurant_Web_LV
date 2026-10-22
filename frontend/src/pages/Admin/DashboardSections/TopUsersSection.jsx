@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
 import { YEAR_OPTIONS, MONTH_OPTIONS, fmtMoney, extractError } from './helpers';
+import { translatePageText } from '../../../pageTextTranslations';
 
 const MEMBERSHIP_LABEL = {
     bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum', diamond: 'Diamond',
@@ -25,7 +26,7 @@ const TopUsersSection = () => {
                 if (!cancelled) setRows(res?.data?.data || []);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, 'Lỗi tải xếp hạng người dùng'));
+                    setError(extractError(err, translatePageText("Lỗi tải xếp hạng người dùng")));
                     setRows([]);
                 }
             } finally {
@@ -46,8 +47,8 @@ const TopUsersSection = () => {
                     {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={selectCls}>
-                    <option value={0}>Cả năm</option>
-                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
+                    <option value={0}>{translatePageText("Cả năm")}</option>
+                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
                 </select>
             </div>
 
@@ -59,11 +60,11 @@ const TopUsersSection = () => {
                         <thead className="bg-red-600 text-white">
                             <tr>
                                 <th className="px-3 py-2 text-left">STT</th>
-                                <th className="px-3 py-2 text-left">Tên</th>
+                                <th className="px-3 py-2 text-left">{translatePageText("Tên")}</th>
                                 <th className="px-3 py-2 text-left">Gmail</th>
-                                <th className="px-3 py-2 text-left">Số điện thoại</th>
-                                <th className="px-3 py-2 text-left">Membership</th>
-                                <th className="px-3 py-2 text-right">Chi tiêu</th>
+                                <th className="px-3 py-2 text-left">{translatePageText("Số điện thoại")}</th>
+                                <th className="px-3 py-2 text-left">{translatePageText('Bậc thành viên')}</th>
+                                <th className="px-3 py-2 text-right">{translatePageText("Chi tiêu")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -81,7 +82,7 @@ const TopUsersSection = () => {
                     </table>
                 </div>
             ) : (
-                <div className="p-6 text-center text-gray-500">Không có dữ liệu</div>
+                <div className="p-6 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
             )}
         </div>
     );

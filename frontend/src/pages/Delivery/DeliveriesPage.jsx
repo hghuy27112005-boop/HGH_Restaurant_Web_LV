@@ -6,27 +6,29 @@ import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from '../Menu/DishDetailPage';
 import { getCartKey, getSessionKey } from '../../utils/cartStorage';
 import EditDeliveryModal from './EditDeliveryModal';
+import { translatePageText } from '../../pageTextTranslations';
+import { translateDishName } from '../../dishTranslations';
 
 const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
 
 // 6 trạng thái của đơn ship (khớp enum delivery_status ở backend)
 const DELIVERY_STATUS_INFO = {
-    waiting_payment: { label: '⏳ Chờ thanh toán', variant: 'warning' },
-    scheduled: { label: '📅 Đã lên lịch', variant: 'info' },
-    preparing: { label: '🍳 Đang chuẩn bị', variant: 'info' },
-    shipping: { label: '🚗 Đang giao hàng', variant: 'info' },
-    completed: { label: '✓ Đã giao hàng', variant: 'success' },
-    cancelled: { label: '✕ Đã hủy', variant: 'danger' },
+    waiting_payment: { get label() { return translatePageText("⏳ Chờ thanh toán"); }, variant: 'warning' },
+    scheduled: { get label() { return translatePageText("📅 Đã lên lịch"); }, variant: 'info' },
+    preparing: { get label() { return translatePageText("🍳 Đang chuẩn bị"); }, variant: 'info' },
+    shipping: { get label() { return translatePageText("🚗 Đang giao hàng"); }, variant: 'info' },
+    completed: { get label() { return translatePageText("✓ Đã giao hàng"); }, variant: 'success' },
+    cancelled: { get label() { return translatePageText("✕ Đã hủy"); }, variant: 'danger' },
 };
 
 const DELIVERY_STATUS_FILTERS = [
-    { id: 'all', label: 'Tất cả' },
+    { id: 'all', get label() { return translatePageText("Tất cả"); } },
     // Không có nút "Chờ thanh toán": đơn chưa thanh toán chưa có Bill nên không hiện ở danh sách của khách.
-    { id: 'scheduled', label: 'Đã lên lịch' },
-    { id: 'preparing', label: 'Đang chuẩn bị' },
-    { id: 'shipping', label: 'Đang giao hàng' },
-    { id: 'completed', label: 'Đã giao hàng' },
-    { id: 'cancelled', label: 'Đã hủy' },
+    { id: 'scheduled', get label() { return translatePageText("Đã lên lịch"); } },
+    { id: 'preparing', get label() { return translatePageText("Đang chuẩn bị"); } },
+    { id: 'shipping', get label() { return translatePageText("Đang giao hàng"); } },
+    { id: 'completed', get label() { return translatePageText("Đã giao hàng"); } },
+    { id: 'cancelled', get label() { return translatePageText("Đã hủy"); } },
 ];
 
 const getTodayDateKey = () => {
@@ -183,9 +185,9 @@ const DeliveriesPage = () => {
 
         return (
             <>
-                <div>{dishName}</div>
+                <div>{translateDishName(dishName)}</div>
                 {customizationName && (
-                    <div className="mt-1 text-xs text-gray-500">Công thức thay thế: {customizationName}</div>
+                    <div className="mt-1 text-xs text-gray-500">{translatePageText("Công thức thay thế:") + " "}{customizationName}</div>
                 )}
             </>
         );
@@ -307,7 +309,7 @@ const DeliveriesPage = () => {
 
     const handleUseCurrentLocation = () => {
         if (!navigator.geolocation) {
-            showError('Trình duyệt của bạn không hỗ trợ lấy vị trí hiện tại.');
+            showError(translatePageText("Trình duyệt của bạn không hỗ trợ lấy vị trí hiện tại."));
             return;
         }
 
@@ -334,7 +336,7 @@ const DeliveriesPage = () => {
             },
             () => {
                 setGpsLoading(false);
-                showError('Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí hoặc nhập địa chỉ thủ công.');
+                showError(translatePageText("Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí hoặc nhập địa chỉ thủ công."));
             }
         );
     };
@@ -648,7 +650,7 @@ const DeliveriesPage = () => {
             const res = await userAPI.getProfile();
             const left = Number(res.data?.data?.cancel_attempts_left ?? 0);
             if (left <= 0) {
-                setCancelErrorMessage('Bạn đã hết lượt hủy đơn trong tuần này (tối đa 2 lượt/tuần, tính chung cho cả đặt bàn và đặt ship). Lượt hủy sẽ được làm mới vào thứ Hai tuần sau.');
+                setCancelErrorMessage(translatePageText("Bạn đã hết lượt hủy đơn trong tuần này (tối đa 2 lượt/tuần, tính chung cho cả đặt bàn và đặt ship). Lượt hủy sẽ được làm mới vào thứ Hai tuần sau."));
                 return;
             }
             setCancelAttemptsLeft(left);
@@ -680,7 +682,7 @@ const DeliveriesPage = () => {
             const res = await userAPI.getProfile();
             const left = Number(res.data?.data?.modify_attempts_left ?? 0);
             if (left <= 0) {
-                setModifyErrorMessage('Bạn đã hết lượt chỉnh sửa đơn trong tuần này (tối đa 2 lượt/tuần). Lượt chỉnh sửa sẽ được làm mới vào thứ Hai tuần sau.');
+                setModifyErrorMessage(translatePageText("Bạn đã hết lượt chỉnh sửa đơn trong tuần này (tối đa 2 lượt/tuần). Lượt chỉnh sửa sẽ được làm mới vào thứ Hai tuần sau."));
                 return;
             }
             setModifyAttemptsLeft(left);
@@ -712,7 +714,7 @@ const DeliveriesPage = () => {
                 const res = await vnpayService.createRefundUrl({ order_id: cancelingBill.order_id });
                 window.location.href = res.data.payment_url;
             } else {
-                setCancelErrorMessage('Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.');
+                setCancelErrorMessage(translatePageText("Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ."));
             }
         } catch (err) {
             setCancelErrorMessage(err.response?.data?.message || err.message);
@@ -810,57 +812,57 @@ const DeliveriesPage = () => {
 
         return (
             <div className="bg-white border border-gray-200 rounded p-4 text-sm space-y-2 text-left">
-                <h4 className="font-bold text-gray-800 border-b pb-2">Tóm tắt đơn hàng</h4>
+                <h4 className="font-bold text-gray-800 border-b pb-2">{translatePageText("Tóm tắt đơn hàng")}</h4>
                 <div className="flex justify-between gap-4">
-                    <span className="text-gray-600">Địa chỉ giao hàng:</span>
+                    <span className="text-gray-600">{translatePageText("Địa chỉ giao hàng:")}</span>
                     <span className="font-semibold text-right">{orderSummary.address}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                    <span className="text-gray-600">Tổng tiền món:</span>
-                    <span className="font-semibold">{cartTotal.toLocaleString('vi-VN')}đ</span>
+                    <span className="text-gray-600">{translatePageText("Tổng tiền món:")}</span>
+                    <span className="font-semibold">{cartTotal.toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                    <span className="text-gray-600">Phí ship (thu riêng khi nhận hàng):</span>
-                    <span className="font-semibold">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}đ</span>
+                    <span className="text-gray-600">{translatePageText("Phí ship (thu riêng khi nhận hàng):")}</span>
+                    <span className="font-semibold">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                    <span className="text-gray-600">Khoảng cách / thời gian giao:</span>
-                    <span className="font-semibold">{orderSummary.distance_km} km / {orderSummary.duration_minutes} phút</span>
+                    <span className="text-gray-600">{translatePageText("Khoảng cách / thời gian giao:")}</span>
+                    <span className="font-semibold">{orderSummary.distance_km} km / {orderSummary.duration_minutes}{" " + translatePageText("phút")}</span>
                 </div>
                 {orderSummary.preferred_time && (
                     <div className="flex justify-between gap-4">
-                        <span className="text-gray-600">Giờ hàng tới bạn chọn:</span>
+                        <span className="text-gray-600">{translatePageText("Giờ hàng tới bạn chọn:")}</span>
                         <span className="font-semibold">{orderSummary.preferred_time}</span>
                     </div>
                 )}
                 {hasFixedCooking ? (
                     <>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">Bắt đầu nấu (dự kiến):</span>
+                            <span className="text-gray-600">{translatePageText("Bắt đầu nấu (dự kiến):")}</span>
                             <span className="font-semibold">{formatExpectedDateTime(cookingAt)}</span>
                         </div>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">Bắt đầu giao (dự kiến):</span>
+                            <span className="text-gray-600">{translatePageText("Bắt đầu giao (dự kiến):")}</span>
                             <span className="font-semibold">{formatExpectedDateTime(shipAt)}</span>
                         </div>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">Hàng tới (dự kiến):</span>
+                            <span className="text-gray-600">{translatePageText("Hàng tới (dự kiến):")}</span>
                             <span className="font-semibold">{formatExpectedDateTime(arrivalAt)}</span>
                         </div>
                     </>
                 ) : (
                     <>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">Bắt đầu nấu:</span>
-                            <span className="font-semibold">Ngay sau khi thanh toán</span>
+                            <span className="text-gray-600">{translatePageText("Bắt đầu nấu:")}</span>
+                            <span className="font-semibold">{translatePageText("Ngay sau khi thanh toán")}</span>
                         </div>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">Hàng tới (dự kiến):</span>
+                            <span className="text-gray-600">{translatePageText("Hàng tới (dự kiến):")}</span>
                             <span className="font-semibold">{totalMinutes != null ? `Sau khoảng ${totalMinutes} phút kể từ lúc thanh toán` : '—'}</span>
                         </div>
                     </>
                 )}
-                <p className="text-xs text-gray-500 pt-1">Lịch trên là dự kiến, hệ thống tính lại chính xác vào lúc bạn thanh toán thành công.</p>
+                <p className="text-xs text-gray-500 pt-1">{translatePageText("Lịch trên là dự kiến, hệ thống tính lại chính xác vào lúc bạn thanh toán thành công.")}</p>
             </div>
         );
     };
@@ -880,24 +882,24 @@ const DeliveriesPage = () => {
 
                 {/* Upper Half: Đặt hàng cố định */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 border-t-4 border-t-red-600 p-4 sm:p-6 mb-8">
-                    <h2 className="text-2xl font-bold mb-4">Góc đặt hàng (Ship)</h2>
+                    <h2 className="text-2xl font-bold mb-4">{translatePageText("Góc đặt hàng (Ship)")}</h2>
 
                     {deliveryCart.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                             <i className="fas fa-shopping-basket text-4xl mb-3 text-gray-300 block"></i>
-                            <p className="text-lg">Quầy đang trống, vui lòng quay lại Menu thêm món vào giỏ hàng.</p>
-                            <button onClick={() => window.location.href = '/menu'} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">Đến Menu</button>
+                            <p className="text-lg">{translatePageText("Quầy đang trống, vui lòng quay lại Menu thêm món vào giỏ hàng.")}</p>
+                            <button onClick={() => window.location.href = '/menu'} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">{translatePageText("Đến Menu")}</button>
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 gap-6 md:gap-8">
                             <div>
-                                <h3 className="font-semibold mb-2">Món đã chọn:</h3>
+                                <h3 className="font-semibold mb-2">{translatePageText("Món đã chọn:")}</h3>
                                 <table className="w-full mb-4 text-sm bg-white border border-gray-300 border-t-4 border-t-red-600">
                                     <thead>
                                         <tr>
-                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">Món</th>
-                                            <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-gray-300">Số lượng</th>
-                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">Thành tiền</th>
+                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">{translatePageText("Món")}</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-gray-300">{translatePageText("Số lượng")}</th>
+                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">{translatePageText("Thành tiền")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -917,7 +919,7 @@ const DeliveriesPage = () => {
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, 1)}
                                                             disabled={item.quantity >= MAX_ITEM_QUANTITY}
-                                                            title={item.quantity >= MAX_ITEM_QUANTITY ? 'Tối đa 50 phần mỗi món' : undefined}
+                                                            title={item.quantity >= MAX_ITEM_QUANTITY ? translatePageText("Tối đa 50 phần mỗi món") : undefined}
                                                             style={checkoutStage !== 'info' ? { display: 'none' } : (item.quantity >= MAX_ITEM_QUANTITY ? { opacity: 0.4, cursor: 'not-allowed' } : undefined)}
                                                             className="w-6 h-6 rounded-full border border-red-600 text-red-600 font-bold flex items-center justify-center hover:bg-red-600 hover:text-white transition"
                                                         >
@@ -926,17 +928,15 @@ const DeliveriesPage = () => {
                                                     </div>
                                                 </td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                    {(item.price * item.quantity).toLocaleString('vi-VN')}đ
-                                                </td>
+                                                    {(item.price * item.quantity).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                     <tfoot>
                                         <tr>
-                                            <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-gray-300">Tổng cộng:</td>
+                                            <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-gray-300">{translatePageText("Tổng cộng:")}</td>
                                             <td className="py-2 px-3 text-right font-bold text-lg text-red-600 border border-gray-300">
-                                                {cartTotal.toLocaleString('vi-VN')}đ
-                                            </td>
+                                                {cartTotal.toLocaleString('vi-VN')}{translatePageText("đ") + " "}</td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -944,9 +944,7 @@ const DeliveriesPage = () => {
                                     onClick={() => setDeleteOrderModalOpen(true)}
                                     className="mt-4 px-4 py-2 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
                                     style={checkoutStage !== 'info' ? { display: 'none' } : undefined}
-                                >
-                                    Xóa đơn hàng
-                                </button>
+                                >{translatePageText("Xóa đơn hàng") + " "}</button>
                             </div>
                             <div>
                                 <>
@@ -956,14 +954,14 @@ const DeliveriesPage = () => {
                                 >
                                     <form onSubmit={handleConfirmInfo} className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-semibold mb-1">Địa chỉ giao hàng</label>
+                                            <label className="block text-sm font-semibold mb-1">{translatePageText("Địa chỉ giao hàng")}</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={address}
                                                 onChange={e => setAddress(e.target.value)}
                                                 className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
-                                                placeholder="Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)..."
+                                                placeholder={translatePageText("Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)...")}
                                             />
                                             <button
                                                 type="button"
@@ -972,12 +970,12 @@ const DeliveriesPage = () => {
                                                 className="mt-2 text-sm font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-1"
                                             >
                                                 <i className={`fas ${gpsLoading ? 'fa-spinner fa-spin' : 'fa-location-crosshairs'}`}></i>
-                                                {gpsLoading ? 'Đang lấy vị trí...' : 'Tự động lấy vị trí hiện tại'}
+                                                {gpsLoading ? translatePageText("Đang lấy vị trí...") : translatePageText("Tự động lấy vị trí hiện tại")}
                                             </button>
                                         </div>
 
                                         {shippingLoading && (
-                                            <p className="text-sm text-gray-500">Đang kiểm tra địa chỉ...</p>
+                                            <p className="text-sm text-gray-500">{translatePageText("Đang kiểm tra địa chỉ...")}</p>
                                         )}
 
                                         {!shippingLoading && shippingError && (
@@ -987,16 +985,16 @@ const DeliveriesPage = () => {
                                         {checkoutStage === 'info' && !shippingLoading && shippingPreview && previewedAddress === address.trim() && (
                                             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm space-y-1">
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">Khoảng cách:</span>
+                                                    <span className="text-gray-600">{translatePageText("Khoảng cách:")}</span>
                                                     <span className="font-semibold">{shippingPreview.distance_km} km</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">Thời gian giao dự kiến:</span>
-                                                    <span className="font-semibold">{shippingPreview.duration_minutes} phút</span>
+                                                    <span className="text-gray-600">{translatePageText("Thời gian giao dự kiến:")}</span>
+                                                    <span className="font-semibold">{shippingPreview.duration_minutes}{" " + translatePageText("phút")}</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">Phí ship (thu riêng khi nhận hàng):</span>
-                                                    <span className="font-bold text-red-600">{shippingPreview.shipping_fee.toLocaleString('vi-VN')}đ</span>
+                                                    <span className="text-gray-600">{translatePageText("Phí ship (thu riêng khi nhận hàng):")}</span>
+                                                    <span className="font-bold text-red-600">{shippingPreview.shipping_fee.toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -1004,16 +1002,16 @@ const DeliveriesPage = () => {
                                         {checkoutStage !== 'info' && orderSummary && (
                                             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm space-y-1">
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">Khoảng cách:</span>
+                                                    <span className="text-gray-600">{translatePageText("Khoảng cách:")}</span>
                                                     <span className="font-semibold">{orderSummary.distance_km} km</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">Thời gian giao dự kiến:</span>
-                                                    <span className="font-semibold">{orderSummary.duration_minutes} phút</span>
+                                                    <span className="text-gray-600">{translatePageText("Thời gian giao dự kiến:")}</span>
+                                                    <span className="font-semibold">{orderSummary.duration_minutes}{" " + translatePageText("phút")}</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">Phí ship (thu riêng khi nhận hàng):</span>
-                                                    <span className="font-bold text-red-600">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}đ</span>
+                                                    <span className="text-gray-600">{translatePageText("Phí ship (thu riêng khi nhận hàng):")}</span>
+                                                    <span className="font-bold text-red-600">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -1021,17 +1019,17 @@ const DeliveriesPage = () => {
                                         <div className="flex flex-wrap items-start justify-between gap-4 pt-3">
                                             <div>
                                                 <div className="flex items-center gap-3">
-                                                    <span className="font-semibold text-gray-700">Thời điểm giao hàng mong muốn</span>
+                                                    <span className="font-semibold text-gray-700">{translatePageText("Thời điểm giao hàng mong muốn")}</span>
                                                     <button
                                                         type="button"
                                                         onClick={() => setPreferredDeliveryEnabled(value => !value)}
                                                         className={`relative inline-flex items-center w-14 h-7 rounded-full border-2 border-white shadow-inner transition-colors duration-200 flex-shrink-0 ${preferredDeliveryEnabled ? 'bg-green-500' : 'bg-gray-400'}`}
-                                                        aria-label="Bật thời điểm giao hàng mong muốn"
+                                                        aria-label={translatePageText("Bật thời điểm giao hàng mong muốn")}
                                                     >
                                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${preferredDeliveryEnabled ? 'translate-x-8' : 'translate-x-1'}`} />
                                                     </button>
                                                 </div>
-                                                <p className="mt-1 text-xs text-gray-500">Bạn muốn hàng được giao tới lúc mấy giờ?</p>
+                                                <p className="mt-1 text-xs text-gray-500">{translatePageText("Bạn muốn hàng được giao tới lúc mấy giờ?")}</p>
                                             </div>
                                             {preferredDeliveryEnabled && (
                                                 <div>
@@ -1040,7 +1038,7 @@ const DeliveriesPage = () => {
                                                         <span className="font-bold text-gray-500">:</span>
                                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="30" value={preferredTimeM} onChange={e => setPreferredTimeM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                                     </div>
-                                                    <p className="mt-1 text-xs text-gray-500">Sớm nhất: {getMinimumPreferredTime()} — muộn nhất: 22:00</p>
+                                                    <p className="mt-1 text-xs text-gray-500">{translatePageText("Sớm nhất:") + " "}{getMinimumPreferredTime()}{" " + translatePageText("— muộn nhất: 22:00")}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -1049,31 +1047,27 @@ const DeliveriesPage = () => {
                                             type="submit"
                                             disabled={!address.trim() || deliveryCart.length === 0 || !shippingPreview || previewedAddress !== address.trim() || shippingLoading || scheduleTimeRef.current !== previewPreferredTime}
                                             className="w-full bg-red-600 text-white font-bold py-3 rounded hover:bg-red-700 transition disabled:opacity-50 mt-4"
-                                        >
-                                            Xác nhận thông tin đặt hàng
-                                        </button>
+                                        >{translatePageText("Xác nhận thông tin đặt hàng") + " "}</button>
                                     </form>
                                 </fieldset>
                                 <Modal
                                     isOpen={checkoutStage === 'payment'}
-                                    title="Thanh toán đơn hàng"
+                                    title={translatePageText("Thanh toán đơn hàng")}
                                     onClose={closePaymentModal}
                                     showHeaderClose
                                     showFooterClose={false}
                                 >
                                     <div className="space-y-4">
                                         <div className="text-center">
-                                            <h3 className="font-bold text-lg mb-2">Thanh toán đơn hàng</h3>
-                                            <p className="text-gray-600 text-sm mb-4">Mọi thông tin đã được chốt. Vui lòng tiến hành thanh toán để hoàn tất.</p>
+                                            <h3 className="font-bold text-lg mb-2">{translatePageText("Thanh toán đơn hàng")}</h3>
+                                            <p className="text-gray-600 text-sm mb-4">{translatePageText("Mọi thông tin đã được chốt. Vui lòng tiến hành thanh toán để hoàn tất.")}</p>
                                         </div>
                                         {renderOrderSummary()}
                                         {saleOffEvent && (
                                             <div className="flex items-center justify-between mb-2 px-1">
                                                 <div>
-                                                    <p className="font-semibold text-gray-700 text-sm">Sử dụng giảm giá của sự kiện</p>
-                                                    <p className="text-xs text-gray-500">
-                                                        Giảm {Number(saleOffEvent.sale_off_percentage)}% — còn {getEffectiveTotal().toLocaleString('vi-VN')}đ
-                                                    </p>
+                                                    <p className="font-semibold text-gray-700 text-sm">{translatePageText("Sử dụng giảm giá của sự kiện")}</p>
+                                                    <p className="text-xs text-gray-500">{translatePageText("Giảm") + " "}{Number(saleOffEvent.sale_off_percentage)}{translatePageText("% — còn") + " "}{getEffectiveTotal().toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -1098,9 +1092,9 @@ const DeliveriesPage = () => {
                                                 }`}
                                         >
                                             {payingWith === 'vnpay' ? (
-                                                <><i className="fas fa-spinner fa-spin"></i> Đang xử lý...</>
+                                                <><i className="fas fa-spinner fa-spin"></i>{" " + translatePageText("Đang xử lý...")}</>
                                             ) : (
-                                                <><i className="fas fa-credit-card"></i> Thanh toán bằng VNPay</>
+                                                <><i className="fas fa-credit-card"></i>{" " + translatePageText("Thanh toán bằng VNPay")}</>
                                             )}
                                         </button>
                                         {/* Nút Điểm */}
@@ -1115,9 +1109,9 @@ const DeliveriesPage = () => {
                                                 }`}
                                         >
                                             {payingWith === 'points' ? (
-                                                <><i className="fas fa-spinner fa-spin"></i> Đang xử lý...</>
+                                                <><i className="fas fa-spinner fa-spin"></i>{" " + translatePageText("Đang xử lý...")}</>
                                             ) : (
-                                                <><i className="fas fa-coins"></i> Thanh toán bằng Điểm</>
+                                                <><i className="fas fa-coins"></i>{" " + translatePageText("Thanh toán bằng Điểm")}</>
                                             )}
                                         </button>
                                         {/* Nút quay lại - chỉ khi chưa bấm thanh toán */}
@@ -1127,7 +1121,7 @@ const DeliveriesPage = () => {
                                                     try {
                                                         await orderService.deleteOrder(createdOrderId);
                                                     } catch (err) {
-                                                        console.warn('Không thể xóa đơn cũ khi sửa thông tin:', err);
+                                                        console.warn(translatePageText("Không thể xóa đơn cũ khi sửa thông tin:"), err);
                                                     }
                                                 }
                                                 clearCheckoutSession();
@@ -1136,9 +1130,7 @@ const DeliveriesPage = () => {
                                             }}
                                             disabled={!!payingWith}
                                             className="w-full mt-2 text-gray-500 hover:text-red-600 text-sm font-bold py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                                        >
-                                            Quay lại sửa thông tin
-                                        </button>
+                                        >{translatePageText("Quay lại sửa thông tin") + " "}</button>
                                     </div>
                                 </Modal>
                             </>
@@ -1148,19 +1140,17 @@ const DeliveriesPage = () => {
                 </div>
 
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">Các đơn đã đặt</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">{translatePageText("Các đơn đã đặt")}</h2>
                     <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-                        <span className="text-sm font-medium text-gray-600 whitespace-nowrap">Tìm theo mã hóa đơn</span>
+                        <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{translatePageText("Tìm theo mã hóa đơn")}</span>
                         <input
                             type="text"
                             value={searchBillId}
                             onChange={e => setSearchBillId(e.target.value)}
-                            placeholder="Nhập mã hóa đơn..."
+                            placeholder={translatePageText("Nhập mã hóa đơn...")}
                             className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                         />
-                        <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="delivery-created-date">
-                            Ngày:
-                        </label>
+                        <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="delivery-created-date">{translatePageText("Ngày:") + " "}</label>
                         <input
                             id="delivery-created-date"
                             type="date"
@@ -1180,33 +1170,21 @@ const DeliveriesPage = () => {
                         onMouseUp={handleTimeWarningBackdropMouseUp}
                     >
                         <div className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto">
-                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
-                                Thông báo
-                            </div>
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{translatePageText("Thông báo") + " "}</div>
                             <div className="p-6">
-                                <p className="text-gray-700 mb-6">
-                                    Đơn hàng này được dự kiến là không thể hoàn tất giao trước 10h tối.
-                                    <br /><br />
-                                    Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng <strong className="text-red-600">{getNextMorningLabel()}</strong> thì chúng tôi mới bắt đầu chuẩn bị đơn hàng cho quý khách.
-                                    <br /><br />
-                                    Thời điểm bắt đầu chuẩn bị đơn giao hàng của mỗi ngày là từ 7h30 sáng.
-                                </p>
+                                <p className="text-gray-700 mb-6">{translatePageText("Đơn hàng này được dự kiến là không thể hoàn tất giao trước 10h tối.") + " "}<br /><br />{translatePageText("Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng") + " "}<strong className="text-red-600">{getNextMorningLabel()}</strong>{" " + translatePageText("thì chúng tôi mới bắt đầu chuẩn bị đơn hàng cho quý khách.") + " "}<br /><br />{translatePageText("Thời điểm bắt đầu chuẩn bị đơn giao hàng của mỗi ngày là từ 7h30 sáng.") + " "}</p>
                                 <div className="flex gap-4">
                                     <button
                                         onClick={() => setShowTimeWarningModal(false)}
                                         className="flex-1 bg-white border border-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-100"
-                                    >
-                                        Đóng
-                                    </button>
+                                    >{translatePageText("Đóng") + " "}</button>
                                     <button
                                         onClick={() => {
                                             setShowTimeWarningModal(false);
                                             setIsConfirmModalOpen(true);
                                         }}
                                         className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
-                                    >
-                                        Tiếp tục đặt hàng
-                                    </button>
+                                    >{translatePageText("Tiếp tục đặt hàng") + " "}</button>
                                 </div>
                             </div>
                         </div>
@@ -1223,21 +1201,15 @@ const DeliveriesPage = () => {
                             className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto"
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
-                                Thông báo
-                            </div>
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{translatePageText("Thông báo") + " "}</div>
                             <div className="p-6">
                                 {preferredTimeModalType === 'after-closing' ? (
-                                    <p className="text-gray-700">
-                                        Nhà hàng chúng tôi đóng cửa lúc 22h và không thực hiện giao hàng sau giờ đóng cửa. Quý khách vẫn có thể tiếp tục đặt hàng, nhà hàng sẽ bắt đầu chuẩn bị đơn hàng cho quý khách vào 7h30 sáng <strong className="text-red-600">{getNextMorningLabel()}</strong>.
+                                    <p className="text-gray-700">{translatePageText("Nhà hàng chúng tôi đóng cửa lúc 22h và không thực hiện giao hàng sau giờ đóng cửa. Quý khách vẫn có thể tiếp tục đặt hàng, nhà hàng sẽ bắt đầu chuẩn bị đơn hàng cho quý khách vào 7h30 sáng") + " "}<strong className="text-red-600">{getNextMorningLabel()}</strong>.
                                     </p>
                                 ) : preferredTimeModalType === 'invalid' ? (
-                                    <p className="text-gray-700">
-                                        Vui lòng nhập thời gian giao hàng hợp lệ trong khoảng từ 00:00 đến 23:59.
-                                    </p>
+                                    <p className="text-gray-700">{translatePageText("Vui lòng nhập thời gian giao hàng hợp lệ trong khoảng từ 00:00 đến 23:59.") + " "}</p>
                                 ) : (
-                                    <p className="text-gray-700">
-                                        Thời điểm bạn chọn quá sớm. Hàng của bạn sẽ tới sớm nhất là <strong className="text-red-600">{getMinimumPreferredTime()}</strong>
+                                    <p className="text-gray-700">{translatePageText("Thời điểm bạn chọn quá sớm. Hàng của bạn sẽ tới sớm nhất là") + " "}<strong className="text-red-600">{getMinimumPreferredTime()}</strong>
                                     </p>
                                 )}
                                 <div className="flex justify-end gap-3 mt-6">
@@ -1245,9 +1217,7 @@ const DeliveriesPage = () => {
                                         <button
                                             onClick={() => setShowPreferredTimeErrorModal(false)}
                                             className="px-5 py-2 bg-white border border-gray-300 text-gray-800 rounded font-bold hover:bg-gray-100"
-                                        >
-                                            Quay lại
-                                        </button>
+                                        >{translatePageText("Quay lại") + " "}</button>
                                     )}
                                     <button
                                         onClick={() => {
@@ -1258,7 +1228,7 @@ const DeliveriesPage = () => {
                                         }}
                                         className="px-5 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
                                     >
-                                        {preferredTimeModalType === 'after-closing' ? 'Tiếp tục' : 'Đóng'}
+                                        {preferredTimeModalType === 'after-closing' ? translatePageText("Tiếp tục") : translatePageText("Đóng")}
                                     </button>
                                 </div>
                             </div>
@@ -1269,29 +1239,25 @@ const DeliveriesPage = () => {
                 {/* Confirm Modal */}
                 <Modal
                     isOpen={isConfirmModalOpen}
-                    title="Xác nhận đặt hàng"
+                    title={translatePageText("Xác nhận đặt hàng")}
                     onClose={() => setIsConfirmModalOpen(false)}
                     onConfirm={confirmOrder}
                     confirmText="Đồng ý đặt hàng"
                 >
-                    <p className="text-gray-700">
-                        Bạn có chắc chắn muốn đặt hàng? <br />
-                        <span className="font-semibold text-red-600">Lưu ý:</span> Sau khi đồng ý sẽ không thể thay đổi thông tin đơn hàng.
-                    </p>
+                    <p className="text-gray-700">{translatePageText("Bạn có chắc chắn muốn đặt hàng?") + " "}<br />
+                        <span className="font-semibold text-red-600">{translatePageText("Lưu ý:")}</span>{" " + translatePageText("Sau khi đồng ý sẽ không thể thay đổi thông tin đơn hàng.") + " "}</p>
                 </Modal>
 
                 {/* Delete Order Confirm Modal */}
                 <Modal
                     isOpen={deleteOrderModalOpen}
-                    title="Xóa đơn hàng"
+                    title={translatePageText("Xóa đơn hàng")}
                     onClose={() => setDeleteOrderModalOpen(false)}
                     onConfirm={confirmDeleteOrder}
                     confirmText="Xóa đơn hàng"
                     cancelText="Hủy"
                 >
-                    <p className="text-gray-700">
-                        Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món và đơn hàng hiện tại.
-                    </p>
+                    <p className="text-gray-700">{translatePageText("Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món và đơn hàng hiện tại.") + " "}</p>
                 </Modal>
 
                 {/* Points Modal: Insufficient */}
@@ -1304,11 +1270,8 @@ const DeliveriesPage = () => {
                             >
                                 <i className="fas fa-times text-xl"></i>
                             </button>
-                            <h3 className="text-xl font-bold text-red-600 mb-4 text-center">Không đủ điểm</h3>
-                            <p className="text-gray-700 text-center mb-6">
-                                Bạn không có đủ điểm để thanh toán hóa đơn này. <br />
-                                Hiện bạn đang có <strong className="text-red-600">{currentPoints}</strong> điểm.
-                            </p>
+                            <h3 className="text-xl font-bold text-red-600 mb-4 text-center">{translatePageText("Không đủ điểm")}</h3>
+                            <p className="text-gray-700 text-center mb-6">{translatePageText("Bạn không có đủ điểm để thanh toán hóa đơn này.") + " "}<br />{translatePageText("Hiện bạn đang có") + " "}<strong className="text-red-600">{currentPoints}</strong>{" " + translatePageText("điểm.") + " "}</p>
                             <button
                                 onClick={() => setPointsModalType(null)}
                                 className="w-full bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
@@ -1329,29 +1292,20 @@ const DeliveriesPage = () => {
                             >
                                 <i className="fas fa-times text-xl"></i>
                             </button>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">Xác nhận thanh toán</h3>
-                            <p className="text-gray-700 text-center mb-4">
-                                Bạn có chắc muốn dùng điểm để thanh toán hóa đơn này? <br />
-                                Hiện bạn đang có <strong className="text-red-600">{currentPoints}</strong> điểm.
-                            </p>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">{translatePageText("Xác nhận thanh toán")}</h3>
+                            <p className="text-gray-700 text-center mb-4">{translatePageText("Bạn có chắc muốn dùng điểm để thanh toán hóa đơn này?") + " "}<br />{translatePageText("Hiện bạn đang có") + " "}<strong className="text-red-600">{currentPoints}</strong>{" " + translatePageText("điểm.") + " "}</p>
                             {checkMembershipDowngrade() && (
-                                <p className="text-yellow-700 bg-yellow-50 border border-yellow-200 p-2 rounded text-sm text-center mb-4">
-                                    ⚠️ Thanh toán hóa đơn này có thể khiến bạn bị hạ bậc thành viên.
-                                </p>
+                                <p className="text-yellow-700 bg-yellow-50 border border-yellow-200 p-2 rounded text-sm text-center mb-4">{translatePageText("⚠️ Thanh toán hóa đơn này có thể khiến bạn bị hạ bậc thành viên.") + " "}</p>
                             )}
                             <div className="flex gap-4">
                                 <button
                                     onClick={() => setPointsModalType(null)}
                                     className="flex-1 bg-gray-200 text-gray-800 border border-gray-400 font-bold py-2 rounded hover:bg-gray-300"
-                                >
-                                    Hủy
-                                </button>
+                                >{translatePageText("Hủy") + " "}</button>
                                 <button
                                     onClick={handleConfirmPointsPayment}
                                     className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
-                                >
-                                    Xác nhận
-                                </button>
+                                >{translatePageText("Xác nhận") + " "}</button>
                             </div>
                         </div>
                     </div>
@@ -1361,16 +1315,10 @@ const DeliveriesPage = () => {
                 {cancelModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                         <div className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto">
-                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">
-                                Hủy đơn hàng
-                            </div>
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{translatePageText("Hủy đơn hàng") + " "}</div>
                             <div className="p-6">
-                                <p className="text-gray-700 text-center mb-3">
-                                    Bạn có chắc muốn hủy đơn hàng {cancelingBill?.order_stt || cancelingBill?.order_id} không?
-                                </p>
-                                <p className="text-sm text-center mb-6 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">
-                                    Việc hủy sẽ tiêu hao <strong>1 lượt hủy đơn</strong> trong tuần (hiện còn <strong>{cancelAttemptsLeft}</strong> lượt). Lượt chỉ bị trừ khi đơn đã được hủy và hoàn tiền/điểm xong.
-                                </p>
+                                <p className="text-gray-700 text-center mb-3">{translatePageText("Bạn có chắc muốn hủy đơn hàng") + " "}{cancelingBill?.order_stt || cancelingBill?.order_id}{" " + translatePageText("không?") + " "}</p>
+                                <p className="text-sm text-center mb-6 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Việc hủy sẽ tiêu hao") + " "}<strong>{translatePageText("1 lượt hủy đơn")}</strong>{" " + translatePageText("trong tuần (hiện còn") + " "}<strong>{cancelAttemptsLeft}</strong>{" " + translatePageText("lượt). Lượt chỉ bị trừ khi đơn đã được hủy và hoàn tiền/điểm xong.") + " "}</p>
                                 <div className="flex gap-4">
                                     <button
                                         onClick={() => {
@@ -1378,15 +1326,11 @@ const DeliveriesPage = () => {
                                             setCancelingBill(null);
                                         }}
                                         className="flex-1 bg-white border border-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-100"
-                                    >
-                                        Đóng
-                                    </button>
+                                    >{translatePageText("Đóng") + " "}</button>
                                     <button
                                         onClick={confirmCancelOrder}
                                         className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
-                                    >
-                                        Xác nhận
-                                    </button>
+                                    >{translatePageText("Xác nhận") + " "}</button>
                                 </div>
                             </div>
                         </div>
@@ -1396,7 +1340,7 @@ const DeliveriesPage = () => {
                 {/* Lỗi thanh toán bằng điểm: modal có nút Đóng, không tự ẩn */}
                 <Modal
                     isOpen={!!pointsErrorMessage}
-                    title="Lỗi thanh toán bằng điểm"
+                    title={translatePageText("Lỗi thanh toán bằng điểm")}
                     onClose={() => setPointsErrorMessage(null)}
                     cancelText="Đóng"
                 >
@@ -1415,7 +1359,7 @@ const DeliveriesPage = () => {
                 {/* Lỗi chỉnh sửa đơn (vd hết lượt) */}
                 <Modal
                     isOpen={!!modifyErrorMessage}
-                    title="Lỗi chỉnh sửa đơn"
+                    title={translatePageText("Lỗi chỉnh sửa đơn")}
                     onClose={() => setModifyErrorMessage(null)}
                     cancelText="Đóng"
                 >
@@ -1425,7 +1369,7 @@ const DeliveriesPage = () => {
                 {/* Chỉnh sửa đơn thành công */}
                 <Modal
                     isOpen={!!modifySuccessMessage}
-                    title="Thông báo"
+                    title={translatePageText("Thông báo")}
                     onClose={() => setModifySuccessMessage(null)}
                     cancelText="Đóng"
                 >
@@ -1435,7 +1379,7 @@ const DeliveriesPage = () => {
                 {/* Cancel Order Error Modal - dùng chung component Modal */}
                 <Modal
                     isOpen={!!cancelErrorMessage}
-                    title="Lỗi hủy đơn"
+                    title={translatePageText("Lỗi hủy đơn")}
                     onClose={() => setCancelErrorMessage(null)}
                     cancelText="Đóng"
                 >
@@ -1461,12 +1405,12 @@ const DeliveriesPage = () => {
                 {filtered.length === 0 ? (
                     <EmptyState
                         icon={deliveries.length === 0 ? "📦" : "🧾"}
-                        title={deliveries.length === 0 ? "Không có đơn giao hàng" : "Không có đơn hàng"}
+                        title={deliveries.length === 0 ? translatePageText("Không có đơn giao hàng") : translatePageText("Không có đơn hàng")}
                         description={
                             deliveries.length === 0
-                                ? 'Bạn chưa có đơn mang về nào.'
+                                ? translatePageText("Bạn chưa có đơn mang về nào.")
                                 : searchBillId.trim()
-                                    ? 'Không tìm thấy đơn hàng phù hợp với bộ lọc.'
+                                    ? translatePageText("Không tìm thấy đơn hàng phù hợp với bộ lọc.")
                                     : `Chưa có đơn với bộ lọc "${DELIVERY_STATUS_FILTERS.find(f => f.id === filter)?.label || filter}"`
                         }
                     />
@@ -1478,27 +1422,27 @@ const DeliveriesPage = () => {
                                 title={
                                     <div className="flex items-baseline flex-wrap">
                                         <span>{`Đơn hàng ${bill.order_stt || bill.order_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}</span>
-                                        <span className="sm:ml-[2.5cm] w-full sm:w-auto text-sm font-normal text-gray-500">Mã hóa đơn: {bill.bill_id || '—'}</span>
+                                        <span className="sm:ml-[2.5cm] w-full sm:w-auto text-sm font-normal text-gray-500">{translatePageText("Mã hóa đơn:") + " "}{bill.bill_id || '—'}</span>
                                     </div>
                                 }
                             >
                                 <div className="grid md:grid-cols-3 gap-4 mb-4">
                                     <div>
-                                        <p className="text-sm text-gray-600">Địa chỉ</p>
+                                        <p className="text-sm text-gray-600">{translatePageText("Địa chỉ")}</p>
                                         <p className="font-semibold">{bill.delivery?.address || '—'}</p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-600">Ngày đặt</p>
+                                        <p className="text-sm text-gray-600">{translatePageText("Ngày đặt")}</p>
                                         <p className="font-semibold">{bill.created_at ? new Date(bill.created_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-600">Phương thức thanh toán</p>
+                                        <p className="text-sm text-gray-600">{translatePageText("Phương thức thanh toán")}</p>
                                         <p className="font-bold text-red-600">
-                                            {bill.payment_method === 'Points' ? 'Điểm' : bill.payment_method === 'vnpay' ? 'VNPay' : (bill.payment_method || '—')}
+                                            {bill.payment_method === 'Points' ? translatePageText("Điểm") : bill.payment_method === 'vnpay' ? 'VNPay' : (bill.payment_method || '—')}
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-600">Bắt đầu giao (dự kiến)</p>
+                                        <p className="text-sm text-gray-600">{translatePageText("Bắt đầu giao (dự kiến)")}</p>
                                         <p className="font-semibold">
                                             {formatExpectedDateTime(
                                                 bill.delivery?.delivery_started_at || bill.delivery?.automatic_start_at
@@ -1508,7 +1452,7 @@ const DeliveriesPage = () => {
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-600">Hàng tới (dự kiến)</p>
+                                        <p className="text-sm text-gray-600">{translatePageText("Hàng tới (dự kiến)")}</p>
                                         <p className="font-semibold">
                                             {formatExpectedDateTime(getExpectedDeliveryArrival(bill.delivery))}
                                         </p>
@@ -1519,37 +1463,36 @@ const DeliveriesPage = () => {
                                 {bill.subtotal_price != null && (
                                     <div className="mt-2 text-sm space-y-1">
                                         <div className="flex justify-between text-gray-600">
-                                            <span>Tổng tiền:</span>
-                                            <span className="font-semibold">{Number(bill.subtotal_price).toLocaleString('vi-VN')}đ</span>
+                                            <span>{translatePageText("Tổng tiền:")}</span>
+                                            <span className="font-semibold">{Number(bill.subtotal_price).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                                         </div>
                                         {bill.sale_off_percentage != null && (
                                             <div className="flex justify-between text-orange-600">
-                                                <span>Giảm giá sự kiện:</span>
+                                                <span>{translatePageText("Giảm giá sự kiện:")}</span>
                                                 <span className="font-semibold">{Number(bill.sale_off_percentage)}%</span>
                                             </div>
                                         )}
                                         {bill.payment_method === 'Points' ? (
                                             <>
                                                 <div className="flex justify-between text-green-700">
-                                                    <span>Đã thanh toán bằng điểm</span>
+                                                    <span>{translatePageText("Đã thanh toán bằng điểm")}</span>
                                                     <span className="font-semibold">
-                                                        -{Math.floor(Number(bill.sale_off_total_price ?? bill.subtotal_price) / 100).toLocaleString('vi-VN')} điểm
-                                                    </span>
+                                                        -{Math.floor(Number(bill.sale_off_total_price ?? bill.subtotal_price) / 100).toLocaleString('vi-VN')}{" " + translatePageText("điểm") + " "}</span>
                                                 </div>
                                                 <div className="flex justify-between font-bold text-gray-800">
-                                                    <span>Số tiền cần trả:</span>
-                                                    <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}đ</span>
+                                                    <span>{translatePageText("Số tiền cần trả:")}</span>
+                                                    <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                                                 </div>
                                             </>
                                         ) : bill.payment_method === 'vnpay' ? (
                                             <div className="flex justify-between font-bold text-gray-800">
-                                                <span>Số tiền đã trả:</span>
-                                                <span className="text-red-600">{Number(bill.sale_off_total_price ?? bill.total_price ?? 0).toLocaleString('vi-VN')}đ</span>
+                                                <span>{translatePageText("Số tiền đã trả:")}</span>
+                                                <span className="text-red-600">{Number(bill.sale_off_total_price ?? bill.total_price ?? 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                                             </div>
                                         ) : (
                                             <div className="flex justify-between font-bold text-gray-800">
-                                                <span>Số tiền cần trả:</span>
-                                                <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}đ</span>
+                                                <span>{translatePageText("Số tiền cần trả:")}</span>
+                                                <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                                             </div>
                                         )}
                                     </div>
@@ -1581,17 +1524,13 @@ const DeliveriesPage = () => {
                                                     onClick={() => handleEditClick(bill)}
                                                     disabled={checkingModify || checkingCancel}
                                                     className="px-4 py-2 bg-white border border-red-600 text-red-600 rounded font-bold text-sm hover:bg-red-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    Chỉnh sửa thông tin
-                                                </button>
+                                                >{translatePageText("Chỉnh sửa thông tin") + " "}</button>
                                             )}
                                             <button
                                                 onClick={() => handleCancelClick(bill)}
                                                 disabled={checkingCancel || checkingModify}
                                                 className="px-4 py-2 bg-red-600 text-white rounded font-bold text-sm hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >
-                                                Hủy đơn hàng
-                                            </button>
+                                            >{translatePageText("Hủy đơn hàng") + " "}</button>
                                         </div>
                                     )}
                                 </div>
@@ -1604,7 +1543,7 @@ const DeliveriesPage = () => {
             {/* Lỗi kho lúc thanh toán: chờ refill hoặc cần giảm số lượng */}
             <Modal
                 isOpen={!!stockError}
-                title="Không đủ nguyên liệu"
+                title={translatePageText("Không đủ nguyên liệu")}
                 onClose={() => setStockError(null)}
                 cancelText="Đóng"
             >
@@ -1615,15 +1554,13 @@ const DeliveriesPage = () => {
                             <ul className="mt-3 list-disc pl-5 text-sm text-gray-700 space-y-1">
                                 {stockError.suggestions.map((s, i) => (
                                     <li key={i}>
-                                        <span className="font-semibold">{s.dish_name}</span>:{' '}
-                                        {s.max_quantity > 0 ? `tối đa ${s.max_quantity} phần` : 'hiện đã hết'}
+                                        <span className="font-semibold">{translateDishName(s.dish || s)}</span>:{' '}
+                                        {s.max_quantity > 0 ? `tối đa ${s.max_quantity} phần` : translatePageText("hiện đã hết")}
                                     </li>
                                 ))}
                             </ul>
                         )}
-                        <p className="mt-3 text-sm text-gray-500">
-                            Hãy bấm "Quay lại sửa thông tin" để giảm số lượng món rồi đặt lại.
-                        </p>
+                        <p className="mt-3 text-sm text-gray-500">{translatePageText("Hãy bấm \"Quay lại sửa thông tin\" để giảm số lượng món rồi đặt lại.") + " "}</p>
                     </>
                 )}
             </Modal>

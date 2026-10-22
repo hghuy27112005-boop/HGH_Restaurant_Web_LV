@@ -1,12 +1,16 @@
 import React, { useLayoutEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import SessionEndedModal from './SessionEndedModal';
 import ChatbotWidget from './Chatbot/ChatbotWidget';
+import SettingsMenu from './SettingsMenu';
+import LocaleAwarePage from './LocaleAwarePage';
 import { useAuthContext } from '../context/AuthContext';
 
 const Layout = ({ children }) => {
+    const { t } = useTranslation();
     const { user, isAuthenticated } = useAuthContext();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [chatbotOpen, setChatbotOpen] = useState(false);
@@ -51,10 +55,10 @@ const Layout = ({ children }) => {
                 <button
                     onClick={() => setSidebarOpen(true)}
                     className={isHome
-                        ? 'absolute top-3 left-3 z-30 w-10 h-10 flex items-center justify-center hover:opacity-80'
+                        ? 'fixed top-3 left-3 z-30 w-10 h-10 flex items-center justify-center hover:opacity-80'
                         : 'fixed top-3 left-3 z-30 w-10 h-10 bg-red-600 hover:bg-red-700 rounded-lg flex flex-col items-center justify-center gap-[5px] shadow'}
-                    aria-label="Mở menu"
-                    title="Mở menu"
+                    aria-label={t('common.openMenu')}
+                    title={t('common.openMenu')}
                 >
                     {isHome ? (
                         <img
@@ -72,16 +76,15 @@ const Layout = ({ children }) => {
                 </button>
             )}
 
-            {isAdmin && !isThemeExcludedPage && (
-                <button
-                    type="button"
-                    onClick={toggleTheme}
-                    className="fixed top-3 right-3 z-30 flex h-10 w-10 items-center justify-center rounded-lg bg-red-600 text-white shadow transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2"
-                    aria-label={isDarkMode ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'}
-                    title={isDarkMode ? 'Giao diện sáng' : 'Giao diện tối'}
-                >
-                    <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'}`} aria-hidden="true"></i>
-                </button>
+            {isAdmin && (
+                <SettingsMenu
+                    isDarkMode={isDarkMode}
+                    isDarkAppearance={isDarkMode || isHome}
+                    showThemeToggle={!isThemeExcludedPage}
+                    onToggleTheme={toggleTheme}
+                    isAuthenticated={isAuthenticated}
+                    placementClass="fixed right-3 top-3 z-30"
+                />
             )}
 
             <div
@@ -99,8 +102,12 @@ const Layout = ({ children }) => {
                 </main>
             </div>
 
-            <SessionEndedModal />
-            {!isAdmin && <ChatbotWidget isOpen={chatbotOpen} setIsOpen={setChatbotOpen} />}
+            <LocaleAwarePage><SessionEndedModal /></LocaleAwarePage>
+            {!isAdmin && (
+                <LocaleAwarePage>
+                    <ChatbotWidget isOpen={chatbotOpen} setIsOpen={setChatbotOpen} />
+                </LocaleAwarePage>
+            )}
         </div>
     );
 };

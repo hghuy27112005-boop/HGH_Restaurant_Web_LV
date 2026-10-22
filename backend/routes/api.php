@@ -56,6 +56,7 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
     Route::put('/notification-preferences', [\App\Http\Controllers\UserNotificationController::class, 'updatePreferences']);
     Route::get('/my-bills', [\App\Http\Controllers\OrderController::class, 'myBillsJson']);
     Route::put('/user', [\App\Http\Controllers\UserController::class, 'updateProfile']);
+    Route::put('/user/language', [\App\Http\Controllers\UserController::class, 'updatePreferredLanguage']);
     Route::post('/user/avatar', [\App\Http\Controllers\UserController::class, 'uploadAvatar']);
     Route::post('/logout', [\App\Http\Controllers\AuthController::class, 'logout']);
 

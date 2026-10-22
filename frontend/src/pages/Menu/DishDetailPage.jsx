@@ -5,6 +5,9 @@ import { ErrorMessage, Loading, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { getCartKey } from '../../utils/cartStorage';
+import { translatePageText } from '../../pageTextTranslations';
+import i18n from '../../i18n';
+import { translateDishName } from '../../dishTranslations';
 
 // Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
 const MAX_ORDER_QTY = 50;
@@ -240,7 +243,9 @@ const ingredientTranslations = {
     'coriander seeds': 'hạt mùi',
 };
 
-const translateIngredients = (value) => (value || '').split(',').map((item) => {
+const translateIngredients = (value) => {
+    if (i18n.resolvedLanguage?.startsWith('en')) return value || '';
+    return (value || '').split(',').map((item) => {
     const trimmed = item.trim();
     const key = trimmed.toLowerCase();
     const translated = ingredientTranslations[key]
@@ -248,7 +253,8 @@ const translateIngredients = (value) => (value || '').split(',').map((item) => {
         || Object.entries(ingredientTranslations).find(([ingredient]) => ingredient.toLowerCase() === key)?.[1]
         || trimmed;
     return translated.charAt(0).toUpperCase() + translated.slice(1);
-}).join(', ');
+    }).join(', ');
+};
 
 const getDishData = (response) => response.data?.data || response.data || [];
 
@@ -299,7 +305,7 @@ const DishDetailPage = () => {
                     setDishes(availableDishes);
                 }
             } catch (loadError) {
-                setError('Không thể tải thông tin món ăn.');
+                setError(translatePageText("Không thể tải thông tin món ăn."));
             } finally {
                 setLoading(false);
             }
@@ -311,7 +317,7 @@ const DishDetailPage = () => {
 
     const openOrderModal = (type) => {
         if (!isAuthenticated) {
-            setAlertMessage('Vui lòng đăng nhập để thực hiện thao tác này');
+            setAlertMessage(translatePageText("Vui lòng đăng nhập để thực hiện thao tác này"));
             navigate('/login?tab=register');
             return;
         }
@@ -347,12 +353,12 @@ const DishDetailPage = () => {
         const maxQty = MAX_ORDER_QTY;
 
         if (Number.isNaN(qty) || qty < 1) {
-            setAlertMessage('Vui lòng nhập số lượng hợp lệ!');
+            setAlertMessage(translatePageText("Vui lòng nhập số lượng hợp lệ!"));
             return;
         }
 
         if (qty > maxQty) {
-            setAlertMessage('Mỗi lần chỉ được đặt tối đa 50 phần cho một món.');
+            setAlertMessage(translatePageText("Mỗi lần chỉ được đặt tối đa 50 phần cho một món."));
             return;
         }
 
@@ -393,7 +399,9 @@ const DishDetailPage = () => {
 
         localStorage.setItem(cartKey, JSON.stringify(cart));
         setIsModalOpen(false);
-        setSuccessMessage(`Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'Giao hàng' : 'Đặt bàn'}.`);
+        setSuccessMessage(i18n.resolvedLanguage?.startsWith('en')
+            ? `Added ${qty} ${translateDishName(selectedDish)} to your ${orderType === 'mang-ve' ? 'Delivery' : 'Booking'} cart.`
+            : `Đã thêm ${qty} ${selectedDish.dish_name} vào giỏ hàng ${orderType === 'mang-ve' ? 'Giao hàng' : 'Đặt bàn'}.`);
     };
 
     const customRecipes = selectedDish?.custom_recipes || [];
@@ -430,7 +438,7 @@ const DishDetailPage = () => {
         const removed = originalIngredients.filter((ingredient) => !selectedIngredients.includes(ingredient));
 
         if (removed.length === 0) {
-            setAlertMessage('Vui lòng bỏ ít nhất một nguyên liệu để tạo công thức mới.');
+            setAlertMessage(translatePageText("Vui lòng bỏ ít nhất một nguyên liệu để tạo công thức mới."));
             return;
         }
 
@@ -449,9 +457,15 @@ const DishDetailPage = () => {
 
         setGeneratingPreview(true);
         try {
+            const isEnglish = i18n.resolvedLanguage?.startsWith('en');
             const response = await dishCustomizationAPI.preview(selectedDish.dish_id, {
-                original_instructions_vi: recipeTranslations[selectedDish.dish_name] || '',
-                removed_ingredients_vi: removed.map(translateIngredients),
+                original_instructions: isEnglish
+                    ? selectedDish.recipe_instructions || ''
+                    : recipeTranslations[selectedDish.dish_name] || selectedDish.recipe_instructions || '',
+                removed_ingredients: removed.map((ingredient) => (
+                    isEnglish ? ingredient : translateIngredients(ingredient)
+                )),
+                language: isEnglish ? 'en' : 'vi',
             });
             const revisedInstructions = response.data.revised_instructions;
 
@@ -464,7 +478,7 @@ const DishDetailPage = () => {
             });
             setRecipeModalView('preview');
         } catch (previewError) {
-            setAlertMessage('Không thể tạo công thức mới lúc này. Vui lòng thử lại.');
+            setAlertMessage(translatePageText("Không thể tạo công thức mới lúc này. Vui lòng thử lại."));
         } finally {
             setGeneratingPreview(false);
         }
@@ -480,7 +494,7 @@ const DishDetailPage = () => {
 
     const saveRecipe = async () => {
         if (!recipeName.trim() || !draftRecipe?.recipe_instructions) {
-            setAlertMessage('Vui lòng nhập tên công thức.');
+            setAlertMessage(translatePageText("Vui lòng nhập tên công thức."));
             return;
         }
 
@@ -502,7 +516,7 @@ const DishDetailPage = () => {
             setSelectedRecipe(null);
             setDraftRecipe(null);
         } catch (saveError) {
-            setAlertMessage('Không thể lưu công thức thay thế. Vui lòng thử lại.');
+            setAlertMessage(translatePageText("Không thể lưu công thức thay thế. Vui lòng thử lại."));
         } finally {
             setSavingRecipe(false);
         }
@@ -513,7 +527,9 @@ const DishDetailPage = () => {
     if (!selectedDish) return null;
 
     const displayedIngredients = selectedDish.ingredients;
-    const displayedInstructions = recipeTranslations[selectedDish.dish_name] || selectedDish.recipe_instructions;
+    const displayedInstructions = i18n.resolvedLanguage?.startsWith('en')
+        ? selectedDish.recipe_instructions
+        : recipeTranslations[selectedDish.dish_name] || selectedDish.recipe_instructions;
     const steps = splitInstructions(displayedInstructions);
 
     return (
@@ -524,47 +540,43 @@ const DishDetailPage = () => {
                     onClick={() => navigate('/menu')}
                     className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-red-600 hover:text-red-700"
                 >
-                    <i className="fas fa-arrow-left"></i>
-                    Quay lại menu
-                </button>
-                <h1 className="text-3xl sm:text-4xl font-bold text-red-600 mb-6 sm:mb-8">Chi tiết món ăn</h1>
+                    <i className="fas fa-arrow-left"></i>{translatePageText("Quay lại menu") + " "}</button>
+                <h1 className="text-3xl sm:text-4xl font-bold text-red-600 mb-6 sm:mb-8">{translatePageText("Chi tiết món ăn")}</h1>
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6">
                     <div className="grid md:grid-cols-2 gap-8 items-start">
-                        <img src={selectedDish.image_url} alt={selectedDish.dish_name} className="w-full max-w-lg mx-auto h-56 sm:h-72 object-cover rounded-xl" />
+                        <img src={selectedDish.image_url} alt={translateDishName(selectedDish)} className="w-full max-w-lg mx-auto h-56 sm:h-72 object-cover rounded-xl" />
                         <div>
-                            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">{selectedDish.dish_name}</h2>
-                            <p className="text-red-600 text-2xl font-bold mb-5">{Number(selectedDish.price).toLocaleString('vi-VN')}đ</p>
-                            <h3 className="font-semibold text-lg mb-2">Nguyên liệu nấu</h3>
-                            <p className="text-gray-700 leading-7">{displayedIngredients ? translateIngredients(displayedIngredients) : 'Món này chưa có thông tin nguyên liệu.'}</p>
+                            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">{translateDishName(selectedDish)}</h2>
+                            <p className="text-red-600 text-2xl font-bold mb-5">{Number(selectedDish.price).toLocaleString('vi-VN')}{translatePageText("đ")}</p>
+                            <h3 className="font-semibold text-lg mb-2">{translatePageText("Nguyên liệu nấu")}</h3>
+                            <p className="text-gray-700 leading-7">{displayedIngredients ? translateIngredients(displayedIngredients) : translatePageText("Món này chưa có thông tin nguyên liệu.")}</p>
                             <div className="grid grid-cols-2 gap-3 mt-6">
-                                <button onClick={() => openOrderModal('mang-ve')} className="py-2 px-3 rounded border border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition">Đặt Ship</button>
-                                <button onClick={() => openOrderModal('dat-ban')} className="py-2 px-3 rounded border border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition">Đặt Bàn</button>
+                                <button onClick={() => openOrderModal('mang-ve')} className="py-2 px-3 rounded border border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition">{translatePageText("Đặt Ship")}</button>
+                                <button onClick={() => openOrderModal('dat-ban')} className="py-2 px-3 rounded border border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition">{translatePageText("Đặt Bàn")}</button>
                             </div>
                         </div>
                     </div>
                     <section className="mt-8 border-t pt-6">
-                        <h3 className="text-xl font-bold text-red-600 mb-4">Công thức nấu</h3>
+                        <h3 className="text-xl font-bold text-red-600 mb-4">{translatePageText("Công thức nấu")}</h3>
                         {steps.length === 0 ? (
-                            <p className="text-gray-500">Món này chưa có công thức.</p>
+                            <p className="text-gray-500">{translatePageText("Món này chưa có công thức.")}</p>
                         ) : (
                             <ol className="list-decimal list-inside space-y-3 text-gray-700 leading-7">
                                 {steps.map((step, index) => <li key={`${selectedDish.dish_id}-${index}`}>{step.trim().replace(/[.]$/, '')}.</li>)}
                             </ol>
                         )}
-                        <button onClick={openRecipeModal} className="mt-5 rounded border border-amber-600 px-4 py-2 font-semibold text-amber-700 hover:bg-amber-50">
-                            Xem công thức thay thế
-                        </button>
+                        <button onClick={openRecipeModal} className="mt-5 rounded border border-amber-600 px-4 py-2 font-semibold text-amber-700 hover:bg-amber-50">{translatePageText("Xem công thức thay thế") + " "}</button>
                     </section>
                     <section className="mt-8 border-t pt-6">
-                        <h3 className="text-xl font-bold text-red-600 mb-3">Đánh giá</h3>
-                        <p className="text-gray-700">{selectedDish.original_rating ?? 0}/5 sao từ {Number(selectedDish.original_review_count ?? 0).toLocaleString('vi-VN')} lượt đánh giá</p>
+                        <h3 className="text-xl font-bold text-red-600 mb-3">{translatePageText("Đánh giá")}</h3>
+                        <p className="text-gray-700">{selectedDish.original_rating ?? 0}{translatePageText("/5 sao từ") + " "}{Number(selectedDish.original_review_count ?? 0).toLocaleString('vi-VN')}{" " + translatePageText("lượt đánh giá")}</p>
                     </section>
                     <div className="mt-8 border-t pt-6">
-                        <h3 className="text-xl font-bold text-red-600 mb-4">Chọn món khác</h3>
+                        <h3 className="text-xl font-bold text-red-600 mb-4">{translatePageText("Chọn món khác")}</h3>
                         <div className="flex flex-wrap gap-2">
                             {dishes.map((dish) => (
                                 <button key={dish.dish_id} onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className={`px-3 py-2 rounded border text-sm ${dish.dish_id === selectedDish.dish_id ? 'bg-red-600 text-white border-red-600' : 'border-gray-300 hover:border-red-600 hover:text-red-600'}`}>
-                                    {dish.dish_name}
+                                    {translateDishName(dish)}
                                 </button>
                             ))}
                         </div>
@@ -573,29 +585,27 @@ const DishDetailPage = () => {
             </div>
             <Modal
                 isOpen={isModalOpen}
-                title={`Đặt món: ${selectedDish.dish_name}`}
+                title={`${translatePageText("Đặt món")}: ${translateDishName(selectedDish)}`}
                 onClose={() => setIsModalOpen(false)}
                 onConfirm={confirmAddToCart}
                 confirmText="Xác nhận thêm vào giỏ hàng"
             >
                 <div className="flex flex-col gap-4">
                     <div>
-                        <span className="text-sm font-semibold text-green-700">Tối đa 50 phần mỗi món</span>
+                        <span className="text-sm font-semibold text-green-700">{translatePageText("Tối đa 50 phần mỗi món")}</span>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-2 text-gray-700">Chọn công thức thay thế</label>
+                        <label className="block font-semibold mb-2 text-gray-700">{translatePageText("Chọn công thức thay thế")}</label>
                         <div className="flex flex-col items-start gap-2">
                             <button
                                 type="button"
                                 onClick={() => setSelectedCustomization(null)}
                                 className={`rounded border px-3 py-2 text-left ${!selectedCustomization ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
-                            >
-                                Món gốc
-                            </button>
+                            >{translatePageText("Món gốc") + " "}</button>
 
                             {(selectedDish?.custom_recipes || []).length === 0 ? (
-                                <p className="text-sm text-gray-500">Bạn chưa lưu công thức thay thế nào cho món này.</p>
+                                <p className="text-sm text-gray-500">{translatePageText("Bạn chưa lưu công thức thay thế nào cho món này.")}</p>
                             ) : (selectedDish?.custom_recipes || []).map((recipe) => (
                                 <button
                                     key={recipe.dish_customization_id}
@@ -603,14 +613,14 @@ const DishDetailPage = () => {
                                     onClick={() => setSelectedCustomization(recipe)}
                                     className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
                                 >
-                                    {recipe.recipe_name}
+                                    {translatePageText(recipe.recipe_name)}
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-1 text-gray-700">Nhập số lượng</label>
+                        <label className="block font-semibold mb-1 text-gray-700">{translatePageText("Nhập số lượng")}</label>
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <button type="button" onClick={handleDecrease10Qty} className="px-2 h-9 flex-shrink-0 border border-gray-300 rounded text-xs font-semibold hover:bg-gray-100">−10</button>
                             <button type="button" onClick={handleDecreaseQty} className="w-9 h-9 flex-shrink-0 flex items-center justify-center border border-gray-300 rounded font-bold text-lg hover:bg-gray-100">−</button>
@@ -630,7 +640,7 @@ const DishDetailPage = () => {
             </Modal>
             <Modal
                 isOpen={Boolean(successMessage)}
-                title="Đặt món thành công"
+                title={translatePageText("Đặt món thành công")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setSuccessMessage('')}
@@ -646,7 +656,7 @@ const DishDetailPage = () => {
             />
             <Modal
                 isOpen={Boolean(alertMessage)}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setAlertMessage('')}
@@ -656,43 +666,41 @@ const DishDetailPage = () => {
             <Modal
                 isOpen={recipeModalOpen}
                 className="max-w-3xl"
-                title={recipeModalView === 'list' ? 'Công thức thay thế' : recipeModalView === 'detail' ? selectedRecipe?.recipe_name : recipeModalView === 'preview' ? 'Công thức mới' : draftRecipe ? 'Chỉnh sửa công thức' : 'Tạo công thức'}
+                title={recipeModalView === 'list' ? translatePageText("Công thức thay thế") : recipeModalView === 'detail' ? selectedRecipe?.recipe_name : recipeModalView === 'preview' ? translatePageText("Công thức mới") : draftRecipe ? translatePageText("Chỉnh sửa công thức") : translatePageText("Tạo công thức")}
                 onClose={() => setRecipeModalOpen(false)}
                 onSecondary={recipeModalView === 'detail' ? () => startEditRecipe(selectedRecipe) : recipeModalView === 'ingredients' || recipeModalView === 'preview' ? handleRecipeBack : undefined}
-                secondaryText={recipeModalView === 'detail' ? 'Chỉnh sửa' : 'Quay lại'}
+                secondaryText={recipeModalView === 'detail' ? translatePageText("Chỉnh sửa") : translatePageText("Quay lại")}
                 secondaryClassName={recipeModalView === 'detail' ? 'font-semibold !border-amber-600 !text-amber-700 hover:!bg-amber-50' : ''}
                 onTertiary={recipeModalView === 'detail' ? () => setRecipeModalView('list') : undefined}
                 tertiaryText="Quay lại"
                 onConfirm={recipeModalView === 'preview' && draftRecipe ? saveRecipe : undefined}
-                confirmText={savingRecipe ? 'Đang lưu...' : 'Lưu công thức'}
+                confirmText={savingRecipe ? translatePageText("Đang lưu...") : translatePageText("Lưu công thức")}
             >
                 {recipeModalView === 'list' && (
                     <div className="flex flex-col gap-3">
                         {customRecipes.length === 0 ? (
-                            <p className="text-gray-600">Món ăn này chưa có công thức thay thế.</p>
+                            <p className="text-gray-600">{translatePageText("Món ăn này chưa có công thức thay thế.")}</p>
                         ) : customRecipes.map((recipe) => (
                             <button key={recipe.dish_customization_id} onClick={() => { setSelectedRecipe(recipe); setRecipeModalView('detail'); }} className="self-start rounded border border-gray-300 px-4 py-3 text-left font-semibold hover:border-amber-600 hover:bg-amber-50">
-                                {recipe.recipe_name}
+                                {translatePageText(recipe.recipe_name)}
                             </button>
                         ))}
-                        <button onClick={startCreateRecipe} className="self-start rounded bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700">
-                            Tạo công thức mới
-                        </button>
+                        <button onClick={startCreateRecipe} className="self-start rounded bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700">{translatePageText("Tạo công thức mới") + " "}</button>
                     </div>
                 )}
 
                 {recipeModalView === 'detail' && selectedRecipe && (
                     <div className="flex flex-col gap-4">
                         <div className="border-b border-gray-200 pb-4">
-                            <h4 className="font-semibold text-red-600">Nguyên liệu đã bỏ</h4>
-                            <p className="mt-1 text-gray-700">{selectedRecipe.removed_ingredients?.length ? translateIngredients(selectedRecipe.removed_ingredients.join(', ')) : 'Không có'}</p>
+                            <h4 className="font-semibold text-red-600">{translatePageText("Nguyên liệu đã bỏ")}</h4>
+                            <p className="mt-1 text-gray-700">{selectedRecipe.removed_ingredients?.length ? translateIngredients(selectedRecipe.removed_ingredients.join(', ')) : translatePageText("Không có")}</p>
                         </div>
                         <div className="border-b border-gray-200 pb-4">
-                            <h4 className="font-semibold text-red-600">Nguyên liệu còn lại</h4>
+                            <h4 className="font-semibold text-red-600">{translatePageText("Nguyên liệu còn lại")}</h4>
                             <p className="mt-1 text-gray-700">{translateIngredients(selectedRecipe.ingredients)}</p>
                         </div>
                         <div>
-                            <h4 className="font-semibold text-red-600">Công thức nấu</h4>
+                            <h4 className="font-semibold text-red-600">{translatePageText("Công thức nấu")}</h4>
                             <ol className="mt-1 list-decimal list-inside space-y-1 text-gray-700">
                                 {splitInstructions(selectedRecipe.recipe_instructions).map((step, index) => <li key={index}>{step}.</li>)}
                             </ol>
@@ -703,28 +711,28 @@ const DishDetailPage = () => {
                 {recipeModalView === 'ingredients' && (
                     <div className="flex flex-col gap-4">
                         <div>
-                            <label className="mb-1 block font-semibold text-red-600">Tên công thức</label>
-                            <input value={recipeName} onChange={(event) => setRecipeName(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2 focus:border-amber-600 focus:outline-none" placeholder="Ví dụ: Bò kho không rau mùi" />
+                            <label className="mb-1 block font-semibold text-red-600">{translatePageText("Tên công thức")}</label>
+                            <input value={recipeName} onChange={(event) => setRecipeName(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2 focus:border-amber-600 focus:outline-none" placeholder={translatePageText("Ví dụ: Bò kho không rau mùi")} />
                         </div>
                         <div>
-                            <p className="mb-2 font-semibold text-red-600">Nguyên liệu</p>
+                            <p className="mb-2 font-semibold text-red-600">{translatePageText("Nguyên liệu")}</p>
                             <div className="flex flex-wrap gap-2">
                                 {originalIngredients.map((ingredient) => {
                                     const selected = selectedIngredients.includes(ingredient);
                                     return <button type="button" key={ingredient} onClick={() => toggleRecipeIngredient(ingredient)} className={`rounded border px-3 py-2 text-left text-sm ${selected ? 'border-red-600 bg-red-600 text-white' : 'border-gray-300 bg-gray-100 text-gray-500 line-through'}`}>{translateIngredients(ingredient)}</button>;
                                 })}
                             </div>
-                            <p className="mt-3 text-sm text-gray-600">Quý khách vui lòng nhấn chọn nguyên liệu muốn bỏ ra</p>
+                            <p className="mt-3 text-sm text-gray-600">{translatePageText("Quý khách vui lòng nhấn chọn nguyên liệu muốn bỏ ra")}</p>
                         </div>
                         <button type="button" onClick={confirmRecipeIngredients} disabled={generatingPreview} className="rounded bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-60">
-                            {generatingPreview ? 'Đang tạo công thức...' : 'Xác nhận nguyên liệu'}
+                            {generatingPreview ? translatePageText("Đang tạo công thức...") : translatePageText("Xác nhận nguyên liệu")}
                         </button>
                     </div>
                 )}
 
                 {recipeModalView === 'preview' && draftRecipe && (
                     <div>
-                        <p className="mb-3 text-gray-700">Công thức sau khi bỏ nguyên liệu:</p>
+                        <p className="mb-3 text-gray-700">{translatePageText("Công thức sau khi bỏ nguyên liệu:")}</p>
                         <ol className="list-decimal list-inside space-y-2 text-gray-700 leading-7">
                             {splitInstructions(draftRecipe.previewInstructions).map((step, index) => <li key={index}>{step}.</li>)}
                         </ol>

@@ -2,12 +2,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
 import { YEAR_OPTIONS, MONTH_OPTIONS, fmtMoney, extractError } from './helpers';
+import { translatePageText } from '../../../pageTextTranslations';
+import { translateDishName } from '../../../dishTranslations';
 
 const COLUMNS = [
-    { key: 'revenue', label: 'Doanh thu', render: (r) => fmtMoney(r.revenue) },
-    { key: 'quantity', label: 'Số phần đặt', render: (r) => Number(r.quantity).toLocaleString('vi-VN') },
-    { key: 'avg_rating', label: 'Sao trung bình', render: (r) => (r.rating_count > 0 ? r.avg_rating.toFixed(2) : '—') },
-    { key: 'rating_count', label: 'Lượt đánh giá', render: (r) => Number(r.rating_count).toLocaleString('vi-VN') },
+    { key: 'revenue', get label() { return translatePageText('Doanh thu'); }, render: (r) => fmtMoney(r.revenue) },
+    { key: 'quantity', get label() { return translatePageText("Số phần đặt"); }, render: (r) => Number(r.quantity).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') },
+    { key: 'avg_rating', get label() { return translatePageText("Sao trung bình"); }, render: (r) => (r.rating_count > 0 ? r.avg_rating.toFixed(2) : '—') },
+    { key: 'rating_count', get label() { return translatePageText("Lượt đánh giá"); }, render: (r) => Number(r.rating_count).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') },
 ];
 
 const DishRankingSection = () => {
@@ -29,7 +31,7 @@ const DishRankingSection = () => {
                 if (!cancelled) setRows(res?.data?.data || []);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, 'Lỗi tải bảng thống kê thực đơn'));
+                    setError(extractError(err, translatePageText("Lỗi tải bảng thống kê thực đơn")));
                     setRows([]);
                 }
             } finally {
@@ -44,7 +46,9 @@ const DishRankingSection = () => {
         const factor = sort.dir === 'asc' ? 1 : -1;
         return [...rows].sort((a, b) => {
             const diff = (a[sort.key] - b[sort.key]) * factor;
-            return diff !== 0 ? diff : a.name.localeCompare(b.name, 'vi');
+            return diff !== 0
+                ? diff
+                : a.name.localeCompare(b.name, document.documentElement.lang === 'en' ? 'en' : 'vi');
         });
     }, [rows, sort]);
 
@@ -60,7 +64,7 @@ const DishRankingSection = () => {
                     {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={selectCls}>
-                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
+                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
                 </select>
             </div>
 
@@ -72,15 +76,15 @@ const DishRankingSection = () => {
                         <thead className="bg-red-600 text-white">
                             <tr>
                                 <th className="px-3 py-2 text-left">STT</th>
-                                <th className="px-3 py-2 text-left">Tên món</th>
+                                <th className="px-3 py-2 text-left">{translatePageText("Tên món")}</th>
                                 {COLUMNS.map((c) => (
                                     <th key={c.key} className="px-3 py-2 text-right whitespace-nowrap">
                                         {c.label}
                                         <span className="inline-flex flex-col ml-1 align-middle">
                                             <button
                                                 type="button"
-                                                aria-label={`${c.label} giảm dần`}
-                                                title="Lớn đến bé"
+                                                aria-label={document.documentElement.lang === 'en' ? `Sort ${c.label} descending` : `${c.label} giảm dần`}
+                                                title={translatePageText("Lớn đến bé")}
                                                 onClick={() => setSort({ key: c.key, dir: 'desc' })}
                                                 className={arrowCls(sort.key === c.key && sort.dir === 'desc')}
                                             >
@@ -88,8 +92,8 @@ const DishRankingSection = () => {
                                             </button>
                                             <button
                                                 type="button"
-                                                aria-label={`${c.label} tăng dần`}
-                                                title="Bé đến lớn"
+                                                aria-label={document.documentElement.lang === 'en' ? `Sort ${c.label} ascending` : `${c.label} tăng dần`}
+                                                title={translatePageText("Bé đến lớn")}
                                                 onClick={() => setSort({ key: c.key, dir: 'asc' })}
                                                 className={arrowCls(sort.key === c.key && sort.dir === 'asc')}
                                             >
@@ -104,7 +108,7 @@ const DishRankingSection = () => {
                             {sorted.map((r, idx) => (
                                 <tr key={r.dish_id} className="border-b hover:bg-gray-50">
                                     <td className="px-3 py-2">{idx + 1}</td>
-                                    <td className="px-3 py-2 font-semibold">{r.name}</td>
+                                    <td className="px-3 py-2 font-semibold">{translateDishName(r)}</td>
                                     {COLUMNS.map((c) => (
                                         <td key={c.key} className="px-3 py-2 text-right">{c.render(r)}</td>
                                     ))}
@@ -114,7 +118,7 @@ const DishRankingSection = () => {
                     </table>
                 </div>
             ) : (
-                <div className="p-6 text-center text-gray-500">Không có dữ liệu</div>
+                <div className="p-6 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
             )}
         </div>
     );

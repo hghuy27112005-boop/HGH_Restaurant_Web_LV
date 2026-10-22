@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { chatbotAPI } from '@/services/chatbotApi';
 import { useAuthContext } from '@/context/AuthContext';
 import chatbotScripts from '@/data/chatbot_customer_scripts';
+import { translatePageText } from '../../pageTextTranslations';
 
 const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     const navigate = useNavigate();
@@ -49,7 +50,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             .map((message, index) => ({
                 url: message.image_url,
                 name: message.filename || `chat-image-${index + 1}.png`,
-                label: 'Ảnh trong tin nhắn',
+                get label() { return translatePageText("Ảnh trong tin nhắn"); },
             })),
         ...pendingImages.map((image, index) => ({
             url: image.url,
@@ -75,7 +76,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 setMessages(data.messages || []);
                 setModerationBlocked(Boolean(data.moderation?.blocked));
                 if (data.moderation?.blocked) {
-                    setModerationMessage('Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.');
+                    setModerationMessage(translatePageText("Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay."));
                 }
                 setLoaded(true);
 
@@ -113,7 +114,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             const imageItem = clipboardItems.find((item) => item.type.startsWith('image/'));
             const hasFile = clipboardItems.some((item) => item.kind === 'file');
             if (!imageItem) {
-                if (hasFile) setImageError('Chỉ có thể nhận hình ảnh trong khung chat.');
+                if (hasFile) setImageError(translatePageText("Chỉ có thể nhận hình ảnh trong khung chat."));
                 return;
             }
 
@@ -277,7 +278,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         };
         const invalidFile = selectedFiles.find((file) => !isImageFile(file));
         if (invalidFile) {
-            setImageError('Chỉ có thể nhận hình ảnh trong khung chat.');
+            setImageError(translatePageText("Chỉ có thể nhận hình ảnh trong khung chat."));
         }
 
         const imageFiles = selectedFiles.filter(isImageFile);
@@ -299,7 +300,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     const sendPendingImage = async () => {
         if (pendingImages.length === 0 || loading) return;
         if (pendingImages.length > 5) {
-            setImageError('Bạn chỉ có thể gửi tối đa 5 hình ảnh trong một lần.');
+            setImageError(translatePageText("Bạn chỉ có thể gửi tối đa 5 hình ảnh trong một lần."));
             return;
         }
 
@@ -548,7 +549,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 }
             `}</style>
             {!isOpen && (
-                <button style={styles.bubble} onClick={() => setIsOpen(true)} aria-label="Mở chat hỗ trợ">
+                <button style={styles.bubble} onClick={() => setIsOpen(true)} aria-label={translatePageText("Mở chat hỗ trợ")}>
                     <img src="/pics/chatbot.png" alt="" style={styles.bubbleIcon} />
                 </button>
             )}
@@ -559,7 +560,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                     <button
                         style={styles.menuBtn}
                         onClick={handleHistoryMenuToggle}
-                        aria-label="Xem đoạn chat theo ngày"
+                        aria-label={translatePageText("Xem đoạn chat theo ngày")}
                     >
                         <span style={styles.menuIcon} aria-hidden="true">
                             <span style={styles.menuIconBar} />
@@ -575,14 +576,14 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 <div style={styles.screenWrapper}>
                     <div style={{ ...styles.historyScreen, ...styles.pageSlideIn }}>
                         <div style={styles.historyHeadingRow}>
-                            <div style={{ ...styles.historyHeading, padding: 0 }}>Hình ảnh</div>
+                            <div style={{ ...styles.historyHeading, padding: 0 }}>{translatePageText("Hình ảnh")}</div>
                             <button
                                 type="button"
                                 style={styles.collapseImagesBtn}
                                 onClick={() => setImagesExpanded((expanded) => !expanded)}
-                                aria-label={imagesExpanded ? 'Thu gọn mục hình ảnh' : 'Mở rộng mục hình ảnh'}
+                                aria-label={imagesExpanded ? translatePageText("Thu gọn mục hình ảnh") : translatePageText("Mở rộng mục hình ảnh")}
                                 aria-expanded={imagesExpanded}
-                                title={imagesExpanded ? 'Thu gọn hình ảnh' : 'Mở rộng hình ảnh'}
+                                title={imagesExpanded ? translatePageText("Thu gọn hình ảnh") : translatePageText("Mở rộng hình ảnh")}
                             >
                                 <span style={{ ...styles.collapseTriangle, transform: imagesExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                             </button>
@@ -590,7 +591,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         {imagesExpanded && (
                             <div style={styles.imageHistoryList}>
                                 {imageGroups.length === 0 ? (
-                                    <div style={styles.emptyHistory}>Chưa có hình ảnh đã gửi.</div>
+                                    <div style={styles.emptyHistory}>{translatePageText("Chưa có hình ảnh đã gửi.")}</div>
                                 ) : imageGroups.map((group) => (
                                     <section key={group.date} style={styles.imageDayGroup}>
                                         <div style={styles.imageDayTitle}>{group.label}</div>
@@ -612,10 +613,10 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 ))}
                             </div>
                         )}
-                        <div style={styles.historyHeading}>Lịch sử chat</div>
+                        <div style={styles.historyHeading}>{translatePageText("Lịch sử chat")}</div>
                         <div style={styles.historyList}>
                             {chatDays.length === 0 ? (
-                                <div style={styles.emptyHistory}>Chưa có lịch sử chat.</div>
+                                <div style={styles.emptyHistory}>{translatePageText("Chưa có lịch sử chat.")}</div>
                             ) : chatDays.map((day) => (
                                 <div key={day.date} style={styles.dayItem}>
                                     <button style={styles.dayLabel} onClick={() => handleSelectDay(day)}>
@@ -635,9 +636,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                                 setActionDate(null);
                                                 setDeleteDate(day.date);
                                             }}
-                                        >
-                                            Xóa lịch sử chat
-                                        </button>
+                                        >{translatePageText("Xóa lịch sử chat") + " "}</button>
                                     )}
                                 </div>
                             ))}
@@ -652,9 +651,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 <div style={styles.moderationBanner}>{moderationMessage}</div>
                             )}
                         {historyDate && (
-                            <div style={styles.historyBanner}>
-                                Đang xem lại đoạn chat cũ — chỉ xem, không thể nhắn tiếp
-                            </div>
+                            <div style={styles.historyBanner}>{translatePageText("Đang xem lại đoạn chat cũ — chỉ xem, không thể nhắn tiếp") + " "}</div>
                         )}
 
                         {(historyDate ? historyMessages : messages).map((msg, idx) => (
@@ -665,12 +662,12 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                             type="button"
                                             style={styles.chatImagePreviewButton}
                                             onClick={() => openImageViewer(msg.image_url)}
-                                            aria-label="Xem ảnh đã gửi"
+                                            aria-label={translatePageText("Xem ảnh đã gửi")}
                                         >
-                                            <img src={msg.image_url} alt="Ảnh đã gửi" style={styles.chatImage} />
+                                            <img src={msg.image_url} alt={translatePageText("Ảnh đã gửi")} style={styles.chatImage} />
                                         </button>
                                     )}
-                                    {msg.content && msg.content !== '[Hình ảnh]' && (
+                                    {msg.content && msg.content !== translatePageText("[Hình ảnh]") && (
                                         <div>{msg.content}</div>
                                     )}
                                 </div>
@@ -761,8 +758,8 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 style={styles.uploadBtn}
                                 onClick={() => imageInputRef.current?.click()}
                                 disabled={loading || !!historyDate || moderationBlocked}
-                                aria-label="Tải ảnh lên"
-                                title="Tải ảnh lên"
+                                aria-label={translatePageText("Tải ảnh lên")}
+                                title={translatePageText("Tải ảnh lên")}
                             >
                                 <svg viewBox="0 0 24 24" style={styles.plusSvg} aria-hidden="true">
                                     <path d="M12 4v16M4 12h16" stroke="white" strokeWidth="3.5" strokeLinecap="round" />
@@ -775,7 +772,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 value={inputText}
                                 onChange={(e) => { setInputText(e.target.value); autoResizeTextarea(); }}
                                 onKeyDown={handleTextareaKeyDown}
-                                placeholder={historyDate ? 'Đang xem đoạn chat cũ...' : 'Nhập tin nhắn...'}
+                                placeholder={historyDate ? translatePageText("Đang xem đoạn chat cũ...") : translatePageText("Nhập tin nhắn...")}
                                 disabled={loading || !!historyDate || moderationBlocked}
                             />
                             <button type="submit" style={styles.sendBtn} disabled={loading || !!historyDate || moderationBlocked}>
@@ -791,24 +788,20 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             {deleteDate && (
                 <div style={styles.modalBackdrop} onClick={() => !deleteLoading && setDeleteDate(null)}>
                     <div style={styles.deleteModal} onClick={(event) => event.stopPropagation()}>
-                        <h2 style={styles.modalTitle}>Xóa lịch sử chat?</h2>
-                        <p style={styles.modalText}>
-                            Lịch sử chat ngày {new Date(`${deleteDate}T00:00:00`).toLocaleDateString('vi-VN')} sẽ bị xóa vĩnh viễn.
-                        </p>
+                        <h2 style={styles.modalTitle}>{translatePageText("Xóa lịch sử chat?")}</h2>
+                        <p style={styles.modalText}>{translatePageText("Lịch sử chat ngày") + " "}{new Date(`${deleteDate}T00:00:00`).toLocaleDateString('vi-VN')}{" " + translatePageText("sẽ bị xóa vĩnh viễn.") + " "}</p>
                         <div style={styles.modalActions}>
                             <button
                                 style={styles.cancelBtn}
                                 onClick={() => setDeleteDate(null)}
                                 disabled={deleteLoading}
-                            >
-                                Hủy
-                            </button>
+                            >{translatePageText("Hủy") + " "}</button>
                             <button
                                 style={styles.deleteBtn}
                                 onClick={handleDeleteHistory}
                                 disabled={deleteLoading}
                             >
-                                {deleteLoading ? 'Đang xóa...' : 'Xóa lịch sử chat'}
+                                {deleteLoading ? translatePageText("Đang xóa...") : translatePageText("Xóa lịch sử chat")}
                             </button>
                         </div>
                     </div>
@@ -819,21 +812,21 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 <div style={styles.imageErrorBackdrop} onClick={() => setImageError('')}>
                     <div style={styles.imageErrorModal} onClick={(event) => event.stopPropagation()}>
                         <div style={styles.imageErrorIcon}>!</div>
-                        <h2 style={styles.imageErrorTitle}>Không thể gửi hình ảnh</h2>
+                        <h2 style={styles.imageErrorTitle}>{translatePageText("Không thể gửi hình ảnh")}</h2>
                         <p style={styles.imageErrorText}>{imageError}</p>
-                        <button style={styles.deleteBtn} onClick={() => setImageError('')}>Đã hiểu</button>
+                        <button style={styles.deleteBtn} onClick={() => setImageError('')}>{translatePageText("Đã hiểu")}</button>
                     </div>
                 </div>
             )}
             </div>
             )}
             {currentPreview && (
-                <div style={styles.imagePreviewBackdrop} role="dialog" aria-modal="true" aria-label="Trình xem ảnh">
+                <div style={styles.imagePreviewBackdrop} role="dialog" aria-modal="true" aria-label={translatePageText("Trình xem ảnh")}>
                     <div style={styles.imageViewerToolbar}>
-                        <button type="button" style={styles.imageViewerAction} onClick={downloadPreviewImage} aria-label="Tải ảnh xuống" title="Tải ảnh xuống">
+                        <button type="button" style={styles.imageViewerAction} onClick={downloadPreviewImage} aria-label={translatePageText("Tải ảnh xuống")} title={translatePageText("Tải ảnh xuống")}>
                             <svg viewBox="0 0 24 24" style={styles.imageViewerIcon} aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 17v4h14v-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                         </button>
-                        <button type="button" style={styles.imageViewerAction} onClick={() => setPreviewIndex(null)} aria-label="Đóng trình xem ảnh" title="Đóng">
+                        <button type="button" style={styles.imageViewerAction} onClick={() => setPreviewIndex(null)} aria-label={translatePageText("Đóng trình xem ảnh")} title={translatePageText("Đóng")}>
                             <svg viewBox="0 0 24 24" style={styles.imageViewerIcon} aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
                         </button>
                     </div>
@@ -842,7 +835,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         style={{ ...styles.imageViewerArrow, ...styles.imageViewerArrowLeft }}
                         onClick={() => setPreviewIndex((index) => Math.max(0, index - 1))}
                         disabled={previewIndex === 0}
-                        aria-label="Ảnh trước"
+                        aria-label={translatePageText("Ảnh trước")}
                     >
                         <svg viewBox="0 0 24 24" style={styles.imageViewerIcon} aria-hidden="true"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
@@ -854,11 +847,11 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         style={{ ...styles.imageViewerArrow, ...styles.imageViewerArrowRight }}
                         onClick={() => setPreviewIndex((index) => Math.min(previewImages.length - 1, index + 1))}
                         disabled={previewIndex === previewImages.length - 1}
-                        aria-label="Ảnh tiếp theo"
+                        aria-label={translatePageText("Ảnh tiếp theo")}
                     >
                         <svg viewBox="0 0 24 24" style={styles.imageViewerIcon} aria-hidden="true"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
-                    <div style={styles.imageViewerThumbnails} aria-label="Danh sách ảnh">
+                    <div style={styles.imageViewerThumbnails} aria-label={translatePageText("Danh sách ảnh")}>
                         {previewImages.map((image, index) => (
                             <button
                                 key={`${image.url}-${index}`}

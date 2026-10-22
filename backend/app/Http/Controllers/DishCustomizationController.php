@@ -32,16 +32,18 @@ class DishCustomizationController extends Controller
     public function preview(Request $request, $dishId, GeminiChatbotService $gemini)
     {
         $data = $request->validate([
-            'original_instructions_vi' => 'required|string',
-            'removed_ingredients_vi' => 'sometimes|array',
-            'removed_ingredients_vi.*' => 'string|max:255',
+            'original_instructions' => 'required|string',
+            'removed_ingredients' => 'sometimes|array',
+            'removed_ingredients.*' => 'string|max:255',
+            'language' => ['required', 'in:vi,en'],
         ]);
 
         Dish::findOrFail($dishId);
 
         $revised = $gemini->reviseRecipeWithoutIngredients(
-            $data['original_instructions_vi'],
-            $data['removed_ingredients_vi'] ?? []
+            $data['original_instructions'],
+            $data['removed_ingredients'] ?? [],
+            $data['language']
         );
 
         return response()->json(['success' => true, 'revised_instructions' => $revised]);

@@ -5,9 +5,11 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { RED, DISH_COLORS, YEAR_OPTIONS, MONTH_OPTIONS, extractError } from './helpers';
+import { translatePageText } from '../../../pageTextTranslations';
+import { translateDishName } from '../../../dishTranslations';
 
 const MAX_DISHES = 5;
-const nf = (v) => Number(v || 0).toLocaleString('vi-VN');
+const nf = (v) => Number(v || 0).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN');
 
 // kind='sales'  : số phần (nét liền, trục trái) + doanh thu (nét đứt, trục phải)
 // kind='rating' : sao trung bình (nét liền, trục trái) + số lượt đánh giá (nét đứt, trục phải)
@@ -16,27 +18,31 @@ const CONFIG = {
         fetch: (p) => adminAPI.dashboard.dishTrend(p),
         leftKey: 'qty',
         rightKey: 'revenue',
-        leftLabel: 'số phần',
-        rightLabel: 'doanh thu',
-        fmtLeft: (v) => `${nf(v)} phần`,
-        fmtRight: (v) => `${nf(v)} VNĐ`,
+        leftLabel: () => document.documentElement.lang === 'en' ? 'servings' : 'số phần',
+        rightLabel: () => document.documentElement.lang === 'en' ? 'revenue' : 'doanh thu',
+        fmtLeft: (v) => `${nf(v)} ${document.documentElement.lang === 'en' ? 'servings' : 'phần'}`,
+        fmtRight: (v) => `${nf(v)} ${document.documentElement.lang === 'en' ? 'VND' : 'VNĐ'}`,
         leftDomain: [0, 'auto'],
         rightTick: (v) => nf(v),
         rightWidth: 90,
-        title: (names, a, b, y) => `Số phần và doanh thu của ${names} từ tháng ${a} đến tháng ${b} năm ${y}`,
+        title: (names, a, b, y) => document.documentElement.lang === 'en'
+            ? `Servings and revenue for ${names} from month ${a} to ${b}, ${y}`
+            : `Số phần và doanh thu của ${names} từ tháng ${a} đến tháng ${b} năm ${y}`,
     },
     rating: {
         fetch: (p) => adminAPI.dashboard.dishRatingTrend(p),
         leftKey: 'avg',
         rightKey: 'count',
-        leftLabel: 'sao trung bình',
-        rightLabel: 'lượt đánh giá',
-        fmtLeft: (v) => `${Number(v || 0).toFixed(2)} sao`,
-        fmtRight: (v) => `${nf(v)} lượt`,
+        leftLabel: () => document.documentElement.lang === 'en' ? 'average rating' : 'sao trung bình',
+        rightLabel: () => document.documentElement.lang === 'en' ? 'reviews' : 'lượt đánh giá',
+        fmtLeft: (v) => `${Number(v || 0).toFixed(2)} ${document.documentElement.lang === 'en' ? 'stars' : 'sao'}`,
+        fmtRight: (v) => `${nf(v)} ${document.documentElement.lang === 'en' ? 'reviews' : 'lượt'}`,
         leftDomain: [0, 5],
         rightTick: (v) => nf(v),
         rightWidth: 50,
-        title: (names, a, b, y) => `Sao trung bình và lượt đánh giá của ${names} từ tháng ${a} đến tháng ${b} năm ${y}`,
+        title: (names, a, b, y) => document.documentElement.lang === 'en'
+            ? `Average rating and review count for ${names} from month ${a} to ${b}, ${y}`
+            : `Sao trung bình và lượt đánh giá của ${names} từ tháng ${a} đến tháng ${b} năm ${y}`,
     },
 };
 
@@ -58,7 +64,7 @@ const DishTrendSection = ({ kind }) => {
                 const res = await adminAPI.dishes.getAll();
                 setAllDishes(res?.data?.data || res?.data || []);
             } catch (err) {
-                setError(extractError(err, 'Lỗi tải danh sách món'));
+                setError(extractError(err, translatePageText("Lỗi tải danh sách món")));
             }
         })();
     }, []);
@@ -88,28 +94,29 @@ const DishTrendSection = ({ kind }) => {
                 year: Number(year), a: Number(monthA), b: Number(monthB),
             });
         } catch (err) {
-            setError(extractError(err, 'Lỗi tải dữ liệu biểu đồ'));
+            setError(extractError(err, translatePageText("Lỗi tải dữ liệu biểu đồ")));
         } finally {
             setLoading(false);
         }
     };
 
+    const english = document.documentElement.lang === 'en';
     const chartData = result
-        ? result.data.map((row) => ({ ...row, label: `Tháng ${row.month}` }))
+        ? result.data.map((row) => ({ ...row, label: `${english ? 'Month' : 'Tháng'} ${row.month}` }))
         : [];
 
     const tooltipFormatter = (value, name, item) =>
         String(item?.dataKey || '').endsWith(`_${cfg.leftKey}`) ? cfg.fmtLeft(value) : cfg.fmtRight(value);
 
     const selectCls = 'border rounded px-3 py-1 bg-white';
+    const darkTheme = document.documentElement.dataset.theme === 'dark';
 
     return (
         <div>
             {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
             {/* Chọn món */}
-            <p className="text-sm text-gray-600 mb-2">
-                Chọn món ({selected.length}/{MAX_DISHES})
+            <p className="text-sm text-gray-600 mb-2">{translatePageText("Chọn món (")}{selected.length}/{MAX_DISHES})
             </p>
             <div className="border rounded p-3 max-h-40 overflow-y-auto flex flex-wrap gap-2 bg-gray-50 mb-3">
                 {allDishes.map((d) => {
@@ -128,7 +135,7 @@ const DishTrendSection = ({ kind }) => {
                                     : 'bg-white text-gray-700 border-gray-300 hover:border-red-400'
                                 }`}
                         >
-                            {d.dish_name}
+                            {translateDishName(d)}
                         </button>
                     );
                 })}
@@ -137,7 +144,7 @@ const DishTrendSection = ({ kind }) => {
             {/* Chọn thời gian */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
                 <select value={year} onChange={(e) => setYear(e.target.value)} className={selectCls}>
-                    <option value="">-- Năm --</option>
+                    <option value="">{translatePageText("-- Năm --")}</option>
                     {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select
@@ -145,8 +152,8 @@ const DishTrendSection = ({ kind }) => {
                     onChange={(e) => { setMonthA(e.target.value); setMonthB(''); }}
                     className={selectCls}
                 >
-                    <option value="">-- Từ tháng --</option>
-                    {MONTH_OPTIONS.slice(0, 11).map((m) => <option key={m} value={m}>Tháng {m}</option>)}
+                    <option value="">{translatePageText("-- Từ tháng --")}</option>
+                    {MONTH_OPTIONS.slice(0, 11).map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
                 </select>
                 <select
                     value={monthB}
@@ -154,22 +161,25 @@ const DishTrendSection = ({ kind }) => {
                     onChange={(e) => setMonthB(e.target.value)}
                     className={`${selectCls} disabled:bg-gray-100`}
                 >
-                    <option value="">-- Đến tháng --</option>
-                    {endOptions.map((m) => <option key={m} value={m}>Tháng {m}</option>)}
+                    <option value="">{translatePageText("-- Đến tháng --")}</option>
+                    {endOptions.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
                 </select>
                 <button
                     onClick={handleCreate}
                     disabled={!valid || loading}
                     className="px-4 py-1 rounded bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-300"
-                >
-                    Tạo biểu đồ
-                </button>
+                >{translatePageText("Tạo biểu đồ") + " "}</button>
             </div>
 
             {/* Biểu đồ (khung cao cố định) */}
             {result && (
                 <p className="text-center font-bold text-red-600 mb-2">
-                    {cfg.title(result.dishes.map((d) => d.name).join(', '), result.a, result.b, result.year)}
+                    {cfg.title(
+                        result.dishes.map((dish) => translateDishName(dish)).join(', '),
+                        result.a,
+                        result.b,
+                        result.year,
+                    )}
                 </p>
             )}
             <div className="h-[480px]">
@@ -190,7 +200,7 @@ const DishTrendSection = ({ kind }) => {
                             <YAxis
                                 yAxisId="right"
                                 orientation="right"
-                                stroke="#6b7280"
+                                stroke={darkTheme ? '#aab4c2' : '#6b7280'}
                                 allowDecimals={false}
                                 tickFormatter={cfg.rightTick}
                                 width={cfg.rightWidth}
@@ -205,7 +215,7 @@ const DishTrendSection = ({ kind }) => {
                                         yAxisId="left"
                                         type="monotone"
                                         dataKey={`dish_${d.dish_id}_${cfg.leftKey}`}
-                                        name={`${d.name} (${cfg.leftLabel})`}
+                                        name={`${translateDishName(d)} (${cfg.leftLabel()})`}
                                         stroke={color}
                                         strokeWidth={2}
                                         dot={{ r: 3 }}
@@ -215,7 +225,7 @@ const DishTrendSection = ({ kind }) => {
                                         yAxisId="right"
                                         type="monotone"
                                         dataKey={`dish_${d.dish_id}_${cfg.rightKey}`}
-                                        name={`${d.name} (${cfg.rightLabel})`}
+                                        name={`${translateDishName(d)} (${cfg.rightLabel()})`}
                                         stroke={color}
                                         strokeWidth={2}
                                         strokeDasharray="6 4"
@@ -226,9 +236,7 @@ const DishTrendSection = ({ kind }) => {
                         </LineChart>
                     </ResponsiveContainer>
                 ) : (
-                    <div className="h-full flex items-center justify-center text-gray-500 text-center px-4">
-                        Chọn món và khoảng thời gian rồi bấm "Tạo biểu đồ"
-                    </div>
+                    <div className="h-full flex items-center justify-center text-gray-500 text-center px-4">{translatePageText("Chọn món và khoảng thời gian rồi bấm \"Tạo biểu đồ\"") + " "}</div>
                 )}
             </div>
         </div>

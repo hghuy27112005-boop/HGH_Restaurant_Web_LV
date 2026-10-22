@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Cropper from "react-easy-crop"; // npm install react-easy-crop
 import { useNavigate } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
+import { translatePageText } from '../../pageTextTranslations';
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -168,9 +169,7 @@ function CropperModal({ show, imageUrl, onClose, onCrop }) {
         width: "90%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto",
         boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
       }}>
-        <h3 style={{ margin: "0 0 16px", textAlign: "center", color: "#333", fontSize: 20 }}>
-          Cắt ảnh đại diện
-        </h3>
+        <h3 style={{ margin: "0 0 16px", textAlign: "center", color: "#333", fontSize: 20 }}>{translatePageText("Cắt ảnh đại diện") + " "}</h3>
 
         {/* Vùng crop: phải set position:relative + chiều cao cố định,
             react-easy-crop tự fill 100% vùng này bằng ResizeObserver,
@@ -204,14 +203,12 @@ function CropperModal({ show, imageUrl, onClose, onCrop }) {
           <span style={{ fontSize: 18, color: "#888", userSelect: "none" }}>+</span>
         </div>
 
-        <p style={{ textAlign: "center", color: "#999", fontSize: 13, margin: "8px 0 4px" }}>
-          Kéo ảnh để di chuyển · Dùng thanh trượt để zoom
-        </p>
+        <p style={{ textAlign: "center", color: "#999", fontSize: 13, margin: "8px 0 4px" }}>{translatePageText("Kéo ảnh để di chuyển · Dùng thanh trượt để zoom") + " "}</p>
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
-          <button className="profile-outline-button" onClick={onClose} style={btnStyle("outline")}>Huỷ</button>
+          <button className="profile-outline-button" onClick={onClose} style={btnStyle("outline")}>{translatePageText("Huỷ")}</button>
           <button onClick={handleConfirm} disabled={busy} style={btnStyle("primary", busy)}>
-            {busy ? "Đang xử lý..." : "✂️ Xác nhận cắt"}
+            {busy ? translatePageText("Đang xử lý...") : translatePageText("✂️ Xác nhận cắt")}
           </button>
         </div>
       </div>
@@ -295,7 +292,7 @@ export default function ProfilePage() {
         setUser(u);
         setForm({ username: u.username, email: u.email, tele_number: u.tele_number ?? "" });
       } catch {
-        showToast("Không thể tải thông tin tài khoản. Vui lòng đăng nhập lại.", "error");
+        showToast(translatePageText("Không thể tải thông tin tài khoản. Vui lòng đăng nhập lại."), "error");
       } finally {
         setLoading(false);
       }
@@ -316,12 +313,12 @@ export default function ProfilePage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      showToast("Vui lòng chọn một file ảnh hợp lệ!", "warning");
+      showToast(translatePageText("Vui lòng chọn một file ảnh hợp lệ!"), "warning");
       e.target.value = "";
       return;
     }
     if (file.size > MAX_AVATAR_FILE_SIZE) {
-      showToast("Ảnh quá lớn, vui lòng chọn ảnh dưới 5MB!", "warning");
+      showToast(translatePageText("Ảnh quá lớn, vui lòng chọn ảnh dưới 5MB!"), "warning");
       e.target.value = "";
       return;
     }
@@ -347,7 +344,7 @@ export default function ProfilePage() {
 
   // ── Lưu avatar ─────────────────────────────────────────────────────────
   async function handleSaveAvatar() {
-    if (!croppedBlob) return showToast("Vui lòng chọn và cắt ảnh trước!", "warning");
+    if (!croppedBlob) return showToast(translatePageText("Vui lòng chọn và cắt ảnh trước!"), "warning");
     setBusy("avatar");
     try {
       const fd = new FormData();
@@ -368,7 +365,7 @@ export default function ProfilePage() {
         showToast(json.message || "Cập nhật thất bại", "error");
       }
     } catch {
-      showToast("Không thể kết nối máy chủ!", "error");
+      showToast(translatePageText("Không thể kết nối máy chủ!"), "error");
     } finally {
       setBusy(null);
     }
@@ -395,7 +392,7 @@ export default function ProfilePage() {
         showToast(msg + detail, "error");
       }
     } catch {
-      showToast("Không thể kết nối máy chủ!", "error");
+      showToast(translatePageText("Không thể kết nối máy chủ!"), "error");
     } finally {
       setBusy(null);
     }
@@ -405,7 +402,7 @@ export default function ProfilePage() {
   async function handleChangePassword(e) {
     e.preventDefault();
     if (pwForm.new_password !== pwForm.new_password_confirmation)
-      return showToast("Xác nhận mật khẩu không khớp!", "warning");
+      return showToast(translatePageText("Xác nhận mật khẩu không khớp!"), "warning");
     try {
       const res = await fetch(`${API_BASE}/user/change-password`, {
         method: "POST",
@@ -421,7 +418,7 @@ export default function ProfilePage() {
         showToast(json.message || "Đổi mật khẩu thất bại", "error");
       }
     } catch {
-      showToast("Không thể kết nối máy chủ!", "error");
+      showToast(translatePageText("Không thể kết nối máy chủ!"), "error");
     }
   }
 
@@ -439,7 +436,7 @@ export default function ProfilePage() {
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
         <div style={{ textAlign: "center", color: "#888" }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
-          <p>Đang tải thông tin...</p>
+          <p>{translatePageText("Đang tải thông tin...")}</p>
         </div>
       </div>
     );
@@ -479,29 +476,29 @@ export default function ProfilePage() {
       />
 
       {/* ── Change Password Modal ── */}
-      <Modal show={pwModal} onClose={() => setPwModal(false)} title="Đổi mật khẩu">
+      <Modal show={pwModal} onClose={() => setPwModal(false)} title={translatePageText("Đổi mật khẩu")}>
         <form onSubmit={handleChangePassword}>
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Mật khẩu hiện tại (*):</label>
+            <label style={labelStyle}>{translatePageText("Mật khẩu hiện tại (*):")}</label>
             <input className="pw-input" type="password" required
-              placeholder="Nhập mật khẩu hiện tại" value={pwForm.current_password}
+              placeholder={translatePageText("Nhập mật khẩu hiện tại")} value={pwForm.current_password}
               onChange={(e) => setPwForm((f) => ({ ...f, current_password: e.target.value }))} />
           </div>
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>Mật khẩu mới (*):</label>
+            <label style={labelStyle}>{translatePageText("Mật khẩu mới (*):")}</label>
             <input className="pw-input" type="password" required minLength={6}
-              placeholder="Nhập mật khẩu mới" value={pwForm.new_password}
+              placeholder={translatePageText("Nhập mật khẩu mới")} value={pwForm.new_password}
               onChange={(e) => setPwForm((f) => ({ ...f, new_password: e.target.value }))} />
           </div>
           <div style={{ marginBottom: 6 }}>
-            <label style={labelStyle}>Xác nhận mật khẩu mới (*):</label>
+            <label style={labelStyle}>{translatePageText("Xác nhận mật khẩu mới (*):")}</label>
             <input className="pw-input" type="password" required minLength={6}
-              placeholder="Nhập lại mật khẩu mới" value={pwForm.new_password_confirmation}
+              placeholder={translatePageText("Nhập lại mật khẩu mới")} value={pwForm.new_password_confirmation}
               onChange={(e) => setPwForm((f) => ({ ...f, new_password_confirmation: e.target.value }))} />
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 24 }}>
-            <Btn type="button" onClick={() => setPwModal(false)} style={{ width: "auto", padding: "9px 22px" }}>Huỷ</Btn>
-            <Btn type="submit" variant="primary" style={{ width: "auto", padding: "9px 22px" }}>Xác nhận</Btn>
+            <Btn type="button" onClick={() => setPwModal(false)} style={{ width: "auto", padding: "9px 22px" }}>{translatePageText("Huỷ")}</Btn>
+            <Btn type="submit" variant="primary" style={{ width: "auto", padding: "9px 22px" }}>{translatePageText("Xác nhận")}</Btn>
           </div>
         </form>
       </Modal>
@@ -529,40 +526,31 @@ export default function ProfilePage() {
             </div>
 
             <h3 style={{ margin: "0 0 8px", color: "#333" }}>{user?.username}</h3>
-            <p style={{ color: "#C0392B", fontWeight: 700, margin: "0 0 8px", fontSize: 15 }}>
-              Vai trò: {user?.role}
+            <p style={{ color: "#C0392B", fontWeight: 700, margin: "0 0 8px", fontSize: 15 }}>{translatePageText("Vai trò:") + " "}{user?.role}
             </p>
             {user?.role !== 'admin' && (
               <>
-                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>
-                  Cấp bậc thành viên: <strong style={{ color: "#333" }}>{user?.membership}</strong>
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{translatePageText("Cấp bậc thành viên:") + " "}<strong style={{ color: "#333" }}>{user?.membership}</strong>
                 </p>
-                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>
-                  Điểm tích lũy: <strong style={{ color: "#C0392B" }}>{user?.points ?? 0}</strong>
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{translatePageText("Điểm tích lũy:") + " "}<strong style={{ color: "#C0392B" }}>{user?.points ?? 0}</strong>
                 </p>
-                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>
-                  Lượt hủy đơn:{" "}
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{translatePageText("Lượt hủy đơn:")}{" "}
                   <strong style={{ color: (user?.cancel_attempts_left ?? 0) === 0 ? "#C0392B" : "#333" }}>
                     {user?.cancel_attempts_left ?? 0}/2
                   </strong>
                 </p>
-                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>
-                  Lượt chỉnh sửa đơn:{" "}
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{translatePageText("Lượt chỉnh sửa đơn:")}{" "}
                   <strong style={{ color: (user?.modify_attempts_left ?? 0) === 0 ? "#C0392B" : "#333" }}>
                     {user?.modify_attempts_left ?? 0}/2
                   </strong>
                 </p>
-                <p style={{ color: "#999", margin: "0 0 16px", fontSize: 12 }}>
-                  Lượt được làm mới vào thứ Hai hàng tuần, tính chung đặt bàn và đặt ship.
-                </p>
+                <p style={{ color: "#999", margin: "0 0 16px", fontSize: 12 }}>{translatePageText("Lượt được làm mới vào thứ Hai hàng tuần, tính chung đặt bàn và đặt ship.") + " "}</p>
               </>
             )}
 
             {/* Upload avatar */}
             <div style={{ textAlign: "left" }}>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5, color: "#555" }}>
-                Đổi ảnh đại diện (Tuỳ chọn)
-              </label>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5, color: "#555" }}>{translatePageText("Đổi ảnh đại diện (Tuỳ chọn)") + " "}</label>
               <input type="file" ref={fileInputRef} accept="image/*"
                 disabled={busy === "profile" || editMode}
                 onChange={handleFileChange}
@@ -575,7 +563,7 @@ export default function ProfilePage() {
               {croppedBlob && (
                 <Btn variant="primary" onClick={handleSaveAvatar} disabled={busy === "avatar"}
                   style={{ marginTop: 10, padding: "7px 12px", fontSize: 13 }}>
-                  {busy === "avatar" ? "Đang lưu..." : "💾 Lưu ảnh đại diện"}
+                  {busy === "avatar" ? translatePageText("Đang lưu...") : translatePageText("💾 Lưu ảnh đại diện")}
                 </Btn>
               )}
             </div>
@@ -586,9 +574,7 @@ export default function ProfilePage() {
             <h2 style={{
               margin: "0 0 24px", color: "#333", fontSize: 22,
               borderBottom: "2px solid #f0f0f0", paddingBottom: 10
-            }}>
-              Thông tin cá nhân
-            </h2>
+            }}>{translatePageText("Thông tin cá nhân") + " "}</h2>
 
             <div>
               <Field label="Tên người dùng (*):">
@@ -610,28 +596,20 @@ export default function ProfilePage() {
 
             <div style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 12 }}>
               {!editMode ? (
-                <Btn onClick={() => setEditMode(true)} disabled={busy === "avatar"}>
-                  Thay đổi thông tin cá nhân
-                </Btn>
+                <Btn onClick={() => setEditMode(true)} disabled={busy === "avatar"}>{translatePageText("Thay đổi thông tin cá nhân") + " "}</Btn>
               ) : (
                 <>
                   <Btn variant="primary" onClick={handleSaveProfile} disabled={busy === "profile"}>
-                    {busy === "profile" ? "Đang lưu..." : "Lưu sửa đổi"}
+                    {busy === "profile" ? translatePageText("Đang lưu...") : translatePageText("Lưu sửa đổi")}
                   </Btn>
                   <Btn onClick={() => {
                     setForm({ username: user.username, email: user.email, tele_number: user.tele_number ?? "" });
                     setEditMode(false);
-                  }} disabled={busy === "profile"}>
-                    Huỷ
-                  </Btn>
+                  }} disabled={busy === "profile"}>{translatePageText("Huỷ") + " "}</Btn>
                 </>
               )}
-              <Btn onClick={() => setPwModal(true)} disabled={editMode || busy === "avatar"}>
-                Đổi mật khẩu
-              </Btn>
-              <Btn variant="danger" onClick={handleLogout} disabled={editMode || busy === "avatar"}>
-                Đăng xuất
-              </Btn>
+              <Btn onClick={() => setPwModal(true)} disabled={editMode || busy === "avatar"}>{translatePageText("Đổi mật khẩu") + " "}</Btn>
+              <Btn variant="danger" onClick={handleLogout} disabled={editMode || busy === "avatar"}>{translatePageText("Đăng xuất") + " "}</Btn>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { deliveryService } from '../../services/api';
 import { Modal } from '../../components/Shared';
+import { translatePageText } from '../../pageTextTranslations';
 
 // Modal chỉnh sửa đơn ship ĐÃ thanh toán: địa chỉ giao và thời điểm muốn nhận hàng (bật/tắt được giờ hẹn).
 // Không đổi món, không thanh toán lại, phí ship thu riêng khi nhận hàng nên không đổi giá đơn.
@@ -152,7 +153,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
             } catch (err) {
                 if (cancelled) return;
                 setPreview(null);
-                handleRequestError(err, 'Không thể kiểm tra địa chỉ này.', true);
+                handleRequestError(err, translatePageText("Không thể kiểm tra địa chỉ này."), true);
             } finally {
                 if (!cancelled) setPreviewLoading(false);
             }
@@ -172,7 +173,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
 
     const handleUseCurrentLocation = () => {
         if (!navigator.geolocation) {
-            setPreviewError('Trình duyệt của bạn không hỗ trợ lấy vị trí hiện tại.');
+            setPreviewError(translatePageText("Trình duyệt của bạn không hỗ trợ lấy vị trí hiện tại."));
             return;
         }
 
@@ -195,14 +196,14 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                     setPreview(data);
                     setPreviewedSig(`${newAddress}|${prefStr ?? ''}|${data.lat},${data.lng}`);
                 } catch (err) {
-                    handleRequestError(err, 'Không thể xác định vị trí giao hàng từ vị trí hiện tại.', true);
+                    handleRequestError(err, translatePageText("Không thể xác định vị trí giao hàng từ vị trí hiện tại."), true);
                 } finally {
                     setGpsLoading(false);
                 }
             },
             () => {
                 setGpsLoading(false);
-                setPreviewError('Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí hoặc nhập địa chỉ thủ công.');
+                setPreviewError(translatePageText("Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí hoặc nhập địa chỉ thủ công."));
             }
         );
     };
@@ -252,7 +253,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
             const data = err.response?.data;
             setConfirmOpen(false);
             if (data?.stock_status === 'insufficient') {
-                setSaveError('Không đủ nguyên liệu cho đơn này theo lịch mới. Vui lòng chọn thời điểm khác hoặc giữ nguyên lịch cũ.');
+                setSaveError(translatePageText("Không đủ nguyên liệu cho đơn này theo lịch mới. Vui lòng chọn thời điểm khác hoặc giữ nguyên lịch cũ."));
             } else {
                 setSaveError(data?.message || err.message || 'Không thể chỉnh sửa đơn. Vui lòng thử lại.');
             }
@@ -265,7 +266,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
         <>
             <Modal
                 isOpen={isOpen}
-                title="Chỉnh sửa thông tin đơn ship"
+                title={translatePageText("Chỉnh sửa thông tin đơn ship")}
                 className="max-w-2xl"
                 onClose={handleClose}
                 cancelText="Đóng"
@@ -275,20 +276,14 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
             >
                 <div className="space-y-6 text-sm">
                     <div className="bg-gray-50 border border-gray-200 rounded p-3 space-y-1">
-                        <div className="font-bold text-gray-800">
-                            Đơn hàng {bill?.order_stt || bill?.order_id}: thông tin hiện tại
+                        <div className="font-bold text-gray-800">{translatePageText("Đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{translatePageText(": thông tin hiện tại") + " "}</div>
+                        <div className="text-gray-600">{translatePageText("Địa chỉ:") + " "}<strong>{original.address || '—'}</strong>
                         </div>
-                        <div className="text-gray-600">
-                            Địa chỉ: <strong>{original.address || '—'}</strong>
+                        <div className="text-gray-600">{translatePageText("Giờ muốn nhận hàng:") + " "}<strong>{original.pref || translatePageText("Không hẹn giờ")}</strong>
+                            {' · '}{translatePageText("Bắt đầu nấu:") + " "}{formatDateTime(original.cookingAt)}
+                            {' · '}{translatePageText("Hàng tới:") + " "}{formatDateTime(original.arrivalAt)}
                         </div>
-                        <div className="text-gray-600">
-                            Giờ muốn nhận hàng: <strong>{original.pref || 'Không hẹn giờ'}</strong>
-                            {' · '}Bắt đầu nấu: {formatDateTime(original.cookingAt)}
-                            {' · '}Hàng tới: {formatDateTime(original.arrivalAt)}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                            Mỗi lần lưu tiêu hao 1 lượt chỉnh sửa trong tuần (hiện còn {attemptsLeft} lượt). Không thể thay đổi món ăn và không cần thanh toán lại. Chỉ sửa được khi đơn chưa tới giờ bắt đầu chuẩn bị.
-                        </div>
+                        <div className="text-xs text-gray-500">{translatePageText("Mỗi lần lưu tiêu hao 1 lượt chỉnh sửa trong tuần (hiện còn") + " "}{attemptsLeft}{" " + translatePageText("lượt). Không thể thay đổi món ăn và không cần thanh toán lại. Chỉ sửa được khi đơn chưa tới giờ bắt đầu chuẩn bị.") + " "}</div>
                     </div>
 
                     {saveError && (
@@ -299,13 +294,13 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
 
                     {/* Cụm 1: địa chỉ giao hàng */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-2">1. Địa chỉ giao hàng</h3>
+                        <h3 className="font-bold text-base text-red-600 mb-2">{translatePageText("1. Địa chỉ giao hàng")}</h3>
                         <input
                             type="text"
                             value={address}
                             onChange={(e) => handleAddressChange(e.target.value)}
                             className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
-                            placeholder="Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)..."
+                            placeholder={translatePageText("Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)...")}
                         />
                         <button
                             type="button"
@@ -314,11 +309,11 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                             className="mt-2 text-sm font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-1"
                         >
                             <i className={`fas ${gpsLoading ? 'fa-spinner fa-spin' : 'fa-location-crosshairs'}`}></i>
-                            {gpsLoading ? 'Đang lấy vị trí...' : 'Tự động lấy vị trí hiện tại'}
+                            {gpsLoading ? translatePageText("Đang lấy vị trí...") : translatePageText("Tự động lấy vị trí hiện tại")}
                         </button>
 
                         {previewLoading && (
-                            <p className="mt-2 text-gray-500">Đang kiểm tra địa chỉ...</p>
+                            <p className="mt-2 text-gray-500">{translatePageText("Đang kiểm tra địa chỉ...")}</p>
                         )}
 
                         {!previewLoading && addressError && (
@@ -328,16 +323,16 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                         {previewReady && (
                             <div className="mt-3 bg-blue-50 border border-blue-200 rounded p-3 space-y-1">
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">Khoảng cách:</span>
+                                    <span className="text-gray-600">{translatePageText("Khoảng cách:")}</span>
                                     <span className="font-semibold">{preview.distance_km} km</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">Thời gian giao dự kiến:</span>
-                                    <span className="font-semibold">{preview.duration_minutes} phút</span>
+                                    <span className="text-gray-600">{translatePageText("Thời gian giao dự kiến:")}</span>
+                                    <span className="font-semibold">{preview.duration_minutes}{" " + translatePageText("phút")}</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">Phí ship (thu riêng khi nhận hàng):</span>
-                                    <span className="font-bold text-red-600">{Number(preview.shipping_fee ?? 0).toLocaleString('vi-VN')}đ</span>
+                                    <span className="text-gray-600">{translatePageText("Phí ship (thu riêng khi nhận hàng):")}</span>
+                                    <span className="font-bold text-red-600">{Number(preview.shipping_fee ?? 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
                                 </div>
                             </div>
                         )}
@@ -345,22 +340,22 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
 
                     {/* Cụm 2: thời điểm muốn nhận hàng */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-2">2. Thời điểm muốn nhận hàng</h3>
+                        <h3 className="font-bold text-base text-red-600 mb-2">{translatePageText("2. Thời điểm muốn nhận hàng")}</h3>
                         <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
                                 <div className="flex items-center gap-3">
-                                    <span className="font-semibold text-gray-700">Thời điểm giao hàng mong muốn</span>
+                                    <span className="font-semibold text-gray-700">{translatePageText("Thời điểm giao hàng mong muốn")}</span>
                                     <button
                                         type="button"
                                         onClick={() => setPrefEnabled((value) => !value)}
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full border-2 border-white shadow-inner transition-colors duration-200 flex-shrink-0 ${prefEnabled ? 'bg-green-500' : 'bg-gray-400'}`}
-                                        aria-label="Bật thời điểm giao hàng mong muốn"
+                                        aria-label={translatePageText("Bật thời điểm giao hàng mong muốn")}
                                     >
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${prefEnabled ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
                                 </div>
                                 <p className="mt-1 text-xs text-gray-500">
-                                    {prefEnabled ? 'Bạn muốn hàng được giao tới lúc mấy giờ?' : 'Đang tắt: đơn được chuẩn bị và giao sớm nhất có thể.'}
+                                    {prefEnabled ? translatePageText("Bạn muốn hàng được giao tới lúc mấy giờ?") : translatePageText("Đang tắt: đơn được chuẩn bị và giao sớm nhất có thể.")}
                                 </p>
                             </div>
                             {prefEnabled && (
@@ -371,7 +366,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="30" value={prefM} onChange={(e) => setPrefM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                     </div>
                                     <p className="mt-1 text-xs text-gray-500">
-                                        {schedule ? `Sớm nhất: ${earliestTime} — muộn nhất: 22:00` : 'Muộn nhất: 22:00'}
+                                        {schedule ? `Sớm nhất: ${earliestTime} — muộn nhất: 22:00` : translatePageText("Muộn nhất: 22:00")}
                                     </p>
                                 </div>
                             )}
@@ -382,42 +377,37 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                         )}
 
                         {afterClosing && (
-                            <p className="mt-2 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">
-                                Nhà hàng đóng cửa lúc 22h và không giao hàng sau giờ đóng cửa. Nhà hàng sẽ bắt đầu chuẩn bị đơn vào 7h30 sáng hôm sau.
-                            </p>
+                            <p className="mt-2 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Nhà hàng đóng cửa lúc 22h và không giao hàng sau giờ đóng cửa. Nhà hàng sẽ bắt đầu chuẩn bị đơn vào 7h30 sáng hôm sau.") + " "}</p>
                         )}
                     </div>
 
                     {/* Cụm 3: lịch dự kiến sau khi sửa */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-2">3. Lịch dự kiến sau khi sửa</h3>
+                        <h3 className="font-bold text-base text-red-600 mb-2">{translatePageText("3. Lịch dự kiến sau khi sửa")}</h3>
                         {schedule && cookingAt ? (
                             <div className="bg-white border border-gray-200 rounded p-3 space-y-2">
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">Bắt đầu nấu (dự kiến):</span>
-                                    <span className="font-semibold">{cookingNow ? 'Ngay sau khi lưu' : formatDateTime(cookingAt)}</span>
+                                    <span className="text-gray-600">{translatePageText("Bắt đầu nấu (dự kiến):")}</span>
+                                    <span className="font-semibold">{cookingNow ? translatePageText("Ngay sau khi lưu") : formatDateTime(cookingAt)}</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">Bắt đầu giao (dự kiến):</span>
+                                    <span className="text-gray-600">{translatePageText("Bắt đầu giao (dự kiến):")}</span>
                                     <span className="font-semibold">{formatDateTime(shipAt)}</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">Hàng tới (dự kiến):</span>
+                                    <span className="text-gray-600">{translatePageText("Hàng tới (dự kiến):")}</span>
                                     <span className="font-semibold">{formatDateTime(arrivalAt)}</span>
                                 </div>
                                 {cookingNotToday && (
-                                    <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">
-                                        Đơn hàng này dự kiến không thể hoàn tất giao trong hôm nay, nên nhà hàng sẽ bắt đầu chuẩn bị vào <strong>{formatDateTime(cookingAt)}</strong>.
+                                    <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Đơn hàng này dự kiến không thể hoàn tất giao trong hôm nay, nên nhà hàng sẽ bắt đầu chuẩn bị vào") + " "}<strong>{formatDateTime(cookingAt)}</strong>.
                                     </p>
                                 )}
                                 {cookingNow && (
-                                    <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">
-                                        Sau khi lưu, đơn sẽ được chuẩn bị ngay nên bạn sẽ không thể chỉnh sửa thêm.
-                                    </p>
+                                    <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Sau khi lưu, đơn sẽ được chuẩn bị ngay nên bạn sẽ không thể chỉnh sửa thêm.") + " "}</p>
                                 )}
                             </div>
                         ) : (
-                            <p className="text-gray-500">Lịch dự kiến sẽ hiện sau khi địa chỉ và thời điểm nhận hàng hợp lệ.</p>
+                            <p className="text-gray-500">{translatePageText("Lịch dự kiến sẽ hiện sau khi địa chỉ và thời điểm nhận hàng hợp lệ.")}</p>
                         )}
                     </div>
                 </div>
@@ -425,19 +415,15 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
 
             <Modal
                 isOpen={confirmOpen}
-                title="Xác nhận chỉnh sửa đơn"
+                title={translatePageText("Xác nhận chỉnh sửa đơn")}
                 onClose={() => { if (!saving) setConfirmOpen(false); }}
                 cancelText="Quay lại"
                 onConfirm={handleSave}
-                confirmText={saving ? 'Đang lưu...' : 'Xác nhận'}
+                confirmText={saving ? translatePageText("Đang lưu...") : translatePageText("Xác nhận")}
                 confirmDisabled={saving}
             >
-                <p className="text-gray-700 mb-3">
-                    Bạn có chắc muốn lưu các thay đổi cho đơn hàng {bill?.order_stt || bill?.order_id} không?
-                </p>
-                <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">
-                    Việc chỉnh sửa sẽ tiêu hao <strong>1 lượt chỉnh sửa đơn</strong> trong tuần (hiện còn <strong>{attemptsLeft}</strong> lượt). Đơn không cần thanh toán lại, phí ship vẫn thu riêng khi nhận hàng.
-                </p>
+                <p className="text-gray-700 mb-3">{translatePageText("Bạn có chắc muốn lưu các thay đổi cho đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{" " + translatePageText("không?") + " "}</p>
+                <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Việc chỉnh sửa sẽ tiêu hao") + " "}<strong>{translatePageText("1 lượt chỉnh sửa đơn")}</strong>{" " + translatePageText("trong tuần (hiện còn") + " "}<strong>{attemptsLeft}</strong>{" " + translatePageText("lượt). Đơn không cần thanh toán lại, phí ship vẫn thu riêng khi nhận hàng.") + " "}</p>
             </Modal>
         </>
     );

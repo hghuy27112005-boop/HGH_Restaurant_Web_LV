@@ -14,23 +14,33 @@ class OrderNotificationMail extends Mailable
 
     public Bill $bill;
     public string $bodyLine; // dòng nội dung riêng cho từng loại thông báo
+    public string $language;
 
-    public function __construct(Bill $bill, string $bodyLine)
+    public function __construct(Bill $bill, string $bodyLine, string $language = 'vi')
     {
         $this->bill = $bill;
         $this->bodyLine = $bodyLine;
+        $this->language = $language === 'en' ? 'en' : 'vi';
     }
 
     public function build()
     {
-        $mail = $this->subject('HGH Restaurant thông báo')
+        $subject = $this->language === 'en'
+            ? 'HGH Restaurant notification'
+            : 'HGH Restaurant thông báo';
+
+        $mail = $this->subject($subject)
             ->view('mail.order_notification')
             ->with([
                 'bill' => $this->bill,
                 'bodyLine' => $this->bodyLine,
+                'language' => $this->language,
             ]);
 
-        $pdf = Pdf::loadView('pdf.invoice', ['bill' => $this->bill]);
+        $pdf = Pdf::loadView('pdf.invoice', [
+            'bill' => $this->bill,
+            'language' => $this->language,
+        ]);
         $mail->attachData($pdf->output(), $this->bill->bill_id . '.pdf', [
             'mime' => 'application/pdf',
         ]);

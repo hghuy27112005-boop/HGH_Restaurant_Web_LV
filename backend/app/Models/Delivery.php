@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use App\Services\UserNotificationService;
+use App\Support\PreferredLanguage;
 
 class Delivery extends Model
 {
@@ -404,6 +405,7 @@ class Delivery extends Model
             $billLabel = $bill ? ", mã hóa đơn {$bill->bill_id}" : '';
             $message = "Nhà hàng đã bắt đầu chuẩn bị đơn đặt ship của bạn{$billLabel}. "
                 . "Đơn hàng sẽ bắt đầu được giao sau 15 phút nữa và dự kiến tới nơi lúc {$arrival}.";
+            $language = PreferredLanguage::forUser($user);
             $notifications = app(UserNotificationService::class);
             $notifications->record(
                 $user,
@@ -418,9 +420,12 @@ class Delivery extends Model
                 && $user->email
                 && $notifications->isEnabled($user, 'delivery_preparing', 'email')
             ) {
-                $bodyLine = "Nhà hàng đã bắt đầu chuẩn bị đơn hàng đặt ship của quý khách, mã hóa đơn là <strong>{$bill->bill_id}</strong>. "
-                    . "Đơn hàng sẽ bắt đầu được giao sau 15 phút nữa và dự kiến tới nơi lúc <strong>{$arrival}</strong>.";
-                Mail::to($user->email)->queue(new OrderNotificationMail($bill, $bodyLine));
+                $bodyLine = $language === 'en'
+                    ? "We have started preparing your delivery order, invoice <strong>{$bill->bill_id}</strong>. "
+                        . "It will be dispatched in about 15 minutes and is expected to arrive at <strong>{$arrival}</strong>."
+                    : "Nhà hàng đã bắt đầu chuẩn bị đơn hàng đặt ship của quý khách, mã hóa đơn là <strong>{$bill->bill_id}</strong>. "
+                        . "Đơn hàng sẽ bắt đầu được giao sau 15 phút nữa và dự kiến tới nơi lúc <strong>{$arrival}</strong>.";
+                Mail::to($user->email)->queue(new OrderNotificationMail($bill, $bodyLine, $language));
             }
         } catch (\Throwable $e) {
             Log::error('Gửi mail bắt đầu chuẩn bị đơn ship thất bại: ' . $e->getMessage());

@@ -4,6 +4,7 @@ import { TableLoading, Button, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
 // Các hàm xuất Excel dùng chung, import từ orderTools (nằm trong thư mục Orders)
 import { EXPORT_LIMIT, fetchAllRows, downloadXlsx } from './Orders/orderTools';
+import { translatePageText } from '../../pageTextTranslations';
 
 const MEMBERSHIP_LABELS = {
     bronze: 'Bronze',
@@ -22,15 +23,15 @@ const MEMBERSHIP_STYLE = {
 };
 
 const UNIT_OPTIONS = [
-    { id: 'day', label: 'Ngày' },
-    { id: 'month', label: 'Tháng' },
-    { id: 'year', label: 'Năm' },
+    { id: 'day', get label() { return translatePageText("Ngày"); } },
+    { id: 'month', get label() { return translatePageText("Tháng"); } },
+    { id: 'year', get label() { return translatePageText("Năm"); } },
 ];
 
 const NO_SPIN = '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
 const formatDateTime = (value) => value
-    ? new Date(value).toLocaleString('vi-VN', {
+    ? new Date(value).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN', {
         hour: '2-digit',
         minute: '2-digit',
         day: '2-digit',
@@ -91,7 +92,7 @@ const AdminUsersPage = () => {
             setTotal(payload.pagination.total);
             setPageInput(String(payload.pagination.current_page));
         } catch (err) {
-            setErrorMessage('Lỗi tải danh sách người dùng');
+            setErrorMessage(translatePageText("Lỗi tải danh sách người dùng"));
             console.error(err);
         } finally {
             setLoading(false);
@@ -124,7 +125,9 @@ const AdminUsersPage = () => {
     const handleExport = async () => {
         if (exporting) return;
         if (total > EXPORT_LIMIT) {
-            setErrorMessage(`Có ${total} người dùng khớp bộ lọc, vượt giới hạn xuất ${EXPORT_LIMIT} người. Vui lòng thu hẹp bộ lọc rồi xuất lại.`);
+            setErrorMessage(document.documentElement.lang === 'en'
+                ? `${total} users match the current filters, exceeding the export limit of ${EXPORT_LIMIT}. Narrow the filters and try again.`
+                : `Có ${total} người dùng khớp bộ lọc, vượt giới hạn xuất ${EXPORT_LIMIT} người. Vui lòng thu hẹp bộ lọc rồi xuất lại.`);
             return;
         }
         try {
@@ -137,15 +140,15 @@ const AdminUsersPage = () => {
                 return adminAPI.users.getAll(params);
             });
             await downloadXlsx(
-                'danh-sach-nguoi-dung.xlsx',
-                'Người dùng',
+                document.documentElement.lang === 'en' ? 'user-list.xlsx' : 'danh-sach-nguoi-dung.xlsx',
+                translatePageText('Người dùng'),
                 [
                     { header: 'STT', width: 8, type: 'number' },
-                    { header: 'Tên người dùng', width: 22, type: 'text' },
-                    { header: 'SĐT', width: 15, type: 'text' },
+                    { header: translatePageText('Tên người dùng'), width: 22, type: 'text' },
+                    { header: translatePageText('SĐT'), width: 15, type: 'text' },
                     { header: 'Gmail', width: 32, type: 'text' },
-                    { header: 'Bậc thành viên', width: 16, type: 'text' },
-                    { header: 'Trạng thái', width: 32, type: 'text' },
+                    { header: translatePageText('Bậc thành viên'), width: 16, type: 'text' },
+                    { header: translatePageText('Trạng thái'), width: 32, type: 'text' },
                 ],
                 rows.map((u) => [
                     u.stt,
@@ -153,7 +156,9 @@ const AdminUsersPage = () => {
                     u.tele_number,
                     u.email,
                     MEMBERSHIP_LABELS[u.membership] || u.membership,
-                    u.is_locked ? `Bị khóa đến ${formatDateTime(u.locked_until)}` : 'Hoạt động',
+                    u.is_locked
+                        ? `${translatePageText('Bị khóa đến')} ${formatDateTime(u.locked_until)}`
+                        : translatePageText('Hoạt động'),
                 ]),
             );
         } catch (err) {
@@ -171,14 +176,23 @@ const AdminUsersPage = () => {
 
     // Chạy sau khi khóa/mở khóa xong: hiện modal riêng "Đang gửi mail" rồi báo kết quả
     const sendNotificationMail = async (kind, user) => {
-        setMailState({ status: 'sending', message: `Đang gửi mail đến ${user.email}...` });
+        setMailState({
+            status: 'sending',
+            message: `${translatePageText("Đang gửi email đến")} ${user.email}...`,
+        });
         try {
-            const res = kind === 'lock'
-                ? await adminAPI.users.sendLockMail(user.user_id)
-                : await adminAPI.users.sendUnlockMail(user.user_id);
-            setMailState({ status: 'done', message: res.data?.message || 'Đã gửi mail.' });
+            if (kind === 'lock') {
+                await adminAPI.users.sendLockMail(user.user_id);
+            } else {
+                await adminAPI.users.sendUnlockMail(user.user_id);
+            }
+            setMailState({ status: 'done', message: translatePageText("Đã gửi email.") });
         } catch (err) {
-            setMailState({ status: 'error', message: err.response?.data?.message || 'Gửi mail thất bại.' });
+            const message = err.response?.data?.message;
+            setMailState({
+                status: 'error',
+                message: message ? translatePageText(message) : translatePageText("Gửi email thất bại."),
+            });
         }
     };
 
@@ -187,15 +201,17 @@ const AdminUsersPage = () => {
 
         const amount = Number(lockAmount);
         if (!Number.isInteger(amount) || amount < 1) {
-            setErrorMessage('Vui lòng nhập thời hạn khóa là số nguyên lớn hơn 0.');
+            setErrorMessage(translatePageText("Vui lòng nhập thời hạn khóa là số nguyên lớn hơn 0."));
             return;
         }
 
         try {
             setBusy(true);
             const target = lockTarget;
-            const res = await adminAPI.users.lock(target.user_id, amount, lockUnit);
-            setSuccess(`${res.data?.message || 'Đã khóa tài khoản'} (tài khoản "${target.username}")`);
+            await adminAPI.users.lock(target.user_id, amount, lockUnit);
+            setSuccess(document.documentElement.lang === 'en'
+                ? `Account locked successfully: "${target.username}"`
+                : `Đã khóa tài khoản thành công (tài khoản "${target.username}")`);
             setLockTarget(null);
             fetchUsers(currentPage);
             fetchStats();
@@ -214,7 +230,9 @@ const AdminUsersPage = () => {
             setBusy(true);
             const target = unlockTarget;
             await adminAPI.users.unlock(target.user_id);
-            setSuccess(`Đã mở khóa tài khoản "${target.username}"`);
+            setSuccess(document.documentElement.lang === 'en'
+                ? `Account unlocked successfully: "${target.username}"`
+                : `Đã mở khóa tài khoản thành công (tài khoản "${target.username}")`);
             setUnlockTarget(null);
             fetchUsers(currentPage);
             fetchStats();
@@ -227,7 +245,7 @@ const AdminUsersPage = () => {
     };
 
     return (
-        <AdminPageShell title="Quản lý người dùng">
+        <AdminPageShell title={translatePageText("Quản lý người dùng")}>
             {/* Thống kê: một hàng */}
             <StatGrid>
                 <StatCard label="Tổng người dùng" value={stats.total} icon="fa-users" tone="red" />
@@ -253,20 +271,18 @@ const AdminUsersPage = () => {
                             value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             onKeyDown={handleSearchKeyDown}
-                            placeholder="Tìm theo tên, email hoặc SDT, nhấn Enter..."
+                            placeholder={translatePageText("Tìm theo tên, email hoặc SDT, nhấn Enter...")}
                             className="w-full border border-gray-300 rounded pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-red-600"
                         />
                     </div>
-                    <button onClick={applySearch} className="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700">
-                        Tìm
-                    </button>
+                    <button onClick={applySearch} className="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700">{translatePageText("Tìm") + " "}</button>
                 </div>
                 <select
                     value={membership}
                     onChange={(e) => setMembership(e.target.value)}
                     className="border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:border-red-600"
                 >
-                    <option value="">Tất cả bậc</option>
+                    <option value="">{translatePageText("Tất cả bậc")}</option>
                     {Object.entries(MEMBERSHIP_LABELS).map(([key, label]) => (
                         <option key={key} value={key}>{label}</option>
                     ))}
@@ -276,16 +292,16 @@ const AdminUsersPage = () => {
                     onChange={(e) => setStatus(e.target.value)}
                     className="border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:outline-none focus:border-red-600"
                 >
-                    <option value="">Mọi trạng thái</option>
-                    <option value="active">Đang hoạt động</option>
-                    <option value="locked">Đang bị khóa</option>
+                    <option value="">{translatePageText("Mọi trạng thái")}</option>
+                    <option value="active">{translatePageText("Đang hoạt động")}</option>
+                    <option value="locked">{translatePageText("Đang bị khóa")}</option>
                 </select>
                 <button
                     onClick={handleExport}
                     disabled={exporting}
                     className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
                 >
-                    {exporting ? 'Đang xuất...' : 'Xuất Excel'}
+                    {exporting ? translatePageText("Đang xuất...") : translatePageText("Xuất Excel")}
                 </button>
             </div>
 
@@ -296,12 +312,12 @@ const AdminUsersPage = () => {
                         <thead>
                             <tr className="bg-red-600 text-white">
                                 <th className="px-4 py-2.5 text-left w-16">STT</th>
-                                <th className="px-4 py-2.5 text-left">Tên người dùng</th>
-                                <th className="px-4 py-2.5 text-left">SĐT</th>
+                                <th className="px-4 py-2.5 text-left">{translatePageText("Tên người dùng")}</th>
+                                <th className="px-4 py-2.5 text-left">{translatePageText("SĐT")}</th>
                                 <th className="px-4 py-2.5 text-left">Gmail</th>
-                                <th className="px-4 py-2.5 text-left">Bậc thành viên</th>
-                                <th className="px-4 py-2.5 text-left">Trạng thái</th>
-                                <th className="px-4 py-2.5 text-left">Thao tác</th>
+                                <th className="px-4 py-2.5 text-left">{translatePageText("Bậc thành viên")}</th>
+                                <th className="px-4 py-2.5 text-left">{translatePageText("Trạng thái")}</th>
+                                <th className="px-4 py-2.5 text-left">{translatePageText("Thao tác")}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -311,9 +327,7 @@ const AdminUsersPage = () => {
                                 </tr>
                             ) : users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                                        Không tìm thấy người dùng nào
-                                    </td>
+                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500">{translatePageText("Không tìm thấy người dùng nào") + " "}</td>
                                 </tr>
                             ) : (
                                 users.map((user) => (
@@ -329,13 +343,10 @@ const AdminUsersPage = () => {
                                         </td>
                                         <td className="px-4 py-1.5">
                                             {user.is_locked ? (
-                                                <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
-                                                    Bị khóa đến {formatDateTime(user.locked_until)}
+                                                <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">{translatePageText("Bị khóa đến") + " "}{formatDateTime(user.locked_until)}
                                                 </span>
                                             ) : (
-                                                <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">
-                                                    Hoạt động
-                                                </span>
+                                                <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">{translatePageText("Hoạt động") + " "}</span>
                                             )}
                                         </td>
                                         <td className="px-4 py-1.5">
@@ -343,16 +354,12 @@ const AdminUsersPage = () => {
                                                 <button
                                                     onClick={() => setUnlockTarget(user)}
                                                     className="px-2.5 py-1 rounded border border-green-600 text-green-700 text-xs font-semibold hover:bg-green-600 hover:text-white transition"
-                                                >
-                                                    Mở khóa
-                                                </button>
+                                                >{translatePageText("Mở khóa") + " "}</button>
                                             ) : (
                                                 <button
                                                     onClick={() => openLockModal(user)}
                                                     className="px-2.5 py-1 rounded border border-red-600 text-red-600 text-xs font-semibold hover:bg-red-600 hover:text-white transition"
-                                                >
-                                                    Khóa tài khoản
-                                                </button>
+                                                >{translatePageText("Khóa tài khoản") + " "}</button>
                                             )}
                                         </td>
                                     </tr>
@@ -375,31 +382,27 @@ const AdminUsersPage = () => {
                         onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }}
                         className={`w-20 border rounded px-2 py-1 text-center ${NO_SPIN}`}
                     />
-                    <Button variant="secondary" size="sm" onClick={handleGoToPage}>
-                        Đi tới
-                    </Button>
+                    <Button variant="secondary" size="sm" onClick={handleGoToPage}>{translatePageText("Đi tới") + " "}</Button>
                 </div>
             </div>
 
             {/* Modal khóa tài khoản */}
             <Modal
                 isOpen={!!lockTarget}
-                title="Khóa tài khoản"
+                title={translatePageText("Khóa tài khoản")}
                 onClose={() => !busy && setLockTarget(null)}
                 onConfirm={handleConfirmLock}
-                confirmText={busy ? 'Đang xử lý...' : 'Khóa'}
+                confirmText={busy ? translatePageText("Đang xử lý...") : translatePageText("Khóa")}
                 cancelText="Hủy"
             >
-                <p className="text-gray-700 mb-4">
-                    Khóa tài khoản <strong>{lockTarget?.username}</strong> trong bao lâu?
-                </p>
+                <p className="text-gray-700 mb-4">{translatePageText("Khóa tài khoản") + " "}<strong>{lockTarget?.username}</strong>{" " + translatePageText("trong bao lâu?") + " "}</p>
                 <div className="flex items-center gap-2">
                     <input
                         type="number"
                         min={1}
                         value={lockAmount}
                         onChange={(e) => setLockAmount(e.target.value)}
-                        placeholder="Nhập số"
+                        placeholder={translatePageText("Nhập số")}
                         className={`w-28 border rounded px-3 py-2 focus:outline-none focus:border-red-600 ${NO_SPIN}`}
                     />
                     <div className="inline-flex rounded-lg border-2 border-red-600 overflow-hidden">
@@ -415,27 +418,25 @@ const AdminUsersPage = () => {
                         ))}
                     </div>
                 </div>
-                <p className="mt-3 text-xs text-gray-500">Tối đa 100 năm. Lý do hiển thị cho người dùng: vi phạm chính sách nội quy Nhà hàng.</p>
+                <p className="mt-3 text-xs text-gray-500">{translatePageText("Tối đa 100 năm. Lý do hiển thị cho người dùng: vi phạm chính sách nội quy Nhà hàng.")}</p>
             </Modal>
 
             {/* Modal mở khóa */}
             <Modal
                 isOpen={!!unlockTarget}
-                title="Mở khóa tài khoản"
+                title={translatePageText("Mở khóa tài khoản")}
                 onClose={() => !busy && setUnlockTarget(null)}
                 onConfirm={handleConfirmUnlock}
-                confirmText={busy ? 'Đang xử lý...' : 'Mở khóa'}
+                confirmText={busy ? translatePageText("Đang xử lý...") : translatePageText("Mở khóa")}
                 cancelText="Hủy"
             >
-                <p className="text-gray-700">
-                    Bạn có chắc muốn mở khóa tài khoản <strong>{unlockTarget?.username}</strong> không?
-                </p>
+                <p className="text-gray-700">{translatePageText("Bạn có chắc muốn mở khóa tài khoản") + " "}<strong>{unlockTarget?.username}</strong>{" " + translatePageText("không?") + " "}</p>
             </Modal>
 
             {/* Modal thành công */}
             <Modal
                 isOpen={!!success}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setSuccess(null)}
@@ -446,7 +447,7 @@ const AdminUsersPage = () => {
             {/* Modal gửi mail: đang gửi / thành công / thất bại */}
             <Modal
                 isOpen={!!mailState}
-                title={mailState?.status === 'sending' ? 'Đang gửi mail' : mailState?.status === 'error' ? 'Gửi mail thất bại' : 'Gửi mail thành công'}
+                title={mailState?.status === 'sending' ? translatePageText("Đang gửi mail") : mailState?.status === 'error' ? translatePageText("Gửi mail thất bại") : translatePageText("Gửi mail thành công")}
                 showHeaderClose={mailState?.status !== 'sending'}
                 showFooterClose={false}
                 onClose={() => mailState?.status !== 'sending' && setMailState(null)}
@@ -462,7 +463,7 @@ const AdminUsersPage = () => {
             {/* Modal lỗi */}
             <Modal
                 isOpen={!!errorMessage}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setErrorMessage(null)}

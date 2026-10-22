@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import * as authAPI from '@/services/api';
 import { userAPI } from '@/services/api';
+import i18n from '../i18n';
 
 /**
  * useAuth - Authentication hook for React
@@ -32,7 +33,11 @@ export const useAuth = () => {
                 const savedUser = sessionStorage.getItem('user');
 
                 if (token && savedUser) {
-                    setUser(JSON.parse(savedUser));
+                    const currentUser = JSON.parse(savedUser);
+                    setUser(currentUser);
+                    if (currentUser.preferred_language) {
+                        await i18n.changeLanguage(currentUser.preferred_language);
+                    }
                     // Verify token is still valid
                     // const response = await userAPI.getProfile();
                     // setUser(response.data);
@@ -59,6 +64,9 @@ export const useAuth = () => {
             const response = await authAPI.authAPI.login(email, password);
 
             const { user, token } = response.data;
+            if (user.preferred_language) {
+                await i18n.changeLanguage(user.preferred_language);
+            }
             sessionStorage.setItem('auth_token', token);
             sessionStorage.setItem('user', JSON.stringify(user));
             setUser(user);
@@ -85,6 +93,9 @@ export const useAuth = () => {
             const response = await authAPI.authAPI.register(data);
 
             const { user, token } = response.data;
+            if (user.preferred_language) {
+                await i18n.changeLanguage(user.preferred_language);
+            }
             sessionStorage.setItem('auth_token', token);
             sessionStorage.setItem('user', JSON.stringify(user));
             setUser(user);

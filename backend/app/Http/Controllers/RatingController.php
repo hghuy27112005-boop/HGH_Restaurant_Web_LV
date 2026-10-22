@@ -11,6 +11,7 @@ use App\Models\Order;
 use App\Models\RecommendationExclusion;
 use App\Services\GeminiChatbotService;
 use App\Services\ContentModerationService;
+use App\Support\PreferredLanguage;
 
 class RatingController extends Controller
 {
@@ -26,6 +27,7 @@ class RatingController extends Controller
     public function ratableItems(Request $request)
     {
         $userId = Auth::id();
+        $language = PreferredLanguage::fromRequest($request);
         $moderationStatus = $this->moderation->status($userId);
 
         $orders = Order::where('user_id', $userId)
@@ -35,7 +37,7 @@ class RatingController extends Controller
             ->limit(100)
             ->get();
 
-        $data = $orders->map(function ($order) {
+        $data = $orders->map(function ($order) use ($language) {
             return [
                 'order_id' => $order->order_id,
                 'order_stt' => $order->order_stt,
@@ -50,7 +52,10 @@ class RatingController extends Controller
                     'existing_rating' => $item->review ? [
                         'rating' => $item->review->rating,
                         'comment' => $item->review->comment,
-                        'ai_response' => $item->review->ai_response,
+                        'ai_response' => $language === 'en'
+                            ? $this->englishRatingResponse((int) $item->review->rating)
+                            : ($item->review->ai_response
+                                ?? $this->vietnameseRatingResponse((int) $item->review->rating)),
                     ] : null,
                 ]),
             ];
@@ -95,21 +100,26 @@ class RatingController extends Controller
         }
 
         $rating = (int) $request->rating;
+        $language = PreferredLanguage::fromRequest($request);
         $aiResponse = $this->gemini->generateRatingResponse(
             $rating,
-            $request->input('comment')
+            $request->input('comment'),
+            $language
         );
 
-        $review = Rating::updateOrCreate(
-            ['order_item_id' => $orderItem->order_item_id],
-            [
-                'dish_id' => $orderItem->dish_id,
-                'user_id' => Auth::id(),
-                'rating' => $rating,
-                'comment' => $request->comment,
-                'ai_response' => $aiResponse,
-            ]
-        );
+        $review = Rating::firstOrNew(['order_item_id' => $orderItem->order_item_id]);
+        $storedResponse = $language === 'en'
+            ? $this->vietnameseRatingResponse($rating)
+            : $aiResponse;
+        $review->fill([
+            'dish_id' => $orderItem->dish_id,
+            'user_id' => Auth::id(),
+            'rating' => $rating,
+            'comment' => $request->comment,
+            'ai_response' => $storedResponse,
+        ]);
+        $review->save();
+        $review->setAttribute('ai_response', $aiResponse);
 
         if ($rating <= 3) {
             RecommendationExclusion::firstOrCreate([
@@ -144,6 +154,20 @@ class RatingController extends Controller
             'message' => 'Đã lưu đánh giá của bạn!',
             'data' => $review,
         ]);
+    }
+
+    private function englishRatingResponse(int $rating): string
+    {
+        return $rating >= 4
+            ? 'Thank you for supporting our restaurant. We are delighted to hear you enjoyed the dish.'
+            : 'Thank you for your feedback. We will take it into consideration as we work to improve the dish.';
+    }
+
+    private function vietnameseRatingResponse(int $rating): string
+    {
+        return $rating >= 4
+            ? 'Cảm ơn quý khách đã ủng hộ nhà hàng chúng tôi. Chúng tôi rất vui khi món ăn đã làm quý khách hài lòng.'
+            : 'Cảm ơn quý khách đã góp ý. Nhà hàng sẽ tiếp thu để cải thiện món ăn tốt hơn.';
     }
 
     /**

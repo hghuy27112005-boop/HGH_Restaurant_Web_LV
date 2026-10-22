@@ -62,17 +62,38 @@ PROMPT;
         return rtrim(mb_substr($text, 0, $lastSpace ?: 137, 'UTF-8'), ' ,;:') . '...';
     }
 
-    public function generateRatingResponse(int $rating, ?string $comment): string
+    public function generateRatingResponse(int $rating, ?string $comment, string $language = 'vi'): string
     {
-        $fallback = $rating >= 4 ? self::RATING_FALLBACK_PRAISE : self::RATING_FALLBACK_FEEDBACK;
-        $sentiment = $rating >= 4 ? 'lời khen và sự hài lòng' : 'lời chê hoặc góp ý cần được tiếp thu';
+        $isEnglish = $language === 'en';
+        $fallback = $isEnglish
+            ? ($rating >= 4
+                ? 'Thank you for supporting our restaurant. We are delighted to hear you enjoyed the dish.'
+                : 'Thank you for your feedback. We will take it into consideration as we work to improve the dish.')
+            : ($rating >= 4 ? self::RATING_FALLBACK_PRAISE : self::RATING_FALLBACK_FEEDBACK);
+        $sentiment = $rating >= 4
+            ? ($isEnglish ? 'praise and satisfaction' : 'lời khen và sự hài lòng')
+            : ($isEnglish ? 'criticism or feedback that should be considered' : 'lời chê hoặc góp ý cần được tiếp thu');
         $commentText = $comment ? trim($comment) : '(khách không viết nhận xét)';
 
-        $prompt = <<<PROMPT
+        if ($isEnglish) {
+            $prompt = <<<PROMPT
+            You are replying on behalf of HGH Restaurant to a customer's dish rating.
+            Refer to the restaurant as "we" and address the reviewer as "you".
+            The {$rating}/5 rating expresses {$sentiment}.
+            Customer comment: "{$commentText}"
+
+            Write a concise, natural, polite reply in English, no more than 2 sentences.
+            For 4 or 5 stars, prioritize thanking the customer for their support.
+            For 3 stars or fewer, thank them for their feedback and say the restaurant will consider it when improving the dish.
+            Do not argue, promise compensation, invent specific actions, or use markdown.
+            Return only the reply.
+            PROMPT;
+        } else {
+            $prompt = <<<PROMPT
 Bạn là đại diện nhà hàng HGH trả lời khách hàng sau khi họ đánh giá món ăn.
 Hãy xưng là "nhà hàng chúng tôi" hoặc "chúng tôi", gọi người đánh giá là "quý khách".
 Đánh giá {$rating}/5 sao thể hiện {$sentiment}.
-Nhận xét của khách: "{$commentText}"
+Nhận xét của khách (nếu có): "{$commentText}"
 
 Viết một phản hồi tiếng Việt ngắn vừa phải, tự nhiên, lịch sự, tối đa 2 câu.
 Nếu từ 4 sao trở lên, ưu tiên cảm ơn quý khách đã ủng hộ.
@@ -80,6 +101,7 @@ Nếu từ 3 sao trở xuống, ưu tiên cảm ơn quý khách đã góp ý và
 Không tranh luận, không hứa hẹn bồi thường, không bịa hành động cụ thể và không dùng markdown.
 Chỉ trả về nội dung phản hồi.
 PROMPT;
+        }
 
         $response = $this->callGemini($prompt, false)['text'] ?? '';
         return $response !== '' ? $response : $fallback;
@@ -260,37 +282,65 @@ PROMPT;
         return is_array($result) ? $result : ['matched' => false];
     }
 
-    public function reviseRecipeWithoutIngredients(string $originalInstructionsVi, array $removedIngredientLabelsVi): string
-    {
-        if (empty($removedIngredientLabelsVi)) {
-            return $originalInstructionsVi;
+            public function reviseRecipeWithoutIngredients(
+                string $originalInstructions,
+                array $removedIngredientLabels,
+                string $language = 'vi'
+            ): string
+            {
+                if (empty($removedIngredientLabels)) {
+                    return $originalInstructions;
+                }
+
+                $removedText = implode(', ', $removedIngredientLabels);
+
+                if ($language === 'en') {
+                    $prompt = <<<PROMPT
+                    You are editing a restaurant recipe written in English.
+
+                    Original recipe:
+                    """
+                    {$originalInstructions}
+                    """
+
+                    Ingredients to remove from the recipe: {$removedText}
+
+                    REQUIRED RULES:
+                    - Edit only steps directly involving the removed ingredients. Remove the action that adds, seasons, or garnishes with them; remove a step only if it is solely about those ingredients.
+                    - Keep every unrelated step verbatim and in the same order.
+                    - Do not add ingredients, equipment, or cooking steps not present in the original recipe.
+                    - If removing an ingredient leaves a sentence incomplete, make only the smallest edit needed to restore its meaning.
+                    - Return the revised recipe in English. Do not translate it into Vietnamese.
+                    - Do not add explanations or a heading.
+
+                    Return exactly this JSON format and nothing else:
+                    {"revised_instructions": "..."}
+                    PROMPT;
+                } else {
+                    $prompt = <<<PROMPT
+                    Bạn chỉnh sửa công thức nấu ăn tiếng Việt cho nhà hàng.
+
+                    Công thức gốc:
+                    """
+                    {$originalInstructions}
+                    """
+
+                    Nguyên liệu cần loại bỏ khỏi công thức: {$removedText}
+
+                    QUY TẮC BẮT BUỘC:
+                    - Chỉ sửa những câu/bước có liên quan trực tiếp đến nguyên liệu bị loại bỏ (bỏ hành động thêm/nêm/rắc nguyên liệu đó, bỏ luôn bước nếu bước đó chỉ xoay quanh nguyên liệu này).
+                    - Các câu/bước KHÔNG liên quan tới nguyên liệu bị loại bỏ PHẢI giữ NGUYÊN VĂN, không diễn đạt lại, không đổi từ ngữ, không đổi thứ tự các câu.
+                    - Không thêm nguyên liệu, dụng cụ hay bước nấu nào không có trong công thức gốc.
+                    - Nếu câu sau khi bỏ nguyên liệu bị cụt/thiếu chủ ngữ, chỉnh lại câu đó cho trọn nghĩa nhưng vẫn giữ đúng phong cách hành văn gốc.
+                    - Không thêm lời giải thích, không thêm tiêu đề.
+
+                    Trả về CHÍNH XÁC định dạng JSON sau, không thêm gì khác:
+                    {"revised_instructions": "..."}
+                    PROMPT;
+                }
+
+                $result = $this->callGemini($prompt, true);
+
+                return $result['revised_instructions'] ?? $originalInstructions;
+            }
         }
-
-        $removedText = implode(', ', $removedIngredientLabelsVi);
-
-        $prompt = <<<PROMPT
-        Bạn chỉnh sửa công thức nấu ăn tiếng Việt cho nhà hàng.
-
-        Công thức gốc:
-        """
-        {$originalInstructionsVi}
-        """
-
-        Nguyên liệu cần loại bỏ khỏi công thức: {$removedText}
-
-        QUY TẮC BẮT BUỘC:
-        - Chỉ sửa những câu/bước có liên quan trực tiếp đến nguyên liệu bị loại bỏ (bỏ hành động thêm/nêm/rắc nguyên liệu đó, bỏ luôn bước nếu bước đó chỉ xoay quanh nguyên liệu này).
-        - Các câu/bước KHÔNG liên quan tới nguyên liệu bị loại bỏ PHẢI giữ NGUYÊN VĂN, không diễn đạt lại, không đổi từ ngữ, không đổi thứ tự các câu.
-        - Không thêm nguyên liệu, dụng cụ hay bước nấu nào không có trong công thức gốc.
-        - Nếu câu sau khi bỏ nguyên liệu bị cụt/thiếu chủ ngữ, chỉnh lại câu đó cho trọn nghĩa nhưng vẫn giữ đúng phong cách hành văn gốc.
-        - Không thêm lời giải thích, không thêm tiêu đề.
-
-        Trả về CHÍNH XÁC định dạng JSON sau, không thêm gì khác:
-        {"revised_instructions": "..."}
-        PROMPT;
-
-        $result = $this->callGemini($prompt, true);
-
-        return $result['revised_instructions'] ?? $originalInstructionsVi;
-    }
-}

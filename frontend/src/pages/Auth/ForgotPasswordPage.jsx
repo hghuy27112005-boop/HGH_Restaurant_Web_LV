@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../../services/api';
 import { ErrorMessage, SuccessMessage } from '../../components/Shared';
+import { translatePageText } from '../../pageTextTranslations';
 
 // Cùng ảnh nền với trang đăng nhập
 const AUTH_BACKGROUND = '/pics/30.jpg';
@@ -130,7 +131,7 @@ const ForgotPasswordPage = () => {
         }
         // 429 do giới hạn IP của Laravel (không có code)
         if (err.response?.status === 429 && !data?.code) {
-            setError('Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.');
+            setError(translatePageText("Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút."));
             return;
         }
         setError(data?.message || fallback);
@@ -141,7 +142,7 @@ const ForgotPasswordPage = () => {
         clearMessages();
         const trimmed = email.trim();
         if (!trimmed) {
-            setError('Vui lòng nhập địa chỉ Email.');
+            setError(translatePageText("Vui lòng nhập địa chỉ Email."));
             return;
         }
 
@@ -157,7 +158,7 @@ const ForgotPasswordPage = () => {
             setSuccess(res.data.message);
             setStep(2);
         } catch (err) {
-            showError(err, 'Không gửi được mã. Vui lòng thử lại.');
+            showError(err, translatePageText("Không gửi được mã. Vui lòng thử lại."));
         } finally {
             setLoading(false);
         }
@@ -172,7 +173,7 @@ const ForgotPasswordPage = () => {
             setStep(3);
         } catch (err) {
             setOtp('');
-            showError(err, 'Xác thực thất bại. Vui lòng thử lại.');
+            showError(err, translatePageText("Xác thực thất bại. Vui lòng thử lại."));
         } finally {
             setLoading(false);
         }
@@ -181,11 +182,11 @@ const ForgotPasswordPage = () => {
     const submitNewPassword = async () => {
         clearMessages();
         if (password.length < 6) {
-            setError('Mật khẩu phải có ít nhất 6 ký tự.');
+            setError(translatePageText("Mật khẩu phải có ít nhất 6 ký tự."));
             return;
         }
         if (password !== passwordConfirm) {
-            setError('Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại!');
+            setError(translatePageText("Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại!"));
             return;
         }
 
@@ -208,7 +209,7 @@ const ForgotPasswordPage = () => {
                 setPasswordConfirm('');
                 setResetToken('');
             }
-            showError(err, 'Đặt lại mật khẩu thất bại. Vui lòng thử lại.');
+            showError(err, translatePageText("Đặt lại mật khẩu thất bại. Vui lòng thử lại."));
         } finally {
             setLoading(false);
         }
@@ -246,14 +247,14 @@ const ForgotPasswordPage = () => {
 
             <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl items-center justify-center gap-10 px-4 sm:px-6 pb-10 lg:justify-between">
                 <div className="hidden lg:block max-w-lg text-white drop-shadow-lg">
-                    <h1 className="text-5xl font-bold leading-tight">NHÀ HÀNG HGH</h1>
-                    <p className="mt-4 text-2xl text-white/90">Hương vị cơm gia đình thuần túy</p>
+                    <h1 className="text-5xl font-bold leading-tight">{translatePageText("NHÀ HÀNG HGH")}</h1>
+                    <p className="mt-4 text-2xl text-white/90">{translatePageText("Hương vị cơm gia đình thuần túy")}</p>
                 </div>
 
                 <div className="w-full max-w-[440px] rounded-2xl border border-white/20 bg-black/40 p-5 shadow-2xl backdrop-blur-md">
                     <div className="mb-3 flex items-center justify-between">
-                        <h2 className="text-lg font-bold text-white">Quên mật khẩu</h2>
-                        <span className="text-xs font-semibold text-white/70">Bước {step}/3</span>
+                        <h2 className="text-lg font-bold text-white">{translatePageText("Quên mật khẩu")}</h2>
+                        <span className="text-xs font-semibold text-white/70">{translatePageText("Bước") + " "}{step}/3</span>
                     </div>
                     <p className="mb-3 text-sm text-white/80 break-words">{stepHint}</p>
 
@@ -274,12 +275,12 @@ const ForgotPasswordPage = () => {
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
                                     maxLength="50"
-                                    placeholder="Nhập email đã đăng ký"
+                                    placeholder={translatePageText("Nhập email đã đăng ký")}
                                     className={inputClass}
                                 />
                             </div>
                             <button type="submit" disabled={loading || resendLeft > 0} className={primaryBtnClass}>
-                                {loading ? 'Đang xử lý...' : resendLeft > 0 ? `Gửi mã (đợi ${resendLeft}s)` : 'Gửi mã'}
+                                {loading ? translatePageText("Đang xử lý...") : resendLeft > 0 ? `Gửi mã (đợi ${resendLeft}s)` : translatePageText("Gửi mã")}
                             </button>
                         </form>
                     )}
@@ -287,16 +288,16 @@ const ForgotPasswordPage = () => {
                     {step === 2 && (
                         <form onSubmit={handleSubmit(verifyOtp)} className="space-y-2">
                             <div>
-                                <label className={labelClass}>Mã OTP (*):</label>
+                                <label className={labelClass}>{translatePageText("Mã OTP (*):")}</label>
                                 <OtpInput value={otp} onChange={setOtp} disabled={loading} />
                             </div>
 
                             <p className={`text-sm ${otpExpired ? 'text-red-300' : 'text-white/80'}`}>
-                                {otpExpired ? 'Mã đã hết hạn. Vui lòng gửi lại mã.' : `Mã còn hiệu lực: ${formatTime(otpLeft)}`}
+                                {otpExpired ? translatePageText("Mã đã hết hạn. Vui lòng gửi lại mã.") : `Mã còn hiệu lực: ${formatTime(otpLeft)}`}
                             </p>
 
                             <button type="submit" disabled={loading || otp.length !== 6 || otpExpired} className={primaryBtnClass}>
-                                {loading ? 'Đang xử lý...' : 'Xác nhận'}
+                                {loading ? translatePageText("Đang xử lý...") : translatePageText("Xác nhận")}
                             </button>
 
                             <div className="flex items-center justify-between pt-1">
@@ -304,51 +305,47 @@ const ForgotPasswordPage = () => {
                                     type="button"
                                     onClick={backToStep1}
                                     className="text-sm text-white/80 underline underline-offset-2 hover:text-white"
-                                >
-                                    Đổi email
-                                </button>
+                                >{translatePageText("Đổi email") + " "}</button>
                                 <button
                                     type="button"
                                     onClick={sendOtp}
                                     disabled={loading || resendLeft > 0}
                                     className="text-sm font-semibold text-red-300 hover:text-red-200 disabled:cursor-not-allowed disabled:text-white/40"
                                 >
-                                    {resendLeft > 0 ? `Gửi lại mã (${resendLeft}s)` : 'Gửi lại mã'}
+                                    {resendLeft > 0 ? `Gửi lại mã (${resendLeft}s)` : translatePageText("Gửi lại mã")}
                                 </button>
                             </div>
 
-                            <p className="pt-1 text-xs text-white/60">
-                                Lưu ý: nhập sai OTP 2 lần sẽ bị khóa tạm thời chức năng quên mật khẩu.
-                            </p>
+                            <p className="pt-1 text-xs text-white/60">{translatePageText("Lưu ý: nhập sai OTP 2 lần sẽ bị khóa tạm thời chức năng quên mật khẩu.") + " "}</p>
                         </form>
                     )}
 
                     {step === 3 && (
                         <form onSubmit={handleSubmit(submitNewPassword)} className="space-y-2">
                             <div>
-                                <label className={labelClass}>Mật khẩu mới (*):</label>
+                                <label className={labelClass}>{translatePageText("Mật khẩu mới (*):")}</label>
                                 <input
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    placeholder="Tối thiểu 6 ký tự"
+                                    placeholder={translatePageText("Tối thiểu 6 ký tự")}
                                     className={inputClass}
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>Xác nhận mật khẩu mới (*):</label>
+                                <label className={labelClass}>{translatePageText("Xác nhận mật khẩu mới (*):")}</label>
                                 <input
                                     type="password"
                                     value={passwordConfirm}
                                     onChange={(e) => setPasswordConfirm(e.target.value)}
                                     required
-                                    placeholder="Nhập lại mật khẩu mới"
+                                    placeholder={translatePageText("Nhập lại mật khẩu mới")}
                                     className={inputClass}
                                 />
                             </div>
                             <button type="submit" disabled={loading || !!success} className={primaryBtnClass}>
-                                {loading ? 'Đang xử lý...' : 'Đặt lại mật khẩu'}
+                                {loading ? translatePageText("Đang xử lý...") : translatePageText("Đặt lại mật khẩu")}
                             </button>
                         </form>
                     )}
@@ -358,9 +355,7 @@ const ForgotPasswordPage = () => {
                             type="button"
                             className="font-semibold text-white underline underline-offset-2"
                             onClick={() => navigate('/login')}
-                        >
-                            Quay lại đăng nhập
-                        </button>
+                        >{translatePageText("Quay lại đăng nhập") + " "}</button>
                     </p>
                 </div>
             </div>

@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Hóa Đơn {{ $bill->bill_id }}</title>
+    <title>{{ ($language ?? 'vi') === 'en' ? 'Invoice' : 'Hóa đơn' }} {{ $bill->bill_id }}</title>
     <style>
         body { font-family: 'DejaVu Sans', sans-serif; font-size: 13px; color: #333; line-height: 1.5; }
         .invoice-box { max-width: 800px; margin: auto; padding: 20px; }
@@ -31,7 +31,11 @@
         $isBooking = $order->order_type === 'booking_table';
         $isPaid = $bill->payment_method !== 'unpaid';
 
-        $customerName = 'Khách hàng';
+        $language = ($language ?? 'vi') === 'en' ? 'en' : 'vi';
+        $isEnglish = $language === 'en';
+        $currency = $isEnglish ? 'VND' : 'VNĐ';
+        $formatAmount = fn ($amount) => number_format($amount, 0, $isEnglish ? '.' : ',', $isEnglish ? ',' : '.') . ' ' . $currency;
+        $customerName = $isEnglish ? 'Customer' : 'Khách hàng';
         try {
             $customerName = $order->user->name ?? $order->user->username ?? $customerName;
         } catch (\Throwable $e) {
@@ -45,58 +49,58 @@
     <div class="invoice-box">
         <div class="header">
             <div class="restaurant-name">HGH RESTAURANT</div>
-            <p>Địa chỉ: Số 52, đường số 2, Khu CBGV ĐHCT, Phường An Khánh, Quận Ninh Kiều, TP. Cần Thơ</p>
-            <p>Điện thoại: 0907106674</p>
+            <p>{{ $isEnglish ? 'Address:' : 'Địa chỉ:' }} Số 52, đường số 2, Khu CBGV ĐHCT, Phường An Khánh, Quận Ninh Kiều, TP. Cần Thơ</p>
+            <p>{{ $isEnglish ? 'Phone:' : 'Điện thoại:' }} 0907106674</p>
         </div>
 
         <table class="invoice-info">
             <tr>
                 <td style="width: 50%;">
-                    <strong>Khách hàng:</strong> {{ $customerName }}<br>
-                    <strong>Loại đơn:</strong> {{ $isBooking ? 'Đặt bàn' : 'Giao hàng' }}<br>
+                    <strong>{{ $isEnglish ? 'Customer:' : 'Khách hàng:' }}</strong> {{ $customerName }}<br>
+                    <strong>{{ $isEnglish ? 'Order type:' : 'Loại đơn:' }}</strong> {{ $isBooking ? ($isEnglish ? 'Booking' : 'Đặt bàn') : ($isEnglish ? 'Delivery' : 'Giao hàng') }}<br>
                     @if(!$isBooking)
-                        <strong>Địa chỉ giao:</strong> {{ $order->delivery->address ?? 'N/A' }}
+                        <strong>{{ $isEnglish ? 'Delivery address:' : 'Địa chỉ giao:' }}</strong> {{ $order->delivery->address ?? 'N/A' }}
                     @else
-                        <strong>Số bàn:</strong> Bàn {{ $bookings->pluck('table_number')->sort()->values()->implode(', ') }}
+                        <strong>{{ $isEnglish ? 'Table(s):' : 'Số bàn:' }}</strong> {{ $isEnglish ? '' : 'Bàn ' }}{{ $bookings->pluck('table_number')->sort()->values()->implode(', ') }}
                     @endif
                 </td>
                 <td style="text-align: right;">
-                    <strong>Mã hóa đơn:</strong> {{ $bill->bill_id }}<br>
-                    <strong>Ngày đặt:</strong> {{ \Carbon\Carbon::parse($bill->created_at)->format('d/m/Y H:i') }}<br>
-                    <strong>Thanh toán:</strong>
+                    <strong>{{ $isEnglish ? 'Invoice ID:' : 'Mã hóa đơn:' }}</strong> {{ $bill->bill_id }}<br>
+                    <strong>{{ $isEnglish ? 'Order date:' : 'Ngày đặt:' }}</strong> {{ \Carbon\Carbon::parse($bill->created_at)->format($isEnglish ? 'm/d/Y H:i' : 'd/m/Y H:i') }}<br>
+                    <strong>{{ $isEnglish ? 'Payment:' : 'Thanh toán:' }}</strong>
                     @if($isPaid)
-                        <span class="status-paid">Đã thanh toán ({{ $bill->payment_method }})</span>
+                        <span class="status-paid">{{ $isEnglish ? 'Paid' : 'Đã thanh toán' }} ({{ $bill->payment_method === 'Points' ? ($isEnglish ? 'Points' : 'Điểm') : $bill->payment_method }})</span>
                     @else
-                        <span class="status-pending">Chưa thanh toán</span>
+                        <span class="status-pending">{{ $isEnglish ? 'Unpaid' : 'Chưa thanh toán' }}</span>
                     @endif
                 </td>
             </tr>
         </table>
 
         @if($isBooking && $firstBooking)
-        <div class="section-title">Thông tin đặt bàn</div>
+        <div class="section-title">{{ $isEnglish ? 'Booking details' : 'Thông tin đặt bàn' }}</div>
         <table style="width: 100%; border: none;">
             <tr>
                 <td style="border: none; padding: 5px 0;">
-                    <strong>Số bàn:</strong> <span class="highlight">Bàn {{ $bookings->pluck('table_number')->sort()->values()->implode(', ') }}</span>
+                    <strong>{{ $isEnglish ? 'Table(s):' : 'Số bàn:' }}</strong> <span class="highlight">{{ $isEnglish ? '' : 'Bàn ' }}{{ $bookings->pluck('table_number')->sort()->values()->implode(', ') }}</span>
                 </td>
                 <td style="border: none; padding: 5px 0; text-align: right;">
-                    <strong>Ngày đến:</strong> {{ \Carbon\Carbon::parse($firstBooking->booking_date)->format('d/m/Y') }} |
-                    <strong>Giờ:</strong> {{ \Carbon\Carbon::parse($firstBooking->start_time)->format('H:i') }} - {{ \Carbon\Carbon::parse($firstBooking->end_time)->format('H:i') }}
+                    <strong>{{ $isEnglish ? 'Visit date:' : 'Ngày đến:' }}</strong> {{ \Carbon\Carbon::parse($firstBooking->booking_date)->format($isEnglish ? 'm/d/Y' : 'd/m/Y') }} |
+                    <strong>{{ $isEnglish ? 'Time:' : 'Giờ:' }}</strong> {{ \Carbon\Carbon::parse($firstBooking->start_time)->format('H:i') }} - {{ \Carbon\Carbon::parse($firstBooking->end_time)->format('H:i') }}
                 </td>
             </tr>
         </table>
         @endif
 
-        <div class="section-title">Chi tiết đơn hàng</div>
+        <div class="section-title">{{ $isEnglish ? 'Order details' : 'Chi tiết đơn hàng' }}</div>
         <table class="items">
             <thead>
                 <tr>
-                    <th style="width: 5%;">STT</th>
-                    <th>Tên Món Ăn</th>
-                    <th style="width: 15%; text-align: center;">Số Lượng</th>
-                    <th style="width: 20%; text-align: right;">Đơn Giá</th>
-                    <th style="width: 20%; text-align: right;">Thành Tiền</th>
+                    <th style="width: 5%;">{{ $isEnglish ? '#' : 'STT' }}</th>
+                    <th>{{ $isEnglish ? 'Dish' : 'Tên món ăn' }}</th>
+                    <th style="width: 15%; text-align: center;">{{ $isEnglish ? 'Quantity' : 'Số lượng' }}</th>
+                    <th style="width: 20%; text-align: right;">{{ $isEnglish ? 'Unit price' : 'Đơn giá' }}</th>
+                    <th style="width: 20%; text-align: right;">{{ $isEnglish ? 'Subtotal' : 'Thành tiền' }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -104,14 +108,14 @@
                 <tr>
                     <td style="text-align: center;">{{ $loop->iteration }}</td>
                     <td>
-                        <div class="highlight">{{ $item->dish->dish_name ?? 'N/A' }}</div>
+                        <div class="highlight">{{ $item->dish ? ($isEnglish ? \App\Support\DishName::english($item->dish) : $item->dish->dish_name) : 'N/A' }}</div>
                         @if($item->customization_name)
-                            <div style="font-size: 11px; color: #666; margin-top: 3px;">Công thức thay thế: {{ $item->customization_name }}</div>
+                            <div style="font-size: 11px; color: #666; margin-top: 3px;">{{ $isEnglish ? 'Custom recipe:' : 'Công thức thay thế:' }} {{ $item->customization_name }}</div>
                         @endif
                     </td>
                     <td style="text-align: center;">{{ $item->quantity }}</td>
-                    <td style="text-align: right;">{{ number_format($item->unit_price, 0, ',', '.') }}đ</td>
-                    <td style="text-align: right; font-weight: bold;">{{ number_format($item->unit_price * $item->quantity, 0, ',', '.') }}đ</td>
+                    <td style="text-align: right;">{{ $formatAmount($item->unit_price) }}</td>
+                    <td style="text-align: right; font-weight: bold;">{{ $formatAmount($item->unit_price * $item->quantity) }}</td>
                 </tr>
                 @endforeach
             </tbody>
@@ -165,44 +169,44 @@
             
             @if($bill->sale_off_percentage !== null)
                 {{-- Hóa đơn có áp dụng giảm giá sự kiện --}}
-                <p style="font-size: 16px; margin-bottom: 5px;">Số tiền phải trả: {{ number_format($subtotal, 0, ',', '.') }} VNĐ</p>
-                <p style="font-size: 14px; color: #E67E22; margin-bottom: 5px;">Giảm giá sự kiện: {{ number_format($bill->sale_off_percentage, 0, ',', '.') }}%</p>
+                <p style="font-size: 16px; margin-bottom: 5px;">{{ $isEnglish ? 'Subtotal:' : 'Số tiền phải trả:' }} {{ $formatAmount($subtotal) }}</p>
+                <p style="font-size: 14px; color: #E67E22; margin-bottom: 5px;">{{ $isEnglish ? 'Promotion discount:' : 'Giảm giá sự kiện:' }} {{ number_format($bill->sale_off_percentage, 0, ',', '.') }}%</p>
                 @if($bill->payment_method === 'Points')
-                    <p style="font-size: 14px; color: #27AE60; margin-bottom: 5px;">Đã thanh toán bằng điểm: -{{ number_format(floor($bill->sale_off_total_price / 100), 0, ',', '.') }} điểm</p>
-                    <p class="total-amount">Số tiền đã trả: {{ number_format($total, 0, ',', '.') }} VNĐ</p>
+                    <p style="font-size: 14px; color: #27AE60; margin-bottom: 5px;">{{ $isEnglish ? 'Paid with points:' : 'Đã thanh toán bằng điểm:' }} -{{ number_format(floor($bill->sale_off_total_price / 100), 0, ',', '.') }} {{ $isEnglish ? 'points' : 'điểm' }}</p>
+                    <p class="total-amount">{{ $isEnglish ? 'Amount paid:' : 'Số tiền đã trả:' }} {{ $formatAmount($total) }}</p>
                 @else
-                    <p class="total-amount">Số tiền đã trả: {{ number_format($total, 0, ',', '.') }} VNĐ</p>
+                    <p class="total-amount">{{ $isEnglish ? 'Amount paid:' : 'Số tiền đã trả:' }} {{ $formatAmount($total) }}</p>
                 @endif
             @elseif($bill->payment_method === 'Points')
-                <p style="font-size: 16px; margin-bottom: 5px;">Số tiền phải trả: {{ number_format($subtotal, 0, ',', '.') }} VNĐ</p>
-                <p style="font-size: 14px; color: #27AE60; margin-bottom: 5px;">Đã thanh toán bằng điểm: -{{ number_format(floor($subtotal / 100), 0, ',', '.') }} điểm</p>
+                <p style="font-size: 16px; margin-bottom: 5px;">{{ $isEnglish ? 'Subtotal:' : 'Số tiền phải trả:' }} {{ $formatAmount($subtotal) }}</p>
+                <p style="font-size: 14px; color: #27AE60; margin-bottom: 5px;">{{ $isEnglish ? 'Paid with points:' : 'Đã thanh toán bằng điểm:' }} -{{ number_format(floor($subtotal / 100), 0, ',', '.') }} {{ $isEnglish ? 'points' : 'điểm' }}</p>
                 @if($shippingFee !== null)
-                <p style="font-size: 16px; margin-bottom: 5px;">Phí ship trả riêng: {{ number_format($shippingFee, 0, ',', '.') }} VNĐ</p>
+                <p style="font-size: 16px; margin-bottom: 5px;">{{ $isEnglish ? 'Delivery fee (paid separately):' : 'Phí ship trả riêng:' }} {{ $formatAmount($shippingFee) }}</p>
                 @endif
             @elseif($discount > 0 && $bill->payment_method === 'vnpay')
-                <p style="font-size: 16px; margin-bottom: 5px;">Số tiền phải trả: {{ number_format($subtotal, 0, ',', '.') }} VNĐ</p>
-                <p style="font-size: 14px; color: #E67E22; margin-bottom: 5px;">Hóa đơn đã áp mã giảm giá VNPay. Giảm: {{ number_format($discount, 0, ',', '.') }} VNĐ</p>
-                <p class="total-amount">Còn: {{ number_format($total, 0, ',', '.') }} VNĐ</p>
+                <p style="font-size: 16px; margin-bottom: 5px;">{{ $isEnglish ? 'Subtotal:' : 'Số tiền phải trả:' }} {{ $formatAmount($subtotal) }}</p>
+                <p style="font-size: 14px; color: #E67E22; margin-bottom: 5px;">{{ $isEnglish ? 'VNPay discount:' : 'Hóa đơn đã áp mã giảm giá VNPay. Giảm:' }} {{ number_format($discount, 0, ',', '.') }} {{ $currency }}</p>
+                <p class="total-amount">{{ $isEnglish ? 'Amount due:' : 'Còn:' }} {{ $formatAmount($total) }}</p>
             @else
-                <p style="font-size: 16px; margin-bottom: 5px;">Số tiền phải trả: {{ number_format($subtotal, 0, ',', '.') }} VNĐ</p>
+                <p style="font-size: 16px; margin-bottom: 5px;">{{ $isEnglish ? 'Subtotal:' : 'Số tiền phải trả:' }} {{ $formatAmount($subtotal) }}</p>
                 @if($discount > 0)
-                <p style="font-size: 14px; color: #E67E22; margin-bottom: 5px;">Giảm giá: -{{ number_format($discount, 0, ',', '.') }} VNĐ</p>
+                <p style="font-size: 14px; color: #E67E22; margin-bottom: 5px;">{{ $isEnglish ? 'Discount:' : 'Giảm giá:' }} -{{ $formatAmount($discount) }}</p>
                 @endif
-                <p class="total-amount">Số tiền đã trả: {{ number_format($total, 0, ',', '.') }} VNĐ</p>
+                <p class="total-amount">{{ $isEnglish ? 'Amount paid:' : 'Số tiền đã trả:' }} {{ $formatAmount($total) }}</p>
                 @if($shippingFee !== null)
-                <p style="font-size: 16px; margin-bottom: 5px;">Phí ship trả riêng: {{ number_format($shippingFee, 0, ',', '.') }} VNĐ</p>
+                <p style="font-size: 16px; margin-bottom: 5px;">{{ $isEnglish ? 'Delivery fee (paid separately):' : 'Phí ship trả riêng:' }} {{ $formatAmount($shippingFee) }}</p>
                 @endif
             @endif
         </div>
         
         <div style="margin-top: 20px; text-align: right; font-size: 13px; font-weight: bold; color: #333;">
-            <p>Số điểm quý khách tích lũy được từ đơn hàng: {{ $basePoints }} + {{ $bonusPoints }} = {{ $totalPoints }}</p>
+            <p>{{ $isEnglish ? 'Points earned on this order:' : 'Số điểm quý khách tích lũy được từ đơn hàng:' }} {{ $basePoints }} + {{ $bonusPoints }} = {{ $totalPoints }}</p>
         </div>
 
         <div class="footer">
-            <p>Cảm ơn quý khách đã ủng hộ HGH Restaurant!</p>
-            <p>Hóa đơn này có giá trị xác nhận giao dịch tại nhà hàng.</p>
-            <p>--- Chúc quý khách ngon miệng ---</p>
+            <p>{{ $isEnglish ? 'Thank you for choosing HGH Restaurant!' : 'Cảm ơn quý khách đã ủng hộ HGH Restaurant!' }}</p>
+            <p>{{ $isEnglish ? 'This invoice confirms your transaction with the restaurant.' : 'Hóa đơn này có giá trị xác nhận giao dịch tại nhà hàng.' }}</p>
+            <p>{{ $isEnglish ? '--- Enjoy your meal! ---' : '--- Chúc quý khách ngon miệng ---' }}</p>
         </div>
     </div>
 </body>

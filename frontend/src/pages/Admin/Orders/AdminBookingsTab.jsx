@@ -6,28 +6,29 @@ import {
     DateFilter, Pagination, todayDateFilter, emptyDateFilter, dateFilterToParams,
     EXPORT_LIMIT, fetchAllRows, downloadXlsx,
 } from './orderTools';
+import { translatePageText } from '../../../pageTextTranslations';
+import { translateDishName } from '../../../dishTranslations';
 
 const BOOKING_STATUS = {
-    scheduled: { label: 'Đã lên lịch', color: 'info' },
-    preparing: { label: 'Đang chuẩn bị', color: 'info' },
-    completed: { label: 'Đã hoàn thành', color: 'success' },
-    cancelled: { label: 'Đã hủy', color: 'danger' },
+    scheduled: { get label() { return translatePageText("Đã lên lịch"); }, color: 'info' },
+    preparing: { get label() { return translatePageText("Đang chuẩn bị"); }, color: 'info' },
+    completed: { get label() { return translatePageText("Đã hoàn thành"); }, color: 'success' },
+    cancelled: { get label() { return translatePageText("Đã hủy"); }, color: 'danger' },
 };
 
 const PAYMENT_STATUS = {
-    unpaid: { label: 'Chưa thanh toán', color: 'danger' },
-    paid: { label: 'Đã thanh toán', color: 'success' },
-    refunded: { label: 'Đã hoàn tiền', color: 'warning' },
+    unpaid: { get label() { return translatePageText("Chưa thanh toán"); }, color: 'danger' },
+    paid: { get label() { return translatePageText("Đã thanh toán"); }, color: 'success' },
+    refunded: { get label() { return translatePageText("Đã hoàn tiền"); }, color: 'warning' },
 };
 
-const PAYMENT_METHOD = { vnpay: 'VNPay', Points: 'Điểm' };
-const methodLabel = (m) => PAYMENT_METHOD[m] || m || '—';
+const methodLabel = (m) => m === 'Points' ? translatePageText('Điểm') : m === 'vnpay' ? 'VNPay' : m || '—';
 
 const STAT_CARDS = [
-    { key: 'scheduled', label: 'Đã lên lịch', icon: 'fa-calendar-check', tone: 'blue' },
-    { key: 'preparing', label: 'Đang chuẩn bị', icon: 'fa-fire-burner', tone: 'orange' },
-    { key: 'completed', label: 'Đã hoàn thành', icon: 'fa-circle-check', tone: 'green' },
-    { key: 'cancelled', label: 'Đã hủy', icon: 'fa-ban', tone: 'gray' },
+    { key: 'scheduled', get label() { return translatePageText("Đã lên lịch"); }, icon: 'fa-calendar-check', tone: 'blue' },
+    { key: 'preparing', get label() { return translatePageText("Đang chuẩn bị"); }, icon: 'fa-fire-burner', tone: 'orange' },
+    { key: 'completed', get label() { return translatePageText("Đã hoàn thành"); }, icon: 'fa-circle-check', tone: 'green' },
+    { key: 'cancelled', get label() { return translatePageText("Đã hủy"); }, icon: 'fa-ban', tone: 'gray' },
 ];
 
 const emptyFilters = () => ({
@@ -40,11 +41,13 @@ const emptyFilters = () => ({
 
 const formatDate = (value) => {
     if (!value) return '—';
-    const [y, m, d] = String(value).split('-');
-    return `${d}/${m}/${y}`;
+    const [y, m, d] = String(value).split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN');
 };
 
-const formatDateTime = (value) => value ? new Date(value).toLocaleString('vi-VN') : '—';
+const formatDateTime = (value) => value
+    ? new Date(value).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')
+    : '—';
 const tablesText = (tables) => (tables && tables.length > 0 ? tables.join(', ') : '—');
 const timeRange = (b) => (b.start_time && b.end_time ? `${b.start_time} - ${b.end_time}` : '—');
 
@@ -79,7 +82,7 @@ const AdminBookingsTab = () => {
             window.open(url, '_blank');
         } catch (err) {
             setSelected(null);
-            setErrorMessage('Không thể xuất hóa đơn. Vui lòng thử lại.');
+            setErrorMessage(translatePageText("Không thể xuất hóa đơn. Vui lòng thử lại."));
         } finally {
             setExportingPdf(false);
         }
@@ -163,27 +166,29 @@ const AdminBookingsTab = () => {
     const handleExport = async () => {
         if (exporting) return;
         if ((pagination.total || 0) > EXPORT_LIMIT) {
-            setErrorMessage(`Có ${pagination.total} đơn khớp bộ lọc, vượt giới hạn xuất ${EXPORT_LIMIT} đơn. Vui lòng thu hẹp bộ lọc (ví dụ chọn ít ngày hơn) rồi xuất lại.`);
+            setErrorMessage(document.documentElement.lang === 'en'
+                ? `${pagination.total} bookings match the current filters, exceeding the export limit of ${EXPORT_LIMIT}. Narrow the filters (for example, select fewer dates) and try again.`
+                : `Có ${pagination.total} đơn khớp bộ lọc, vượt giới hạn xuất ${EXPORT_LIMIT} đơn. Vui lòng thu hẹp bộ lọc (ví dụ chọn ít ngày hơn) rồi xuất lại.`);
             return;
         }
         try {
             setExporting(true);
             const rows = await fetchAllRows((p, per) => adminAPI.bookings.getAll(listParams(p, per)));
             await downloadXlsx(
-                'don-dat-ban.xlsx',
-                'Đặt bàn',
+                document.documentElement.lang === 'en' ? 'bookings.xlsx' : 'don-dat-ban.xlsx',
+                translatePageText('Đặt bàn'),
                 [
-                    { header: 'Mã hóa đơn', width: 16, type: 'text' },
-                    { header: 'ID người dùng', width: 14, type: 'number' },
-                    { header: 'Tên người dùng', width: 18, type: 'text' },
-                    { header: 'Số điện thoại', width: 15, type: 'text' },
-                    { header: 'Bàn', width: 12, type: 'text' },
-                    { header: 'Ngày khách đến', width: 16, type: 'text' },
-                    { header: 'Giờ', width: 15, type: 'text' },
-                    { header: 'Trạng thái', width: 16, type: 'text' },
-                    { header: 'Phương thức', width: 14, type: 'text' },
-                    { header: 'Tổng tiền', width: 16, type: 'money' },
-                    { header: 'Ngày tạo', width: 21, type: 'datetime' },
+                    { header: translatePageText('Mã hóa đơn'), width: 16, type: 'text' },
+                    { header: translatePageText('ID người dùng'), width: 14, type: 'number' },
+                    { header: translatePageText('Tên người dùng'), width: 18, type: 'text' },
+                    { header: translatePageText('Số điện thoại'), width: 15, type: 'text' },
+                    { header: translatePageText('Bàn'), width: 12, type: 'text' },
+                    { header: translatePageText('Ngày khách đến'), width: 16, type: 'text' },
+                    { header: translatePageText('Giờ'), width: 15, type: 'text' },
+                    { header: translatePageText('Trạng thái'), width: 16, type: 'text' },
+                    { header: translatePageText('Phương thức'), width: 14, type: 'text' },
+                    { header: translatePageText('Tổng tiền'), width: 16, type: 'money' },
+                    { header: translatePageText('Ngày tạo'), width: 21, type: 'datetime' },
                 ],
                 rows.map((b) => [
                     b.bill?.bill_id,
@@ -233,12 +238,10 @@ const AdminBookingsTab = () => {
                         value={billIdInput}
                         onChange={(e) => setBillIdInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') applyBillId(); }}
-                        placeholder="Nhập mã hóa đơn, nhấn Enter để tìm..."
+                        placeholder={translatePageText("Nhập mã hóa đơn, nhấn Enter để tìm...")}
                         className="flex-1 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-600"
                     />
-                    <button onClick={applyBillId} className="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700">
-                        Tìm
-                    </button>
+                    <button onClick={applyBillId} className="px-4 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700">{translatePageText("Tìm") + " "}</button>
                 </div>
 
                 <div className="relative" ref={filterRef}>
@@ -246,54 +249,49 @@ const AdminBookingsTab = () => {
                         onClick={() => { setDraft(filters); setIsFilterOpen((v) => !v); }}
                         className="bg-white hover:bg-red-50 text-red-600 font-bold py-2 px-4 rounded border-2 border-red-600 flex items-center gap-2 transition"
                     >
-                        <i className="fas fa-filter"></i>
-                        Bộ lọc{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                        <i className="fas fa-filter"></i>{translatePageText("Bộ lọc")}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
                     </button>
 
                     {isFilterOpen && (
                         <div className="absolute right-0 top-full mt-2 z-30 w-80 bg-white border border-gray-200 rounded-lg shadow-xl p-5">
                             <div className="mb-4">
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Ngày tạo đơn</label>
-                                <DateFilter label="Ngày" value={draft.created} onChange={(created) => setDraft({ ...draft, created })} />
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Ngày tạo đơn")}</label>
+                                <DateFilter label={translatePageText("Ngày")} value={draft.created} onChange={(created) => setDraft({ ...draft, created })} />
                             </div>
                             <div className="mb-4">
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Ngày khách đến</label>
-                                <DateFilter label="Ngày" value={draft.arrival} onChange={(arrival) => setDraft({ ...draft, arrival })} />
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Ngày khách đến")}</label>
+                                <DateFilter label={translatePageText("Ngày")} value={draft.arrival} onChange={(arrival) => setDraft({ ...draft, arrival })} />
                             </div>
                             <div className="mb-4">
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">ID người dùng</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("ID người dùng")}</label>
                                 <input
                                     type="number"
-                                    placeholder="Tất cả"
+                                    placeholder={translatePageText("Tất cả")}
                                     value={draft.userId}
                                     onChange={(e) => setDraft({ ...draft, userId: e.target.value })}
                                     className={`${inputClass} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                                 />
                             </div>
                             <div className="mb-4">
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Trạng thái đặt bàn</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Trạng thái đặt bàn")}</label>
                                 <select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })} className={inputClass}>
-                                    <option value="">Tất cả</option>
+                                    <option value="">{translatePageText("Tất cả")}</option>
                                     {Object.entries(BOOKING_STATUS).map(([key, s]) => (
                                         <option key={key} value={key}>{s.label}</option>
                                     ))}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Phương thức thanh toán</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Phương thức thanh toán")}</label>
                                 <select value={draft.method} onChange={(e) => setDraft({ ...draft, method: e.target.value })} className={inputClass}>
-                                    <option value="">Tất cả</option>
+                                    <option value="">{translatePageText("Tất cả")}</option>
                                     <option value="vnpay">VNPay</option>
-                                    <option value="Points">Điểm</option>
+                                    <option value="Points">{translatePageText("Điểm")}</option>
                                 </select>
                             </div>
                             <div className="mt-6 flex gap-3">
-                                <button onClick={resetFilters} className="flex-1 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded border border-gray-300 text-sm">
-                                    Đặt lại
-                                </button>
-                                <button onClick={applyFilters} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded text-sm">
-                                    Áp dụng
-                                </button>
+                                <button onClick={resetFilters} className="flex-1 py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded border border-gray-300 text-sm">{translatePageText("Đặt lại") + " "}</button>
+                                <button onClick={applyFilters} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded text-sm">{translatePageText("Áp dụng") + " "}</button>
                             </div>
                         </div>
                     )}
@@ -304,32 +302,32 @@ const AdminBookingsTab = () => {
                     disabled={exporting}
                     className="px-4 py-2 rounded bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
                 >
-                    {exporting ? 'Đang xuất...' : 'Xuất Excel'}
+                    {exporting ? translatePageText("Đang xuất...") : translatePageText("Xuất Excel")}
                 </button>
             </div>
 
             {/* Bảng */}
-            <Card title={`Danh sách đặt bàn (${pagination.total ?? 0})`}>
+            <Card title={`${translatePageText("Danh sách đặt bàn")} (${pagination.total ?? 0})`}>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead className="bg-red-600 text-white border-b">
                             <tr>
-                                <th className="px-4 py-2 text-left">Mã HĐ</th>
-                                <th className="px-4 py-2 text-left">Khách hàng</th>
-                                <th className="px-4 py-2 text-left">Bàn</th>
-                                <th className="px-4 py-2 text-left">Ngày đến</th>
-                                <th className="px-4 py-2 text-left">Giờ</th>
-                                <th className="px-4 py-2 text-left">Trạng thái</th>
-                                <th className="px-4 py-2 text-left">Phương thức</th>
-                                <th className="px-4 py-2 text-left">Ngày tạo</th>
-                                <th className="px-4 py-2 text-left">Hành động</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Mã HĐ")}</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Khách hàng")}</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Bàn")}</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Ngày đến")}</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Giờ")}</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Trạng thái")}</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Phương thức")}</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Ngày tạo")}</th>
+                                <th className="px-4 py-2 text-left">{translatePageText("Hành động")}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading ? (
                                 <tr><td colSpan={9}><TableLoading /></td></tr>
                             ) : bookings.length === 0 ? (
-                                <tr><td colSpan={9} className="px-4 py-3 text-center text-gray-500">Không có dữ liệu</td></tr>
+                                <tr><td colSpan={9} className="px-4 py-3 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</td></tr>
                             ) : bookings.map((b) => (
                                 <tr key={b.order_id} className="border-b hover:bg-gray-50">
                                     <td className="px-4 py-2 font-mono text-xs font-bold">{b.bill?.bill_id || '—'}</td>
@@ -351,9 +349,7 @@ const AdminBookingsTab = () => {
                                         <button
                                             onClick={() => setSelected(b)}
                                             className="px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
-                                        >
-                                            Chi tiết
-                                        </button>
+                                        >{translatePageText("Chi tiết") + " "}</button>
                                     </td>
                                 </tr>
                             ))}
@@ -372,42 +368,42 @@ const AdminBookingsTab = () => {
                 >
                     <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
                         <div className="sticky top-0 bg-red-600 px-6 py-4 flex justify-between items-center border-b">
-                            <h2 className="text-xl font-bold text-white">Chi tiết đặt bàn</h2>
+                            <h2 className="text-xl font-bold text-white">{translatePageText("Chi tiết đặt bàn")}</h2>
                             <button onClick={() => setSelected(null)} className="text-2xl text-white hover:text-gray-200">×</button>
                         </div>
 
                         <div className="p-6 space-y-6">
                             <div>
-                                <h3 className="font-bold text-lg mb-3">Thông tin đặt bàn</h3>
+                                <h3 className="font-bold text-lg mb-3">{translatePageText("Thông tin đặt bàn")}</h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="min-w-0">
-                                        <p className="text-xs text-gray-500">Mã hóa đơn</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Mã hóa đơn")}</p>
                                         <p className="font-mono font-bold text-sm">{bill?.bill_id || '—'}</p>
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="text-xs text-gray-500">Số thứ tự đơn</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Số thứ tự đơn")}</p>
                                         <p className="font-mono font-bold text-sm">{selected.order_stt || selected.order_id}</p>
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="text-xs text-gray-500">Bàn</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Bàn")}</p>
                                         <p className="text-sm font-semibold">{tablesText(selected.tables)}</p>
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="text-xs text-gray-500">Ngày khách đến</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Ngày khách đến")}</p>
                                         <p className="text-sm font-semibold">{formatDate(selected.booking_date)}</p>
                                     </div>
                                     <div className="col-span-2 min-w-0">
-                                        <p className="text-xs text-gray-500">Giờ</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Giờ")}</p>
                                         <p className="text-sm font-semibold">{timeRange(selected)}</p>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="border-t border-red-600 pt-4">
-                                <h3 className="font-bold text-lg mb-3">Thông tin khách hàng</h3>
+                                <h3 className="font-bold text-lg mb-3">{translatePageText("Thông tin khách hàng")}</h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <p className="text-xs text-gray-500">Tên</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Tên")}</p>
                                         <p className="font-semibold">{selected.user?.username || 'N/A'}</p>
                                     </div>
                                     <div>
@@ -415,48 +411,46 @@ const AdminBookingsTab = () => {
                                         <p className="text-sm">{selected.user?.email || '—'}</p>
                                     </div>
                                     <div>
-                                        <p className="text-xs text-gray-500">Điện thoại</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Điện thoại")}</p>
                                         <p className="text-sm">{selected.user?.tele_number || 'N/A'}</p>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="border-t border-red-600 pt-4">
-                                <h3 className="font-bold text-lg mb-3">Danh sách các món</h3>
+                                <h3 className="font-bold text-lg mb-3">{translatePageText("Danh sách các món")}</h3>
                                 <table className="w-full max-w-lg text-sm bg-white border border-black border-t-4 border-t-red-600">
                                     <thead>
                                         <tr>
-                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">Món</th>
+                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">{translatePageText("Món")}</th>
                                             <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-black">SL</th>
-                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-black">Thành tiền</th>
+                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-black">{translatePageText("Thành tiền")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {(selected.items || []).map((item, i) => (
                                             <tr key={i}>
                                                 <td className="py-2 px-3 border border-black">
-                                                    <div>{item.dish?.dish_name || item.dish_name || 'N/A'}</div>
+                                                    <div>{translateDishName(item.dish || item)}</div>
                                                     {item.customization_name && (
-                                                        <div className="mt-1 text-xs text-gray-500">Công thức thay thế: {item.customization_name}</div>
+                                                        <div className="mt-1 text-xs text-gray-500">{translatePageText("Công thức thay thế:") + " "}{item.customization_name}</div>
                                                     )}
                                                 </td>
                                                 <td className="py-2 px-3 text-center border border-black">{item.quantity}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                                    {(Number(item.unit_price) * item.quantity).toLocaleString('vi-VN')}đ
-                                                </td>
+                                                    {(Number(item.unit_price) * item.quantity).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ") + " "}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                     <tfoot>
                                         <tr>
-                                            <td colSpan={2} className="py-2 px-3 font-bold border border-black">Tổng cộng:</td>
+                                            <td colSpan={2} className="py-2 px-3 font-bold border border-black">{translatePageText("Tổng cộng:")}</td>
                                             <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                                {Number(selected.subtotal_price || 0).toLocaleString('vi-VN')}đ
-                                            </td>
+                                                {Number(selected.subtotal_price || 0).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ") + " "}</td>
                                         </tr>
                                         {bill?.sale_off_percentage != null && (
                                             <tr>
-                                                <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">Giảm giá sự kiện:</td>
+                                                <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">{translatePageText("Giảm giá sự kiện:")}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-orange-500 border border-black">
                                                     {Number(bill.sale_off_percentage)}%
                                                 </td>
@@ -464,37 +458,34 @@ const AdminBookingsTab = () => {
                                         )}
                                         {bill?.payment_method === 'vnpay' && bill?.sale_off_percentage == null && Number(selected.subtotal_price || 0) > Number(bill?.total_price || 0) && (
                                             <tr>
-                                                <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">Giảm giá VNPay:</td>
+                                                <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">{translatePageText("Giảm giá VNPay:")}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-orange-500 border border-black">
-                                                    -{Number(Number(selected.subtotal_price || 0) - Number(bill?.total_price || 0)).toLocaleString('vi-VN')}đ
-                                                </td>
+                                                    -{Number(Number(selected.subtotal_price || 0) - Number(bill?.total_price || 0)).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ") + " "}</td>
                                             </tr>
                                         )}
                                         {bill?.payment_method === 'Points' && (
                                             <tr>
-                                                <td colSpan={2} className="py-2 px-3 font-bold border border-black text-green-600">Đã thanh toán bằng điểm:</td>
+                                                <td colSpan={2} className="py-2 px-3 font-bold border border-black text-green-600">{translatePageText("Đã thanh toán bằng điểm:")}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-green-600 border border-black">
-                                                    -{Math.floor(Number(bill?.sale_off_total_price ?? selected.subtotal_price ?? 0) / 100).toLocaleString('vi-VN')} điểm
-                                                </td>
+                                                    -{Math.floor(Number(bill?.sale_off_total_price ?? selected.subtotal_price ?? 0) / 100).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{" " + translatePageText("điểm") + " "}</td>
                                             </tr>
                                         )}
                                         <tr>
                                             <td colSpan={2} className="py-2 px-3 font-bold border border-black text-red-600">
-                                                {bill?.payment_method === 'vnpay' ? 'Số tiền đã trả:' : 'Số tiền cần trả:'}
+                                                {bill?.payment_method === 'vnpay' ? translatePageText("Số tiền đã trả:") : translatePageText("Số tiền cần trả:")}
                                             </td>
                                             <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                                {Number(bill?.total_price || 0).toLocaleString('vi-VN')}đ
-                                            </td>
+                                                {Number(bill?.total_price || 0).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ") + " "}</td>
                                         </tr>
                                     </tfoot>
                                 </table>
                             </div>
 
                             <div className="border-t border-red-600 pt-4">
-                                <h3 className="font-bold text-lg mb-3">Trạng thái</h3>
+                                <h3 className="font-bold text-lg mb-3">{translatePageText("Trạng thái")}</h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <p className="text-xs text-gray-500">Trạng thái đặt bàn</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Trạng thái đặt bàn")}</p>
                                         <div className="mt-1">
                                             <Badge variant={BOOKING_STATUS[selected.booking_status]?.color}>
                                                 {BOOKING_STATUS[selected.booking_status]?.label || selected.booking_status || '—'}
@@ -502,7 +493,7 @@ const AdminBookingsTab = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <p className="text-xs text-gray-500">Trạng thái thanh toán</p>
+                                        <p className="text-xs text-gray-500">{translatePageText("Trạng thái thanh toán")}</p>
                                         <div className="mt-1">
                                             <Badge variant={PAYMENT_STATUS[selected.B_payment_status]?.color}>
                                                 {PAYMENT_STATUS[selected.B_payment_status]?.label || selected.B_payment_status || '—'}
@@ -516,7 +507,7 @@ const AdminBookingsTab = () => {
                                 <h3 className="font-bold text-lg mb-3">Timeline</h3>
                                 <div className="space-y-2 text-sm">
                                     <div className="flex justify-between">
-                                        <span>Thanh toán / tạo đơn lúc:</span>
+                                        <span>{translatePageText("Thanh toán / tạo đơn lúc:")}</span>
                                         <span>{formatDateTime(selected.created_at)}</span>
                                     </div>
                                 </div>
@@ -528,14 +519,12 @@ const AdminBookingsTab = () => {
                                     disabled={exportingPdf || !bill?.bill_id}
                                     className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-semibold disabled:opacity-50"
                                 >
-                                    {exportingPdf ? 'Đang xuất...' : 'Xuất PDF'}
+                                    {exportingPdf ? translatePageText("Đang xuất...") : translatePageText("Xuất PDF")}
                                 </button>
                                 <button
                                     onClick={() => setSelected(null)}
                                     className="ml-auto px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400 text-sm"
-                                >
-                                    Đóng
-                                </button>
+                                >{translatePageText("Đóng") + " "}</button>
                             </div>
                         </div>
                     </div>
@@ -545,7 +534,7 @@ const AdminBookingsTab = () => {
             {/* Modal lỗi */}
             <Modal
                 isOpen={!!errorMessage}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setErrorMessage(null)}

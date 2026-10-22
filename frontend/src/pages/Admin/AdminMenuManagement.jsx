@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { adminAPI, dishAPI } from '../../services/api';
 import { TableLoading, Badge, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
+import { translatePageText } from '../../pageTextTranslations';
+import { translateDishName } from '../../dishTranslations';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:8000';
 
@@ -19,9 +21,9 @@ const getImageUrl = (imageUrl) => {
 };
 
 const STATUS_FILTERS = [
-    { id: 'all', label: 'Tất cả' },
-    { id: 'active', label: 'Đang bán' },
-    { id: 'hidden', label: 'Đã ẩn' },
+    { id: 'all', get label() { return translatePageText("Tất cả"); } },
+    { id: 'active', get label() { return translatePageText("Đang bán"); } },
+    { id: 'hidden', get label() { return translatePageText("Đã ẩn"); } },
     { id: 'bestseller', label: 'Bestseller' },
 ];
 
@@ -88,7 +90,7 @@ const AdminMenuManagement = () => {
             (statsRes.data?.data || []).forEach((s) => { statsMap[s.dish_id] = s; });
             setRatingStats(statsMap);
         } catch (err) {
-            setAlertMessage('Lỗi tải danh sách thực đơn');
+            setAlertMessage(translatePageText("Lỗi tải danh sách thực đơn"));
             console.error(err);
         } finally {
             setLoading(false);
@@ -106,7 +108,7 @@ const AdminMenuManagement = () => {
             setReviewPage(page);
             setReviewHasMore(Boolean(d.has_more));
         } catch (err) {
-            setAlertMessage('Lỗi tải đánh giá của món');
+            setAlertMessage(translatePageText("Lỗi tải đánh giá của món"));
             console.error(err);
         } finally {
             setReviewLoading(false);
@@ -126,7 +128,7 @@ const AdminMenuManagement = () => {
     const formatReviewDate = (value) => {
         if (!value) return '';
         const d = new Date(String(value).replace(' ', 'T'));
-        return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('vi-VN');
+        return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN');
     };
 
     // ===== Lọc tại trình duyệt =====
@@ -145,7 +147,7 @@ const AdminMenuManagement = () => {
     const getStt = (dish, index) => (isFiltered ? index + 1 : dish.dish_id);
 
     const getTypeName = (typeId) =>
-        dishTypes.find((t) => t.type_id === typeId)?.type_name || 'Khác';
+        translatePageText(dishTypes.find((t) => t.type_id === typeId)?.type_name || 'Khác');
 
     // Thống kê trên toàn bộ món (không đổi theo bộ lọc)
     const totalDishes = dishes.length;
@@ -190,7 +192,7 @@ const AdminMenuManagement = () => {
         if (!file) return;
 
         if (!file.type.startsWith("image/")) {
-            setAlertMessage("Vui lòng chọn một file ảnh hợp lệ!");
+            setAlertMessage(translatePageText("Vui lòng chọn một file ảnh hợp lệ!"));
             e.target.value = "";
             return;
         }
@@ -207,7 +209,7 @@ const AdminMenuManagement = () => {
         e.preventDefault();
 
         if (!editMode && !selectedImage) {
-            setAlertMessage("Vui lòng tải lên một hình ảnh!");
+            setAlertMessage(translatePageText("Vui lòng tải lên một hình ảnh!"));
             return;
         }
 
@@ -230,32 +232,35 @@ const AdminMenuManagement = () => {
 
             if (editMode) {
                 await adminAPI.dishes.update(selectedDishId, data);
-                setAlertMessage("Cập nhật món ăn thành công!");
+                setAlertMessage(translatePageText("Cập nhật món ăn thành công!"));
             } else {
                 await adminAPI.dishes.create(data);
-                setAlertMessage("Thêm món ăn thành công!");
+                setAlertMessage(translatePageText("Thêm món ăn thành công!"));
             }
             setIsModalOpen(false);
             fetchData();
         } catch (err) {
-            setAlertMessage("Đã xảy ra lỗi: " + (err.response?.data?.message || err.message));
+            console.error('Save dish error:', err.response?.data || err.message);
+            setAlertMessage(translatePageText("Không thể lưu món ăn. Vui lòng thử lại."));
         } finally {
             setBusy(false);
         }
     };
 
     const handleToggleStatus = (dish) => {
-        const action = dish.is_active ? 'ẩn' : 'hiện lại';
         setConfirmState({
-            message: `Bạn có chắc muốn ${action} món "${dish.dish_name}" không?`,
+            message: document.documentElement.lang === 'en'
+                ? `Are you sure you want to ${dish.is_active ? 'hide' : 'show'} "${translateDishName(dish)}"?`
+                : `Bạn có chắc muốn ${dish.is_active ? 'ẩn' : 'hiện lại'} món "${dish.dish_name}" không?`,
             onConfirm: async () => {
                 setConfirmState(null);
                 try {
-                    const res = await adminAPI.dishes.toggleStatus(dish.dish_id);
-                    setAlertMessage(res.data.message);
+                    await adminAPI.dishes.toggleStatus(dish.dish_id);
+                    setAlertMessage(translatePageText(dish.is_active ? 'Đã ẩn món ăn.' : 'Đã hiện món ăn.'));
                     fetchData();
                 } catch (err) {
-                    setAlertMessage("Lỗi: " + (err.response?.data?.message || err.message));
+                    console.error('Toggle dish status error:', err.response?.data || err.message);
+                    setAlertMessage(translatePageText("Không thể cập nhật trạng thái món ăn. Vui lòng thử lại."));
                 }
             },
         });
@@ -263,16 +268,16 @@ const AdminMenuManagement = () => {
 
     const handleDelete = (id) => {
         setConfirmState({
-            message: "Xóa vĩnh viễn món này khỏi hệ thống?",
+            message: translatePageText("Xóa vĩnh viễn món này khỏi hệ thống?"),
             onConfirm: async () => {
                 setConfirmState(null);
                 try {
                     await adminAPI.dishes.delete(id);
-                    setAlertMessage("Đã xóa món ăn thành công!");
+                    setAlertMessage(translatePageText("Đã xóa món ăn thành công!"));
                     fetchData();
                 } catch (err) {
                     console.error('Delete dish error:', err.response?.status, err.response?.data || err.message);
-                    setAlertMessage(err.response?.data?.message || ("Lỗi khi xóa món ăn: " + err.message));
+                    setAlertMessage(translatePageText("Không thể xóa món ăn. Vui lòng thử lại."));
                 }
             },
         });
@@ -295,21 +300,19 @@ const AdminMenuManagement = () => {
             : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`;
 
     const statusBadge = (dish) => dish.is_active ? (
-        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">Đang bán</span>
+        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">{translatePageText("Đang bán")}</span>
     ) : (
-        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-gray-200 text-gray-600">Đã ẩn</span>
+        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-gray-200 text-gray-600">{translatePageText("Đã ẩn")}</span>
     );
 
     return (
         <AdminPageShell
-            title="Quản lý thực đơn"
+            title={translatePageText("Quản lý thực đơn")}
             actions={
                 <button
                     onClick={() => handleOpenModal()}
                     className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition-colors"
-                >
-                    + Thêm món ăn
-                </button>
+                >{translatePageText("+ Thêm món ăn") + " "}</button>
             }
         >
             {/* Thống kê: một hàng */}
@@ -323,16 +326,14 @@ const AdminMenuManagement = () => {
             {/* Thanh công cụ: chip loại món + tìm kiếm + trạng thái + chế độ xem */}
             <div className="mb-4 bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-3">
                 <div className="flex gap-2 overflow-x-auto w-0 min-w-full">
-                    <button onClick={() => setTypeFilter('')} className={chipClass(typeFilter === '')}>
-                        Tất cả loại
-                    </button>
+                    <button onClick={() => setTypeFilter('')} className={chipClass(typeFilter === '')}>{translatePageText("Tất cả loại") + " "}</button>
                     {dishTypes.map((type) => (
                         <button
                             key={type.type_id}
                             onClick={() => setTypeFilter(type.type_id)}
                             className={chipClass(String(typeFilter) === String(type.type_id))}
                         >
-                            {type.type_name}
+                            {translatePageText(type.type_name)}
                         </button>
                     ))}
                 </div>
@@ -344,7 +345,7 @@ const AdminMenuManagement = () => {
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Tìm theo tên món..."
+                            placeholder={translatePageText("Tìm theo tên món...")}
                             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:border-red-600"
                         />
                     </div>
@@ -358,7 +359,7 @@ const AdminMenuManagement = () => {
                         ))}
                     </select>
                     <div className="inline-flex rounded-lg border-2 border-red-600 overflow-hidden bg-white">
-                        {[['table', 'fa-table-list', 'Bảng'], ['grid', 'fa-table-cells-large', 'Lưới'], ['rating', 'fa-star', 'Đánh giá']].map(([mode, icon, text]) => (
+                        {[['table', 'fa-table-list', translatePageText("Bảng")], ['grid', 'fa-table-cells-large', translatePageText("Lưới")], ['rating', 'fa-star', translatePageText("Đánh giá")]].map(([mode, icon, text]) => (
                             <button
                                 key={mode}
                                 onClick={() => setViewMode(mode)}
@@ -374,23 +375,20 @@ const AdminMenuManagement = () => {
             {/* Danh sách */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-gray-800">
-                        Danh sách món ăn ({visibleDishes.length}{isFiltered ? ` / ${dishes.length}` : ''})
+                    <span className="font-semibold text-gray-800">{translatePageText("Danh sách món ăn (")}{visibleDishes.length}{isFiltered ? ` / ${dishes.length}` : ''})
                     </span>
                     {viewMode === 'rating' && (
                         <button
                             onClick={() => setIsPickerOpen(true)}
                             className="px-3 py-1.5 text-sm font-semibold rounded bg-red-600 text-white hover:bg-red-700 transition"
-                        >
-                            Xem đánh giá của khách hàng
-                        </button>
+                        >{translatePageText("Xem đánh giá của khách hàng") + " "}</button>
                     )}
                 </div>
 
                 {loading ? (
                     <TableLoading />
                 ) : visibleDishes.length === 0 ? (
-                    <p className="py-8 text-center text-gray-500">Không có món ăn nào phù hợp</p>
+                    <p className="py-8 text-center text-gray-500">{translatePageText("Không có món ăn nào phù hợp")}</p>
                 ) : viewMode === 'rating' ? (
                     <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                         {visibleDishes.map((dish) => {
@@ -402,19 +400,19 @@ const AdminMenuManagement = () => {
                                 >
                                     <img
                                         src={getImageUrl(dish.image_url)}
-                                        alt={dish.dish_name}
+                                        alt={translateDishName(dish)}
                                         className="w-full h-36 object-cover"
                                     />
                                     <div className="p-3">
-                                        <p className="font-semibold text-gray-800 leading-snug line-clamp-2">{dish.dish_name}</p>
+                                        <p className="font-semibold text-gray-800 leading-snug line-clamp-2">{translateDishName(dish)}</p>
                                         {stat ? (
                                             <p className="mt-2 text-sm text-gray-700">
                                                 <span className="text-yellow-500">★</span>{' '}
                                                 <span className="font-bold">{Number(stat.avg_rating).toFixed(1)}</span>
-                                                <span className="text-gray-500"> / 5 ({stat.review_count} đánh giá)</span>
+                                                <span className="text-gray-500"> / 5 ({stat.review_count}{" " + translatePageText("đánh giá)")}</span>
                                             </p>
                                         ) : (
-                                            <p className="mt-2 text-sm text-gray-400">Chưa có đánh giá</p>
+                                            <p className="mt-2 text-sm text-gray-400">{translatePageText("Chưa có đánh giá")}</p>
                                         )}
                                     </div>
                                 </div>
@@ -427,13 +425,13 @@ const AdminMenuManagement = () => {
                             <thead className="bg-red-600 text-white uppercase text-xs">
                                 <tr>
                                     <th className="px-4 py-2.5 w-16">STT</th>
-                                    <th className="px-4 py-2.5">Hình ảnh</th>
-                                    <th className="px-4 py-2.5">Tên món</th>
-                                    <th className="px-4 py-2.5">Loại</th>
-                                    <th className="px-4 py-2.5">Giá tiền</th>
+                                    <th className="px-4 py-2.5">{translatePageText("Hình ảnh")}</th>
+                                    <th className="px-4 py-2.5">{translatePageText("Tên món")}</th>
+                                    <th className="px-4 py-2.5">{translatePageText("Loại")}</th>
+                                    <th className="px-4 py-2.5">{translatePageText("Giá tiền")}</th>
                                     <th className="px-4 py-2.5 text-center">Bestseller</th>
-                                    <th className="px-4 py-2.5 text-center">Trạng thái</th>
-                                    <th className="px-4 py-2.5 text-center">Thao tác</th>
+                                    <th className="px-4 py-2.5 text-center">{translatePageText("Trạng thái")}</th>
+                                    <th className="px-4 py-2.5 text-center">{translatePageText("Thao tác")}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -443,17 +441,16 @@ const AdminMenuManagement = () => {
                                         <td className="px-4 py-2">
                                             <img
                                                 src={getImageUrl(dish.image_url)}
-                                                alt={dish.dish_name}
+                                                alt={translateDishName(dish)}
                                                 className="w-12 h-12 object-cover rounded shadow-sm"
                                             />
                                         </td>
-                                        <td className="px-4 py-2 font-semibold">{dish.dish_name}</td>
+                                        <td className="px-4 py-2 font-semibold">{translateDishName(dish)}</td>
                                         <td className="px-4 py-2">
                                             <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
                                         </td>
                                         <td className="px-4 py-2 font-bold text-red-600">
-                                            {Number(dish.price).toLocaleString('vi-VN')}đ
-                                        </td>
+                                            {Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ") + " "}</td>
                                         <td className="px-4 py-2 text-center">
                                             {dish.is_bestseller ? <span className="text-yellow-500 text-lg">⭐</span> : ''}
                                         </td>
@@ -462,21 +459,17 @@ const AdminMenuManagement = () => {
                                             <button
                                                 onClick={() => handleOpenModal(dish)}
                                                 className="text-blue-600 hover:text-blue-800 font-medium"
-                                            >
-                                                Sửa
-                                            </button>
+                                            >{translatePageText("Sửa") + " "}</button>
                                             <button
                                                 onClick={() => handleToggleStatus(dish)}
                                                 className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
                                             >
-                                                {dish.is_active ? 'Ẩn' : 'Hiện'}
+                                                {dish.is_active ? translatePageText("Ẩn") : translatePageText("Hiện")}
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(dish.dish_id)}
                                                 className="text-red-600 hover:text-red-800 font-medium"
-                                            >
-                                                Xóa
-                                            </button>
+                                            >{translatePageText("Xóa") + " "}</button>
                                         </td>
                                     </tr>
                                 ))}
@@ -493,7 +486,7 @@ const AdminMenuManagement = () => {
                                 <div className="relative">
                                     <img
                                         src={getImageUrl(dish.image_url)}
-                                        alt={dish.dish_name}
+                                        alt={translateDishName(dish)}
                                         className="w-full h-36 object-cover"
                                     />
                                     <span className="absolute top-2 left-2 bg-black/60 text-white text-xs font-bold px-2 py-0.5 rounded">
@@ -501,28 +494,28 @@ const AdminMenuManagement = () => {
                                     </span>
                                     <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
                                         {dish.is_bestseller && (
-                                            <span className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded">⭐ Bestseller</span>
+                                            <span className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded">{translatePageText("⭐ Bestseller")}</span>
                                         )}
                                         {!dish.is_active && (
-                                            <span className="bg-gray-700 text-white text-xs font-bold px-2 py-0.5 rounded">Đã ẩn</span>
+                                            <span className="bg-gray-700 text-white text-xs font-bold px-2 py-0.5 rounded">{translatePageText("Đã ẩn")}</span>
                                         )}
                                     </div>
                                 </div>
                                 <div className="p-3 flex flex-col flex-1">
-                                    <p className="font-semibold text-gray-800 leading-snug line-clamp-2">{dish.dish_name}</p>
+                                    <p className="font-semibold text-gray-800 leading-snug line-clamp-2">{translateDishName(dish)}</p>
                                     <div className="mt-1">
                                         <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
                                     </div>
-                                    <p className="mt-2 font-bold text-red-600">{Number(dish.price).toLocaleString('vi-VN')}đ</p>
+                                    <p className="mt-2 font-bold text-red-600">{Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ")}</p>
                                     <div className="mt-auto pt-3 flex justify-between text-sm">
-                                        <button onClick={() => handleOpenModal(dish)} className="text-blue-600 hover:text-blue-800 font-medium">Sửa</button>
+                                        <button onClick={() => handleOpenModal(dish)} className="text-blue-600 hover:text-blue-800 font-medium">{translatePageText("Sửa")}</button>
                                         <button
                                             onClick={() => handleToggleStatus(dish)}
                                             className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
                                         >
-                                            {dish.is_active ? 'Ẩn' : 'Hiện'}
+                                            {dish.is_active ? translatePageText("Ẩn") : translatePageText("Hiện")}
                                         </button>
-                                        <button onClick={() => handleDelete(dish.dish_id)} className="text-red-600 hover:text-red-800 font-medium">Xóa</button>
+                                        <button onClick={() => handleDelete(dish.dish_id)} className="text-red-600 hover:text-red-800 font-medium">{translatePageText("Xóa")}</button>
                                     </div>
                                 </div>
                             </div>
@@ -542,7 +535,7 @@ const AdminMenuManagement = () => {
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
                         <div className="bg-red-600 px-6 py-4 flex justify-between items-center">
                             <h3 className="text-xl font-bold text-white">
-                                {editMode ? 'Sửa món ăn' : 'Thêm món ăn mới'}
+                                {editMode ? translatePageText("Sửa món ăn") : translatePageText("Thêm món ăn mới")}
                             </h3>
                             <button onClick={handleCloseModal} className="text-white hover:text-gray-200">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -551,27 +544,27 @@ const AdminMenuManagement = () => {
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Tên món ăn (*)</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Tên món ăn (*)")}</label>
                                 <input
                                     type="text" required
                                     value={formData.dish_name}
                                     onChange={e => setFormData({ ...formData, dish_name: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                                    placeholder="Nhập tên món"
+                                    placeholder={translatePageText("Nhập tên món")}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">Loại món ăn (*)</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Loại món ăn (*)")}</label>
                                 <select
                                     required
                                     value={formData.type_id}
                                     onChange={e => setFormData({ ...formData, type_id: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
                                 >
-                                    <option value="" disabled>-- Chọn loại món --</option>
+                                    <option value="" disabled>{translatePageText("-- Chọn loại món --")}</option>
                                     {dishTypes.map(type => (
-                                        <option key={type.type_id} value={type.type_id}>{type.type_name}</option>
+                                        <option key={type.type_id} value={type.type_id}>{translatePageText(type.type_name)}</option>
                                     ))}
                                 </select>
                             </div>
@@ -579,7 +572,7 @@ const AdminMenuManagement = () => {
                             {editMode && (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Giá tiền (*)</label>
+                                        <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Giá tiền (*)")}</label>
                                         <input
                                             type="number" required min="0" step="1000"
                                             value={formData.price}
@@ -594,15 +587,13 @@ const AdminMenuManagement = () => {
                                             onChange={e => setFormData({ ...formData, is_bestseller: e.target.checked })}
                                             className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
                                         />
-                                        <label htmlFor="bestseller" className="ml-2 text-sm font-semibold text-gray-700">
-                                            Là món bán chạy (Bestseller)
-                                        </label>
+                                        <label htmlFor="bestseller" className="ml-2 text-sm font-semibold text-gray-700">{translatePageText("Là món bán chạy (Bestseller)") + " "}</label>
                                     </div>
                                 </>
                             )}
 
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">Hình ảnh {!editMode && "(*)"}</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">{translatePageText("Hình ảnh") + " "}{!editMode && "(*)"}</label>
                                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
                                     {previewImage && (
                                         <img src={previewImage} alt="Preview" className="mx-auto h-32 object-contain mb-3" />
@@ -620,15 +611,13 @@ const AdminMenuManagement = () => {
                                     type="button"
                                     onClick={handleCloseModal}
                                     className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 font-semibold"
-                                >
-                                    Hủy
-                                </button>
+                                >{translatePageText("Hủy") + " "}</button>
                                 <button
                                     type="submit"
                                     disabled={busy}
                                     className="px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 font-semibold disabled:opacity-50"
                                 >
-                                    {busy ? 'Đang lưu...' : 'Lưu'}
+                                    {busy ? translatePageText("Đang lưu...") : translatePageText("Lưu")}
                                 </button>
                             </div>
                         </form>
@@ -639,7 +628,7 @@ const AdminMenuManagement = () => {
             {/* Modal chi tiết đánh giá của 1 món */}
             <Modal
                 isOpen={!!reviewDish}
-                title={reviewDish?.dish_name || ''}
+                title={reviewDish ? translateDishName(reviewDish) : ''}
                 className="max-w-lg"
                 onClose={() => setReviewDish(null)}
                 cancelText="Đóng"
@@ -647,13 +636,13 @@ const AdminMenuManagement = () => {
                 {!reviewSummary ? (
                     <TableLoading />
                 ) : reviewSummary.review_count === 0 ? (
-                    <p className="py-6 text-center text-gray-500">Chưa có đánh giá</p>
+                    <p className="py-6 text-center text-gray-500">{translatePageText("Chưa có đánh giá")}</p>
                 ) : (
                     <>
                         <p className="mb-4 text-gray-700">
                             <span className="text-yellow-500 text-xl">★</span>{' '}
                             <span className="font-bold text-lg">{Number(reviewSummary.avg_rating).toFixed(1)}</span>
-                            <span className="text-gray-500"> / 5 ({reviewSummary.review_count} đánh giá)</span>
+                            <span className="text-gray-500"> / 5 ({reviewSummary.review_count}{" " + translatePageText("đánh giá)")}</span>
                         </p>
                         <div className="space-y-3">
                             {reviewList.map((r) => (
@@ -677,7 +666,7 @@ const AdminMenuManagement = () => {
                                     disabled={reviewLoading}
                                     className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50"
                                 >
-                                    {reviewLoading ? 'Đang tải...' : 'Xem thêm'}
+                                    {reviewLoading ? translatePageText("Đang tải...") : translatePageText("Xem thêm")}
                                 </button>
                             </div>
                         )}
@@ -688,7 +677,7 @@ const AdminMenuManagement = () => {
             {/* Modal chọn món để xem đánh giá */}
             <Modal
                 isOpen={isPickerOpen}
-                title="Chọn món muốn xem đánh giá"
+                title={translatePageText("Chọn món muốn xem đánh giá")}
                 className="max-w-3xl"
                 onClose={() => setIsPickerOpen(false)}
                 cancelText="Quay lại"
@@ -703,8 +692,8 @@ const AdminMenuManagement = () => {
                             }}
                             className="cursor-pointer rounded-lg border-2 border-transparent hover:border-red-600 overflow-hidden transition"
                         >
-                            <img src={getImageUrl(dish.image_url)} alt={dish.dish_name} className="w-full h-20 object-cover" />
-                            <p className="text-xs p-1 truncate">{dish.dish_name}</p>
+                            <img src={getImageUrl(dish.image_url)} alt={translateDishName(dish)} className="w-full h-20 object-cover" />
+                            <p className="text-xs p-1 truncate">{translateDishName(dish)}</p>
                         </div>
                     ))}
                 </div>
@@ -713,7 +702,7 @@ const AdminMenuManagement = () => {
             {/* Modal thông báo (thay cho alert) */}
             <Modal
                 isOpen={Boolean(alertMessage)}
-                title="Thông báo"
+                title={translatePageText("Thông báo")}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setAlertMessage('')}
@@ -724,7 +713,7 @@ const AdminMenuManagement = () => {
             {/* Modal xác nhận (thay cho window.confirm) */}
             <Modal
                 isOpen={Boolean(confirmState)}
-                title="Xác nhận"
+                title={translatePageText("Xác nhận")}
                 onClose={() => setConfirmState(null)}
                 onConfirm={confirmState?.onConfirm}
                 confirmText="Xác nhận"

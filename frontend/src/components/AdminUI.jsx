@@ -1,4 +1,5 @@
 import React from 'react';
+import { translatePageText } from '../pageTextTranslations';
 
 // Khung chung cho mọi trang admin: tiêu đề + mô tả ngắn + vùng nút bên phải
 export const AdminPageShell = ({ title, description, actions, children }) => (
@@ -6,8 +7,14 @@ export const AdminPageShell = ({ title, description, actions, children }) => (
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
                 <div>
-                    <h1 className="text-3xl font-bold text-red-600">{title}</h1>
-                    {description && <p className="mt-1 text-sm text-gray-500">{description}</p>}
+                    <h1 className="text-3xl font-bold text-red-600">
+                        {typeof title === 'string' ? translatePageText(title) : title}
+                    </h1>
+                    {description && (
+                        <p className="mt-1 text-sm text-gray-500">
+                            {typeof description === 'string' ? translatePageText(description) : description}
+                        </p>
+                    )}
                 </div>
                 {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
@@ -42,7 +49,9 @@ export const StatCard = ({ label, value, icon = 'fa-chart-simple', tone = 'gray'
                 <i className={`fas ${icon}`}></i>
             </div>
             <div className="min-w-0">
-                <p className="text-xs text-gray-500 truncate">{label}</p>
+                <p className="text-xs text-gray-500 truncate">
+                    {typeof label === 'string' ? translatePageText(label) : label}
+                </p>
                 <p className={`text-2xl font-bold leading-tight ${t.text}`}>{value ?? 0}</p>
             </div>
         </div>

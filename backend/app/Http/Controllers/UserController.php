@@ -52,7 +52,22 @@ class UserController extends Controller
                 'cancel_attempts_left' => (int) $user->cancel_attempts_left,
                 'modify_attempts_left' => (int) $user->modify_attempts_left,
                 'created_at'  => $user->created_at,
+                'preferred_language' => $user->preferred_language,
             ],
+        ]);
+    }
+
+    public function updatePreferredLanguage(Request $request)
+    {
+        $validated = $request->validate([
+            'language' => ['required', 'in:vi,en'],
+        ]);
+
+        $request->user()->update(['preferred_language' => $validated['language']]);
+
+        return response()->json([
+            'success' => true,
+            'preferred_language' => $validated['language'],
         ]);
     }
 

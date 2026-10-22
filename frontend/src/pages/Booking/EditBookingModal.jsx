@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { bookingService } from '../../services/api';
 import { Modal } from '../../components/Shared';
+import { translatePageText } from '../../pageTextTranslations';
 
 // Modal chỉnh sửa đơn đặt bàn ĐÃ thanh toán: ngày giờ, số lượng + loại bàn, số thứ tự bàn.
 // Dùng state riêng, không dùng chung với wizard đặt bàn mới ở BookingsPage (wizard gắn chặt
@@ -295,7 +296,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
             const data = err.response?.data;
             setConfirmOpen(false);
             if (data?.stock_status === 'insufficient') {
-                setSaveError('Không đủ nguyên liệu cho đơn này vào ngày giờ mới. Vui lòng chọn ngày hoặc giờ khác, hoặc giữ nguyên lịch cũ.');
+                setSaveError(translatePageText("Không đủ nguyên liệu cho đơn này vào ngày giờ mới. Vui lòng chọn ngày hoặc giờ khác, hoặc giữ nguyên lịch cũ."));
             } else {
                 setSaveError(data?.message || err.message || 'Không thể chỉnh sửa đơn. Vui lòng thử lại.');
             }
@@ -312,7 +313,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
         <>
             <Modal
                 isOpen={isOpen}
-                title="Chỉnh sửa thông tin đặt bàn"
+                title={translatePageText("Chỉnh sửa thông tin đặt bàn")}
                 className="max-w-2xl"
                 onClose={handleClose}
                 cancelText="Đóng"
@@ -322,15 +323,10 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
             >
                 <div className="space-y-6 text-sm">
                     <div className="bg-gray-50 border border-gray-200 rounded p-3 space-y-1">
-                        <div className="font-bold text-gray-800">
-                            Đơn hàng {bill?.order_stt || bill?.order_id}: thông tin hiện tại
+                        <div className="font-bold text-gray-800">{translatePageText("Đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{translatePageText(": thông tin hiện tại") + " "}</div>
+                        <div className="text-gray-600">{translatePageText("Ngày") + " "}<strong>{formatDateOnly(original.date)}</strong>, {original.start} - {original.end}{translatePageText(", bàn") + " "}<strong>{original.tables.join(', ') || '—'}</strong>
                         </div>
-                        <div className="text-gray-600">
-                            Ngày <strong>{formatDateOnly(original.date)}</strong>, {original.start} - {original.end}, bàn <strong>{original.tables.join(', ') || '—'}</strong>
-                        </div>
-                        <div className="text-xs text-gray-500">
-                            Mỗi lần lưu tiêu hao 1 lượt chỉnh sửa trong tuần (hiện còn {attemptsLeft} lượt). Không thể thay đổi món ăn và không cần thanh toán lại.
-                        </div>
+                        <div className="text-xs text-gray-500">{translatePageText("Mỗi lần lưu tiêu hao 1 lượt chỉnh sửa trong tuần (hiện còn") + " "}{attemptsLeft}{" " + translatePageText("lượt). Không thể thay đổi món ăn và không cần thanh toán lại.") + " "}</div>
                     </div>
 
                     {saveError && (
@@ -341,13 +337,12 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
                     {/* Cụm 1: ngày giờ */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-1">1. Ngày & giờ</h3>
-                        <p className="text-gray-600 mb-3">
-                            Giờ hoạt động: 07:00 - 22:00. <strong className="text-red-600">Chỉ được đặt bàn tối đa 90'.</strong>
+                        <h3 className="font-bold text-base text-red-600 mb-1">{translatePageText("1. Ngày & giờ")}</h3>
+                        <p className="text-gray-600 mb-3">{translatePageText("Giờ hoạt động: 07:00 - 22:00.") + " "}<strong className="text-red-600">{translatePageText("Chỉ được đặt bàn tối đa 90'.")}</strong>
                         </p>
                         <div className="space-y-4">
                             <div>
-                                <label className="block font-semibold mb-1">Ngày đặt</label>
+                                <label className="block font-semibold mb-1">{translatePageText("Ngày đặt")}</label>
                                 <input
                                     type="date"
                                     min={minDate}
@@ -359,7 +354,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block font-semibold mb-1">Giờ đến</label>
+                                    <label className="block font-semibold mb-1">{translatePageText("Giờ đến")}</label>
                                     <div className={timeBoxClass}>
                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="07" value={startH} onChange={(e) => setStartH(e.target.value.replace(/\D/g, ''))} className={timeInputClass} />
                                         <span className="font-bold text-gray-500">:</span>
@@ -367,7 +362,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block font-semibold mb-1">Giờ về</label>
+                                    <label className="block font-semibold mb-1">{translatePageText("Giờ về")}</label>
                                     <div className={timeBoxClass}>
                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="08" value={endH} onChange={(e) => setEndH(e.target.value.replace(/\D/g, ''))} className={timeInputClass} />
                                         <span className="font-bold text-gray-500">:</span>
@@ -383,8 +378,8 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
                     {/* Cụm 2: số lượng và loại bàn */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-1">2. Số lượng & loại bàn</h3>
-                        <p className="text-gray-600 mb-3">Bạn muốn đặt bao nhiêu bàn? (Tối đa 3 bàn)</p>
+                        <h3 className="font-bold text-base text-red-600 mb-1">{translatePageText("2. Số lượng & loại bàn")}</h3>
+                        <p className="text-gray-600 mb-3">{translatePageText("Bạn muốn đặt bao nhiêu bàn? (Tối đa 3 bàn)")}</p>
                         <div className="flex justify-center gap-4 mb-4">
                             {[1, 2, 3].map((num) => (
                                 <button
@@ -397,13 +392,13 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                                 </button>
                             ))}
                         </div>
-                        <p className="text-gray-600 mb-2">Phân bổ số lượng theo sức chứa. Tổng: <b>{totalTables}</b> bàn.</p>
+                        <p className="text-gray-600 mb-2">{translatePageText("Phân bổ số lượng theo sức chứa. Tổng:") + " "}<b>{totalTables}</b>{" " + translatePageText("bàn.")}</p>
                         <div className="space-y-3">
                             {TABLE_GROUPS.map((g) => (
                                 <div key={g.key} className="flex justify-between items-center bg-white p-3 border rounded-lg">
                                     <div>
                                         <div className="font-bold">{g.name} ({g.cap})</div>
-                                        <div className="text-xs text-gray-500">STT từ {g.range}</div>
+                                        <div className="text-xs text-gray-500">{translatePageText("STT từ") + " "}{g.range}</div>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <button type="button" onClick={() => handleTableTypeChange(g.key, -1)} className={stepBtnClass}>-</button>
@@ -420,24 +415,20 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
                     {/* Cụm 3: chọn số thứ tự bàn */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-1">3. Chọn bàn trống</h3>
-                        <p className="text-gray-600 mb-1">
-                            Vui lòng chọn <b>{totalTables}</b> bàn. Đã chọn {selectedTables.length}/{totalTables}.
+                        <h3 className="font-bold text-base text-red-600 mb-1">{translatePageText("3. Chọn bàn trống")}</h3>
+                        <p className="text-gray-600 mb-1">{translatePageText("Vui lòng chọn") + " "}<b>{totalTables}</b>{" " + translatePageText("bàn. Đã chọn") + " "}{selectedTables.length}/{totalTables}.
                         </p>
                         <p className="text-gray-500 mb-2 text-xs">
-                            <span className="inline-block w-3 h-3 bg-gray-400 rounded-sm align-middle mr-1"></span>
-                            Bàn xám: đã có người đặt trong khung giờ này
-                        </p>
+                            <span className="inline-block w-3 h-3 bg-gray-400 rounded-sm align-middle mr-1"></span>{translatePageText("Bàn xám: đã có người đặt trong khung giờ này") + " "}</p>
                         {isCheckingOverlap && (
-                            <p className="text-gray-500 mb-2">Đang kiểm tra bàn trống...</p>
+                            <p className="text-gray-500 mb-2">{translatePageText("Đang kiểm tra bàn trống...")}</p>
                         )}
 
                         <div className="border p-2 bg-white rounded">
                             {TABLE_GROUPS.map((g) => tableTypes[g.key] > 0 && (
                                 <div key={g.key} className="mb-4">
                                     <div className="font-bold text-sm mb-2 text-gray-700 border-b pb-1">
-                                        {g.name} ({g.range.replace(' - ', '-')}) - Cần chọn {tableTypes[g.key]} bàn
-                                    </div>
+                                        {g.name} ({g.range.replace(' - ', '-')}{translatePageText(") - Cần chọn") + " "}{tableTypes[g.key]}{" " + translatePageText("bàn") + " "}</div>
                                     <div className="grid grid-cols-5 gap-2">
                                         {Array.from({ length: g.count }, (_, i) => i + g.from).map((num) => {
                                             const occupied = unavailableTables.includes(num);
@@ -464,7 +455,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                                 </div>
                             ))}
                             {typesTotal === 0 && (
-                                <p className="text-gray-500 p-2">Hãy chọn loại bàn ở phần 2 trước.</p>
+                                <p className="text-gray-500 p-2">{translatePageText("Hãy chọn loại bàn ở phần 2 trước.")}</p>
                             )}
                         </div>
                         {hint && <p className="mt-2 text-sm font-semibold text-red-600">{hint}</p>}
@@ -477,19 +468,15 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
             <Modal
                 isOpen={confirmOpen}
-                title="Xác nhận chỉnh sửa đơn"
+                title={translatePageText("Xác nhận chỉnh sửa đơn")}
                 onClose={() => { if (!saving) setConfirmOpen(false); }}
                 cancelText="Quay lại"
                 onConfirm={handleSave}
-                confirmText={saving ? 'Đang lưu...' : 'Xác nhận'}
+                confirmText={saving ? translatePageText("Đang lưu...") : translatePageText("Xác nhận")}
                 confirmDisabled={saving}
             >
-                <p className="text-gray-700 mb-3">
-                    Bạn có chắc muốn lưu các thay đổi cho đơn hàng {bill?.order_stt || bill?.order_id} không?
-                </p>
-                <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">
-                    Việc chỉnh sửa sẽ tiêu hao <strong>1 lượt chỉnh sửa đơn</strong> trong tuần (hiện còn <strong>{attemptsLeft}</strong> lượt). Đơn không cần thanh toán lại.
-                </p>
+                <p className="text-gray-700 mb-3">{translatePageText("Bạn có chắc muốn lưu các thay đổi cho đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{" " + translatePageText("không?") + " "}</p>
+                <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Việc chỉnh sửa sẽ tiêu hao") + " "}<strong>{translatePageText("1 lượt chỉnh sửa đơn")}</strong>{" " + translatePageText("trong tuần (hiện còn") + " "}<strong>{attemptsLeft}</strong>{" " + translatePageText("lượt). Đơn không cần thanh toán lại.") + " "}</p>
             </Modal>
         </>
     );

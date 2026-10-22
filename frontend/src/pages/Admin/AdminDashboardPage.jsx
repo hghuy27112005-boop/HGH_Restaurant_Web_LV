@@ -10,6 +10,7 @@ import PeakHoursSection from './DashboardSections/PeakHoursSection';
 import TopUsersSection from './DashboardSections/TopUsersSection';
 import HolidaysSection from './DashboardSections/HolidaysSection';
 import { fmtMoney, extractError } from './DashboardSections/helpers';
+import { translatePageText } from '../../pageTextTranslations';
 
 const AdminDashboardPage = () => {
     const [loading, setLoading] = useState(true);
@@ -22,7 +23,7 @@ const AdminDashboardPage = () => {
                 const res = await adminAPI.dashboard.summary();
                 setSummary(res?.data?.data || null);
             } catch (err) {
-                setError(extractError(err, 'Lỗi tải dashboard'));
+                setError(extractError(err, translatePageText("Lỗi tải dashboard")));
             } finally {
                 setLoading(false);
             }
@@ -39,40 +40,40 @@ const AdminDashboardPage = () => {
 
             <StatGrid>
                 <StatCard label="Tổng doanh thu" value={fmtMoney(summary?.total_revenue)} icon="fa-sack-dollar" tone="green" />
-                <StatCard label="Tổng số đơn" value={Number(summary?.total_orders || 0).toLocaleString('vi-VN')} icon="fa-receipt" tone="purple" />
+                <StatCard label="Tổng số đơn" value={Number(summary?.total_orders || 0).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')} icon="fa-receipt" tone="purple" />
                 <StatCard label="Doanh thu đặt bàn" value={fmtMoney(summary?.booking_revenue)} icon="fa-chair" tone="blue" />
                 <StatCard label="Doanh thu đặt ship" value={fmtMoney(summary?.ship_revenue)} icon="fa-motorcycle" tone="yellow" />
             </StatGrid>
 
-            <CollapsibleSection title="Doanh thu" icon="fa-chart-line">
+            <CollapsibleSection title={translatePageText("Doanh thu")} icon="fa-chart-line">
                 <MetricSection metric="revenue" />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Số đơn hàng" icon="fa-receipt">
+            <CollapsibleSection title={translatePageText("Số đơn hàng")} icon="fa-receipt">
                 <MetricSection metric="orders" />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Xu hướng món ăn" icon="fa-arrow-trend-up">
+            <CollapsibleSection title={translatePageText("Xu hướng món ăn")} icon="fa-arrow-trend-up">
                 <DishTrendSection kind="sales" />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Món ăn được yêu thích" icon="fa-heart">
+            <CollapsibleSection title={translatePageText("Món ăn được yêu thích")} icon="fa-heart">
                 <DishTrendSection kind="rating" />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Thống kê theo thực đơn" icon="fa-utensils">
+            <CollapsibleSection title={translatePageText("Thống kê theo thực đơn")} icon="fa-utensils">
                 <DishRankingSection />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Khung giờ cao điểm" icon="fa-clock">
+            <CollapsibleSection title={translatePageText("Khung giờ cao điểm")} icon="fa-clock">
                 <PeakHoursSection />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Xếp hạng người dùng" icon="fa-ranking-star">
+            <CollapsibleSection title={translatePageText("Xếp hạng người dùng")} icon="fa-ranking-star">
                 <TopUsersSection />
             </CollapsibleSection>
 
-            <CollapsibleSection title="Ngày nghỉ lễ" icon="fa-calendar-days">
+            <CollapsibleSection title={translatePageText("Ngày nghỉ lễ")} icon="fa-calendar-days">
                 <HolidaysSection />
             </CollapsibleSection>
         </AdminPageShell>

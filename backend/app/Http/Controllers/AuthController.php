@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use App\Models\PasswordResetOtp;
 use App\Mail\PasswordResetOtpMail;
+use App\Support\PreferredLanguage;
 
 class AuthController extends Controller
 {
@@ -46,13 +47,16 @@ class AuthController extends Controller
 
         // Tài khoản đang bị khóa: không cho đăng nhập, không cấp token
         if ($account->isLocked()) {
+            $language = PreferredLanguage::fromRequest($request);
+            $lockedUntil = $account->locked_until->format($language === 'en' ? 'H:i m/d/Y' : 'H:i d/m/Y');
+
             return response()->json([
                 'success' => false,
                 'code' => 'account_locked',
                 'locked_until' => $account->locked_until->toIso8601String(),
-                'message' => 'Tài khoản của bạn đã bị khóa đến '
-                    . $account->locked_until->format('H:i d/m/Y')
-                    . '. Lý do: vi phạm chính sách nội quy Nhà hàng.',
+                'message' => $language === 'en'
+                    ? "Your account is locked until {$lockedUntil}. Reason: violation of the restaurant's policies."
+                    : "Tài khoản của bạn đã bị khóa đến {$lockedUntil}. Lý do: vi phạm chính sách nội quy Nhà hàng.",
             ], 403);
         }
 
@@ -138,6 +142,7 @@ class AuthController extends Controller
                 'tele_number' => $phone,
                 'password_hash' => Hash::make($request->password),
                 'role' => 'user',
+                'preferred_language' => PreferredLanguage::fromRequest($request),
             ]);
 
             Auth::login($user);
@@ -227,7 +232,9 @@ class AuthController extends Controller
             return $this->lockedAccountResponse($account);
         }
 
-        return DB::transaction(function () use ($email, $account) {
+        $language = PreferredLanguage::fromRequest($request);
+
+        return DB::transaction(function () use ($email, $account, $language) {
             $record = $this->lockOtpRecord($email);
 
             if ($record->isBlocked()) {
@@ -256,8 +263,8 @@ class AuthController extends Controller
 
             // Chỉ gửi mail thật khi email có tài khoản; gửi SAU khi đã trả response cho khỏi chờ SMTP
             if ($account) {
-                dispatch(function () use ($email, $otp) {
-                    Mail::to($email)->send(new PasswordResetOtpMail($otp, PasswordResetOtp::OTP_MINUTES));
+                dispatch(function () use ($email, $otp, $language) {
+                    Mail::to($email)->send(new PasswordResetOtpMail($otp, PasswordResetOtp::OTP_MINUTES, $language));
                 })->afterResponse();
             }
 

@@ -272,3 +272,23 @@ html[data-theme='dark'] input::placeholder,
 html[data-theme='dark'] textarea::placeholder {
     color: #9ca3af;
 }
+
+html[data-theme='dark'] .recharts-default-tooltip {
+    background-color: #1f2229 !important;
+    border: 1px solid #8a95a5 !important;
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
+html[data-theme='dark'] .recharts-tooltip-label,
+html[data-theme='dark'] .recharts-tooltip-item-separator {
+    color: #f3f4f6 !important;
+}
+
+html[data-theme='dark'] .recharts-cartesian-axis-tick-value {
+    fill: #d0d7e2 !important;
+}
+
+html[data-theme='dark'] .recharts-cartesian-grid line {
+    stroke: #626d7e !important;
+}

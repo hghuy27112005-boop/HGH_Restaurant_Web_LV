@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from './Shared';
+import { translatePageText } from '../pageTextTranslations';
 
 const RevenueChart = () => {
     const [data, setData] = useState([]);
@@ -30,21 +31,17 @@ const RevenueChart = () => {
                     className={`px-4 py-2 rounded ${
                         chartType === 'line' ? 'bg-red-600 text-white' : 'bg-white border'
                     }`}
-                >
-                    📈 Biểu đồ đường
-                </button>
+                >{translatePageText("📈 Biểu đồ đường") + " "}</button>
                 <button
                     onClick={() => setChartType('bar')}
                     className={`px-4 py-2 rounded ${
                         chartType === 'bar' ? 'bg-red-600 text-white' : 'bg-white border'
                     }`}
-                >
-                    📊 Biểu đồ cột
-                </button>
+                >{translatePageText("📊 Biểu đồ cột") + " "}</button>
             </div>
 
             {/* Chart */}
-            <Card title="Doanh thu theo tháng">
+            <Card title={translatePageText("Doanh thu theo tháng")}>
                 {chartType === 'bar' ? (
                     // Bar Chart
                     <div className="space-y-4">
@@ -113,11 +110,11 @@ const RevenueChart = () => {
                 <div className="flex gap-6 mt-6 pt-4 border-t">
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 bg-green-600 rounded" />
-                        <span className="text-sm">Doanh thu thực tế</span>
+                        <span className="text-sm">{translatePageText("Doanh thu thực tế")}</span>
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="w-4 h-4 bg-gray-400 rounded opacity-50" />
-                        <span className="text-sm">Mục tiêu</span>
+                        <span className="text-sm">{translatePageText("Mục tiêu")}</span>
                     </div>
                 </div>
             </Card>
