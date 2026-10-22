@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 /**
- * Seed đơn hàng từ 01/2025 tới hiện tại, bám sát luật đang chạy:
+ * Seed đơn hàng từ 01 của năm ngoái (năm hiện tại - 1) tới hiện tại, bám sát luật đang chạy:
  * - Đặt bàn: giờ đến cách lúc thanh toán >= 60'; tới (giờ đến - 60') thì "preparing" và trừ kho;
  *   đơn có giờ nấu nằm trong 10' sau thanh toán thì trừ kho ngay lúc thanh toán.
  * - Ship: không hẹn giờ thì nấu ngay (>= 7:30), hẹn giờ thì nấu = giờ tới - thời gian giao - 15';
@@ -36,7 +36,7 @@ class OrdersSeeder extends Seeder
         ini_set('memory_limit', '1024M');
 
         // ===== Cấu hình =====
-        $startYear = 2025;
+        $startYear = now()->year - 1;
         $startMonth = 1;
         $minPerMonth = 350;
         $maxPerMonth = 450;
@@ -50,44 +50,11 @@ class OrdersSeeder extends Seeder
         $generator = new OrderCodeGenerator();
         $fmt = fn (?Carbon $c) => $c?->format('Y-m-d H:i:s');
 
-        // ===== 1) Người dùng (giữ như cũ) =====
-        $existingUsers = DB::table('users')->orderBy('user_id')->get();
-        $existingCount = $existingUsers->count();
-        $startIndex = $existingCount > 0 ? $existingCount + 1 : 1;
-        $targetTotalUsers = 21;
-        $toCreate = max(0, $targetTotalUsers - $existingCount);
+        // ===== 1) Người dùng =====
+        // User đã do DatabaseSeeder tạo sẵn (admin + 5 tài khoản demo + 100 user seed);
+        // đơn hàng được chia đều cho mọi tài khoản không phải admin.
+        $users = DB::table('users')->where('role', '<>', 'admin')->orderBy('user_id')->pluck('user_id')->toArray();
 
-        $formatTele = function ($n) {
-            if ($n < 10) {
-                return sprintf('0%d23456789', $n);
-            }
-            return sprintf('0%02d3456789', $n);
-        };
-
-        $i = 0;
-        $created = 0;
-        while ($created < $toCreate) {
-            $idx = $startIndex + $i;
-            $i++;
-
-            if ($idx == 12) continue;
-            if ($idx == 22) continue;
-
-            $username = 'user' . ($idx - 1);
-            DB::table('users')->insert([
-                'username' => $username,
-                'email' => $username . '@example.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => $formatTele($idx),
-                'role' => 'user',
-                'points' => 0,
-                'membership' => 'bronze',
-                'created_at' => now(),
-            ]);
-            $created++;
-        }
-
-        $users = DB::table('users')->where('role', '<>', 'admin')->pluck('user_id')->toArray();
         if (count($users) < 1) {
             $this->command->error('No non-admin users available to seed orders.');
             return;
@@ -533,6 +500,17 @@ class OrdersSeeder extends Seeder
         $saleOffCount = 0;
 
         usort($drafts, fn ($a, $b) => $a['created_at']->getTimestamp() <=> $b['created_at']->getTimestamp());
+
+        // Chia đơn đều cho các user: xếp vòng tròn theo thứ tự thời gian, mỗi vòng xáo trộn lại
+        $userQueue = [];
+        foreach ($drafts as $k => $draftRow) {
+            if (empty($userQueue)) {
+                $userQueue = $users;
+                shuffle($userQueue);
+            }
+            $drafts[$k]['user_id'] = array_pop($userQueue);
+        }
+        unset($draftRow);
 
         $orderSeq = [];
         $deliverySeq = [];

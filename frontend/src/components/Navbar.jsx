@@ -7,9 +7,9 @@ const Navbar = () => {
     const { pathname } = useLocation();
     const [scrolled, setScrolled] = useState(false);
 
-    // Trang chủ và trang đăng nhập có ảnh nền tối phủ kín: navbar trong suốt, chữ trắng (chỉ riêng 2 trang này)
+    // Trang chủ, đăng nhập và quên mật khẩu có ảnh nền tối phủ kín: navbar trong suốt, chữ trắng (chỉ riêng các trang này)
     const isHome = pathname === '/';
-    const isDarkPage = isHome || pathname === '/login';
+    const isDarkPage = isHome || pathname === '/login' || pathname === '/forgot-password';
 
     // Ở trang chủ: khi cuộn xuống thì navbar có nền tối mờ để chữ còn đọc được trên nội dung phía sau
     useEffect(() => {

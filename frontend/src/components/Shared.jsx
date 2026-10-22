@@ -69,7 +69,7 @@ export const WarningMessage = ({ message, onClose }) => (
 
 let modalOpenCount = 0;
 
-export const Modal = ({ isOpen, title, titleClassName = '', className = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng', onSecondary, secondaryText = 'Quay lại', secondaryClassName = '', onTertiary, tertiaryText = 'Quay lại', tertiaryClassName = '', showHeaderClose = false, showFooterClose = true }) => {
+export const Modal = ({ isOpen, title, titleClassName = '', className = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng', onSecondary, secondaryText = 'Quay lại', secondaryClassName = '', onTertiary, tertiaryText = 'Quay lại', tertiaryClassName = '', showHeaderClose = false, showFooterClose = true, confirmDisabled = false }) => {
     const [zIndex, setZIndex] = useState(50);
     const mouseDownOnBackdrop = useRef(false);
 
@@ -142,7 +142,8 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                     {onConfirm && (
                         <button
                             onClick={onConfirm}
-                            className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700"
+                            disabled={confirmDisabled}
+                            className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600"
                         >
                             {confirmText}
                         </button>

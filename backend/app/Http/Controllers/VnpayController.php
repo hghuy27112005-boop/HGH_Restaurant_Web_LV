@@ -205,6 +205,11 @@ class VnpayController extends Controller
             if (!$delivery || !in_array($delivery->delivery_status, ['waiting_payment', 'scheduled'])) {
                 return response()->json(['message' => 'Đơn hàng đang được chuẩn bị, không thể hủy'], 400);
             }
+
+            // Job chuyển sang 'preparing' có thể chạy trễ nên kiểm tra giờ nấu thật.
+            if ($delivery->cooking_at !== null && $delivery->cooking_at->lte(now())) {
+                return response()->json(['message' => 'Đơn hàng đã tới giờ chuẩn bị, không thể hủy'], 400);
+            }
         }
 
         // Đơn VNPay: hủy sẽ thu hồi điểm đã nhận lúc thanh toán. Nếu khách đã tiêu
@@ -237,8 +242,35 @@ class VnpayController extends Controller
         $vnp_TxnRef     = $orderId . '_' . time();
         $vnp_Amount     = $amount * 100;
         $vnp_CreateDate = now()->format('YmdHis');
-        $vnp_ExpireDate = now()->addMinutes(15)->format('YmdHis');
+        // Link hoàn tiền sống tối đa 15 phút, nhưng KHÔNG được sống quá hạn hủy đơn (đặt bàn: trước giờ đến 60';
+        // ship: trước giờ bắt đầu nấu), nếu không khách có thể tạo link lúc còn hạn rồi trả sau khi đã quá hạn.
+        // Trừ 1 phút làm đệm cho độ trễ giữa VNPay và server.
+        $linkDeadline = null;
+        if ($order->order_type === 'booking_table') {
+            $linkDeadline = $deadline;
+        } elseif ($order->order_type === 'delivery' && $delivery->cooking_at && $delivery->cooking_at->gt(now())) {
+            $linkDeadline = $delivery->cooking_at;
+        }
+
+        $expireAt = now()->addMinutes(15);
+        if ($linkDeadline) {
+            $cap = $linkDeadline->copy()->subMinute();
+            if ($cap->lt($expireAt)) {
+                $expireAt = $cap;
+            }
+        }
+        if ($expireAt->lt(now()->addMinutes(2))) {
+            return response()->json(['message' => 'Đã quá sát thời hạn hủy đơn nên không thể tạo yêu cầu hoàn tiền mới.'], 400);
+        }
+
+        $vnp_ExpireDate = $expireAt->format('YmdHis');
         $vnp_OrderInfo  = 'Hoan tien don hang ' . $orderId;
+
+        // Giới hạn hủy đơn theo tuần: kiểm tra còn lượt + giữ chỗ 1 link hoàn tiền đang chờ (15 phút).
+        // Lượt chỉ bị trừ thật ở IPN, khi VNPay xác nhận hoàn tiền xong.
+        if ($blocked = $request->user()->reserveRefundLink($orderId, $expireAt)) {
+            return response()->json($blocked, 422);
+        }
 
         $rawIp = $request->header('X-Forwarded-For') ?? $request->ip();
         $ip    = trim(explode(',', $rawIp)[0]);
@@ -423,6 +455,15 @@ class VnpayController extends Controller
         if ($isRefund) {
             Log::info('VNPay IPN refund', ['order_id' => $orderId]);
 
+            DB::beginTransaction();
+            try {
+            // Khóa dòng Order rồi đọc lại bản mới nhất từ DB, để IPN gọi song song phải chờ nhau
+            // và các hàm phía sau (Stock::restoreForOrder, thu hồi điểm) không dùng dữ liệu cũ.
+            $order = Order::with('user', 'delivery', 'booking')
+                ->where('order_id', $orderId)
+                ->lockForUpdate()
+                ->first();
+
             // Chặn xử lý lặp: đơn đã hoàn rồi thì không thu hồi điểm / hoàn kho lần nữa
             $alreadyRefunded = $order->order_type === 'delivery'
                 ? $order->delivery?->D_payment_status === 'refunded'
@@ -430,7 +471,59 @@ class VnpayController extends Controller
                     ->where('B_payment_status', 'refunded')
                     ->exists();
             if ($alreadyRefunded) {
+                DB::rollBack();
                 return response()->json(['RspCode' => '02', 'Message' => 'Order already confirmed']);
+            }
+
+            // Kiểm tra lại hạn hủy đặt bàn theo giờ khách THỰC SỰ trả (vnp_PayDate),
+            // vì ở createRefundUrl chỉ kiểm tra lúc tạo link.
+            if ($order->order_type === 'booking_table') {
+                $booking = $order->booking;
+                if ($booking) {
+                    $bookingDateStr = \Carbon\Carbon::parse($booking->booking_date)->format('Y-m-d');
+                    $cancelDeadline = \Carbon\Carbon::parse($bookingDateStr . ' ' . $booking->start_time)->subHour();
+
+                    $payDateRaw = $result['data']['vnp_PayDate'] ?? '';
+                    try {
+                        $paidAt = $payDateRaw !== ''
+                            ? \Carbon\Carbon::createFromFormat('YmdHis', $payDateRaw)
+                            : now();
+                    } catch (\Throwable $e) {
+                        $paidAt = now();
+                    }
+
+                    if ($paidAt->greaterThanOrEqualTo($cancelDeadline)) {
+                        Log::critical('VNPay IPN refund quá hạn hủy đặt bàn, bỏ qua, cần xử lý thủ công', [
+                            'order_id'        => $orderId,
+                            'paid_at'         => $paidAt->toDateTimeString(),
+                            'cancel_deadline' => $cancelDeadline->toDateTimeString(),
+                        ]);
+                        DB::rollBack();
+                        return response()->json(['RspCode' => '00', 'Message' => 'Confirm Success']);
+                    }
+                }
+            }
+
+            // Đơn ship: khách trả tiền hoàn sau giờ nấu (cooking_at) thì không được hủy nữa.
+            if ($order->order_type === 'delivery' && $order->delivery && $order->delivery->cooking_at) {
+                $payDateRaw = $result['data']['vnp_PayDate'] ?? '';
+                try {
+                    $paidAt = $payDateRaw !== ''
+                        ? \Carbon\Carbon::createFromFormat('YmdHis', $payDateRaw)
+                        : now();
+                } catch (\Throwable $e) {
+                    $paidAt = now();
+                }
+
+                if ($paidAt->greaterThanOrEqualTo($order->delivery->cooking_at)) {
+                    Log::critical('VNPay IPN refund quá giờ nấu đơn ship, bỏ qua, cần xử lý thủ công', [
+                        'order_id'   => $orderId,
+                        'paid_at'    => $paidAt->toDateTimeString(),
+                        'cooking_at' => $order->delivery->cooking_at->toDateTimeString(),
+                    ]);
+                    DB::rollBack();
+                    return response()->json(['RspCode' => '00', 'Message' => 'Confirm Success']);
+                }
             }
 
             $bill = \App\Models\Bill::where('order_id', $orderId)->first();
@@ -485,7 +578,22 @@ class VnpayController extends Controller
                 }
             }
 
+            // Giới hạn hủy đơn theo tuần: hoàn tiền xong hoàn chỉnh mới trừ 1 lượt, đồng thời xóa khóa link chờ.
+            // Gọi sau khi đã save điểm của user (hàm này refresh model).
+            if ($user) {
+                $user->consumeCancelAttemptAfterRefund($orderId);
+            }
+
+            DB::commit();
             return response()->json(['RspCode' => '00', 'Message' => 'Confirm Success']);
+            } catch (\Throwable $e) {
+                DB::rollBack();
+                Log::error('VNPay IPN refund transaction failed', [
+                    'order_id' => $orderId,
+                    'error'    => $e->getMessage(),
+                ]);
+                return response()->json(['RspCode' => '99', 'Message' => 'Unknown error']);
+            }
         }
 
         // Kiểm tra delivery/booking record

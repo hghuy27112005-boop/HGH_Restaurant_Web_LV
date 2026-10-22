@@ -13,7 +13,7 @@ const axiosInstance = axios.create({
 
 // Add token to request if exists
 axiosInstance.interceptors.request.use((config) => {
-    const token = localStorage.getItem('auth_token');
+    const token = sessionStorage.getItem('auth_token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -24,11 +24,11 @@ axiosInstance.interceptors.request.use((config) => {
 axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401 && !error.config?.skipAuthRedirect) {
-            // Token expired or invalid
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('user');
-            window.location.href = '/login';
+        const url = error.config?.url || '';
+        const isAuthForm = url.includes('/login') || url.includes('/register');
+        if (error.response?.status === 401 && !isAuthForm && sessionStorage.getItem('auth_token')) {
+            // Token đã bị thu hồi (đăng nhập/đăng xuất ở nơi khác): báo cho useAuth hiện modal
+            window.dispatchEvent(new Event('session-kicked'));
         }
         return Promise.reject(error);
     }
@@ -39,15 +39,16 @@ export const authAPI = {
     register: (data) => axiosInstance.post('/register', data),
     login: (username, password) => axiosInstance.post('/login', { username, password }),
     logout: () => axiosInstance.post('/logout'),
-    forgotPassword: (email) => axiosInstance.post('/forgot-password', { email }),
+    sendResetOtp: (email) => axiosInstance.post('/forgot-password/send-otp', { email }),
+    verifyResetOtp: (email, otp) => axiosInstance.post('/forgot-password/verify-otp', { email, otp }),
+    resetPassword: (data) => axiosInstance.post('/forgot-password/reset', data),
 };
 
 // User API
 export const userAPI = {
     getProfile: () => axiosInstance.get('/user'),
-    // Dùng riêng cho polling kiểm tra tài khoản còn tồn tại — không để interceptor
-    // tự động redirect khi 401, vì cần hiện modal thông báo trước rồi mới logout.
-    checkAccountAlive: () => axiosInstance.get('/user', { skipAuthRedirect: true }),
+    // Dùng cho polling kiểm tra phiên còn sống (401 => interceptor phát 'session-kicked')
+    checkAccountAlive: () => axiosInstance.get('/user'),
     updateProfile: (data) => axiosInstance.put('/user', data),
     uploadAvatar: (formData) =>
         axiosInstance.post('/user/avatar', formData, {
@@ -155,7 +156,16 @@ export const shippingAPI = {
 // Admin APIs
 export const adminAPI = {
     dashboard: {
-        get: (filters = {}) => axiosInstance.get('/admin/dashboard', { params: filters }),
+        summary: () => axiosInstance.get('/admin/dashboard/summary'),
+        daily: (filters = {}) => axiosInstance.get('/admin/dashboard/daily', { params: filters }),
+        monthly: (filters = {}) => axiosInstance.get('/admin/dashboard/monthly', { params: filters }),
+        topMonths: (filters = {}) => axiosInstance.get('/admin/dashboard/top-months', { params: filters }),
+        dishTrend: (filters = {}) => axiosInstance.get('/admin/dashboard/dish-trend', { params: filters }),
+        dishRatingTrend: (filters = {}) => axiosInstance.get('/admin/dashboard/dish-rating-trend', { params: filters }),
+        dishRanking: (filters = {}) => axiosInstance.get('/admin/dashboard/dish-ranking', { params: filters }),
+        peakHours: (filters = {}) => axiosInstance.get('/admin/dashboard/peak-hours', { params: filters }),
+        topUsers: (filters = {}) => axiosInstance.get('/admin/dashboard/top-users', { params: filters }),
+        holidays: (filters = {}) => axiosInstance.get('/admin/dashboard/holidays', { params: filters }),
     },
     bills: {
         exportPdf: (id) =>
@@ -189,6 +199,13 @@ export const adminAPI = {
         // Xóa vĩnh viễn - backend sẽ từ chối nếu món đã từng được đặt hàng
         delete: (id) => axiosInstance.delete(`/admin/dishes/${id}`),
     },
+    ratings: {
+        // Thống kê sao trung bình + số lượt đánh giá của mọi món
+        getStats: () => axiosInstance.get('/admin/ratings/stats'),
+        // Đánh giá của 1 món, phân trang 10 cái/lần (page = 1, 2, 3...)
+        getByDish: (dishId, page = 1) =>
+            axiosInstance.get(`/admin/ratings/dish/${dishId}`, { params: { page } }),
+    },
     users: {
         getAll: (filters = {}) =>
             axiosInstance.get('/admin/users', { params: filters }),
@@ -202,32 +219,6 @@ export const adminAPI = {
             axiosInstance.post(`/admin/users/${id}/send-lock-mail`),
         sendUnlockMail: (id) =>
             axiosInstance.post(`/admin/users/${id}/send-unlock-mail`),
-    },
-    statistics: {
-        revenue: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/revenue', { params: filters }),
-        revenueSummary: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/revenue-summary', { params: filters }),
-        revenueByMonthRange: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/revenue-by-month-range', { params: filters }),
-        revenueByYear: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/revenue-by-year', { params: filters }),
-        bestsellers: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/bestsellers', { params: filters }),
-        customers: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/customers', { params: filters }),
-        availableMonths: () =>
-            axiosInstance.get('/admin/statistics/available-months'),
-        orderCountsByMonth: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/order-counts-by-month', { params: filters }),
-        dishQuantityByMonth: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/dish-quantity-by-month', { params: filters }),
-        dishTrendByMonthRange: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/dish-trend-by-month-range', { params: filters }),
-        peakHours: (filters = {}) =>
-            axiosInstance.get('/admin/statistics/peak-hours', { params: filters }),
-        availableYears: () =>
-            axiosInstance.get('/admin/statistics/available-years'),
     },
 };
 
@@ -249,11 +240,14 @@ export const bookingService = {
     checkOverlap: (data) => axiosInstance.post('/booking-tables/check-overlap', data),
     getOccupiedTables: (data) => axiosInstance.post('/booking-tables/occupied', data),
     cancelWithPoints: (orderId) => axiosInstance.post('/booking-tables/cancel-points', { order_id: orderId }),
+    modifyBooking: (data) => axiosInstance.post('/booking-tables/modify', data),
 };
 
 export const deliveryService = {
     getDeliveries: () => myBillsAPI.getAll({ order_type: 'delivery' }),
     cancelDelivery: (id) => deliveryAPI.cancelWithPoints(id),
+    previewModify: (id, data) => axiosInstance.post(`/deliveries/${id}/preview-modify`, data),
+    modifyDelivery: (id, data) => axiosInstance.post(`/deliveries/${id}/modify`, data),
 };
 
 export const vnpayAPI = {

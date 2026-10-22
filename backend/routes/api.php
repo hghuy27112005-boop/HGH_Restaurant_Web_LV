@@ -18,7 +18,10 @@ Route::get('/server-time', function () {
 });
 
 Route::post('/login', [\App\Http\Controllers\AuthController::class, 'login']);
-Route::post('/forgot-password', [\App\Http\Controllers\AuthController::class, 'forgotPassword']);
+// Quên mật khẩu (OTP qua email): public, throttle theo IP
+Route::post('/forgot-password/send-otp', [\App\Http\Controllers\AuthController::class, 'sendResetOtp'])->middleware('throttle:5,1');
+Route::post('/forgot-password/verify-otp', [\App\Http\Controllers\AuthController::class, 'verifyResetOtp'])->middleware('throttle:10,1');
+Route::post('/forgot-password/reset', [\App\Http\Controllers\AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 
 // Public API - Dishes & Menu
 Route::get('/dishes', [\App\Http\Controllers\DishController::class, 'index']);
@@ -62,11 +65,14 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
 
     // Deliveries
     Route::post('deliveries/{delivery}/cancel-points', [\App\Http\Controllers\DeliveryController::class, 'cancelWithPoints']);
+    Route::post('deliveries/{delivery}/preview-modify', [\App\Http\Controllers\DeliveryController::class, 'previewModify']);
+    Route::post('deliveries/{delivery}/modify', [\App\Http\Controllers\DeliveryController::class, 'modify']);
 
     // Booking Tables
     Route::post('booking-tables/check-overlap', [\App\Http\Controllers\BookingTableController::class, 'checkMultiOverlap']);
     Route::post('booking-tables/occupied', [\App\Http\Controllers\BookingTableController::class, 'getOccupiedTables']);
     Route::post('booking-tables/cancel-points', [\App\Http\Controllers\BookingTableController::class, 'cancelWithPoints']);
+    Route::post('booking-tables/modify', [\App\Http\Controllers\BookingTableController::class, 'modify']);
 
     // VNPay - yêu cầu đăng nhập để tạo link thanh toán/hoàn tiền cho đúng đơn của mình
     Route::post('vnpay/create-payment-url', [VnpayController::class, 'createPaymentUrl']);
@@ -100,7 +106,16 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
 // Admin Routes
 Route::middleware(['auth:sanctum', 'locked', 'admin'])->group(function () {
     // Dashboard
-    Route::get('admin/dashboard', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'index']);
+    Route::get('admin/dashboard/summary', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'summary']);
+    Route::get('admin/dashboard/daily', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'daily']);
+    Route::get('admin/dashboard/monthly', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'monthly']);
+    Route::get('admin/dashboard/top-months', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'topMonths']);
+    Route::get('admin/dashboard/dish-trend', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'dishTrend']);
+    Route::get('admin/dashboard/dish-rating-trend', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'dishRatingTrend']);
+    Route::get('admin/dashboard/dish-ranking', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'dishRanking']);
+    Route::get('admin/dashboard/peak-hours', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'peakHours']);
+    Route::get('admin/dashboard/top-users', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'topUsers']);
+    Route::get('admin/dashboard/holidays', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'holidays']);
 
     // Bills Management
     Route::get('admin/bills/{bill}/export-pdf', [\App\Http\Controllers\BillController::class, 'exportPDFAdmin']);
@@ -132,23 +147,12 @@ Route::middleware(['auth:sanctum', 'locked', 'admin'])->group(function () {
     Route::post('admin/dishes/{id}/toggle-status', [\App\Http\Controllers\DishController::class, 'toggleStatus']);
     Route::delete('admin/dishes/{id}', [\App\Http\Controllers\DishController::class, 'deleteDish']);
 
+    // Ratings Management (xem đánh giá của khách theo món)
+    Route::get('admin/ratings/stats', [\App\Http\Controllers\Admin\Admin_RatingController::class, 'stats']);
+    Route::get('admin/ratings/dish/{dishId}', [\App\Http\Controllers\Admin\Admin_RatingController::class, 'byDish']);
+
     // Promotions
     Route::apiResource('admin/sale-off-events', \App\Http\Controllers\Admin\Admin_SaleOffEventController::class);
-
-    Route::get('admin/statistics/available-months', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'availableMonths']);
-    Route::get('admin/statistics/order-counts-by-month', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'orderCountsByMonth']);
-    Route::get('admin/statistics/dish-quantity-by-month', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'dishQuantityByMonth']);
-    Route::get('admin/statistics/dish-trend-by-month-range', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'dishTrendByMonthRange']);
-    Route::get('admin/statistics/peak-hours', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'peakHours']);
-    Route::get('admin/statistics/available-years', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'availableYears']);
-
-    // Statistics
-    Route::get('admin/statistics/revenue', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'revenue']);
-    Route::get('admin/statistics/revenue-summary', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'revenueSummary']);
-    Route::get('admin/statistics/revenue-by-month-range', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'revenueByMonthRange']);
-    Route::get('admin/statistics/revenue-by-year', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'revenueByYear']);
-    Route::get('admin/statistics/bestsellers', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'bestsellers']);
-    Route::get('admin/statistics/customers', [\App\Http\Controllers\Admin\Admin_StatisticsController::class, 'customers']);
 });
 
 Route::get('/vnpay/ipn', [VnpayController::class, 'vnpayIpn']);

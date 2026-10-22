@@ -36,7 +36,15 @@ const AdminMenuManagement = () => {
     const [typeFilter, setTypeFilter] = useState(''); // '' = tất cả loại
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
-    const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
+    const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid' | 'rating'
+    const [ratingStats, setRatingStats] = useState({}); // { [dish_id]: { review_count, avg_rating } }
+    const [isPickerOpen, setIsPickerOpen] = useState(false); // modal chọn món để xem đánh giá
+    const [reviewDish, setReviewDish] = useState(null); // món đang được xem đánh giá chi tiết
+    const [reviewList, setReviewList] = useState([]); // các đánh giá đã tải của món đang xem
+    const [reviewSummary, setReviewSummary] = useState(null); // { review_count, avg_rating }
+    const [reviewPage, setReviewPage] = useState(1);
+    const [reviewHasMore, setReviewHasMore] = useState(false);
+    const [reviewLoading, setReviewLoading] = useState(false);
 
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -69,18 +77,56 @@ const AdminMenuManagement = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [dishesRes, typesRes] = await Promise.all([
+            const [dishesRes, typesRes, statsRes] = await Promise.all([
                 adminAPI.dishes.getAll(),
-                dishAPI.getDishTypes()
+                dishAPI.getDishTypes(),
+                adminAPI.ratings.getStats().catch(() => ({ data: { data: [] } })),
             ]);
             setDishes(dishesRes.data);
             setDishTypes(typesRes.data);
+            const statsMap = {};
+            (statsRes.data?.data || []).forEach((s) => { statsMap[s.dish_id] = s; });
+            setRatingStats(statsMap);
         } catch (err) {
             setAlertMessage('Lỗi tải danh sách thực đơn');
             console.error(err);
         } finally {
             setLoading(false);
         }
+    };
+
+    // ===== Xem đánh giá của 1 món (10 cái/lần) =====
+    const loadReviews = async (dishId, page) => {
+        setReviewLoading(true);
+        try {
+            const res = await adminAPI.ratings.getByDish(dishId, page);
+            const d = res.data;
+            setReviewSummary({ review_count: d.review_count, avg_rating: d.avg_rating });
+            setReviewList((prev) => (page === 1 ? d.reviews : [...prev, ...d.reviews]));
+            setReviewPage(page);
+            setReviewHasMore(Boolean(d.has_more));
+        } catch (err) {
+            setAlertMessage('Lỗi tải đánh giá của món');
+            console.error(err);
+        } finally {
+            setReviewLoading(false);
+        }
+    };
+
+    // Chọn món mới thì xóa dữ liệu cũ rồi tải trang 1
+    useEffect(() => {
+        if (!reviewDish) return;
+        setReviewList([]);
+        setReviewSummary(null);
+        setReviewHasMore(false);
+        loadReviews(reviewDish.dish_id, 1);
+    }, [reviewDish]);
+
+    // created_at từ backend dạng "2026-10-21 09:20:18" nên đổi dấu cách thành "T" cho mọi trình duyệt đọc được
+    const formatReviewDate = (value) => {
+        if (!value) return '';
+        const d = new Date(String(value).replace(' ', 'T'));
+        return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('vi-VN');
     };
 
     // ===== Lọc tại trình duyệt =====
@@ -276,7 +322,7 @@ const AdminMenuManagement = () => {
 
             {/* Thanh công cụ: chip loại món + tìm kiếm + trạng thái + chế độ xem */}
             <div className="mb-4 bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-3">
-                <div className="flex gap-2 overflow-x-auto">
+                <div className="flex gap-2 overflow-x-auto w-0 min-w-full">
                     <button onClick={() => setTypeFilter('')} className={chipClass(typeFilter === '')}>
                         Tất cả loại
                     </button>
@@ -312,7 +358,7 @@ const AdminMenuManagement = () => {
                         ))}
                     </select>
                     <div className="inline-flex rounded-lg border-2 border-red-600 overflow-hidden bg-white">
-                        {[['table', 'fa-table-list', 'Bảng'], ['grid', 'fa-table-cells-large', 'Lưới']].map(([mode, icon, text]) => (
+                        {[['table', 'fa-table-list', 'Bảng'], ['grid', 'fa-table-cells-large', 'Lưới'], ['rating', 'fa-star', 'Đánh giá']].map(([mode, icon, text]) => (
                             <button
                                 key={mode}
                                 onClick={() => setViewMode(mode)}
@@ -327,14 +373,54 @@ const AdminMenuManagement = () => {
 
             {/* Danh sách */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-4 py-3 border-b font-semibold text-gray-800">
-                    Danh sách món ăn ({visibleDishes.length}{isFiltered ? ` / ${dishes.length}` : ''})
+                <div className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold text-gray-800">
+                        Danh sách món ăn ({visibleDishes.length}{isFiltered ? ` / ${dishes.length}` : ''})
+                    </span>
+                    {viewMode === 'rating' && (
+                        <button
+                            onClick={() => setIsPickerOpen(true)}
+                            className="px-3 py-1.5 text-sm font-semibold rounded bg-red-600 text-white hover:bg-red-700 transition"
+                        >
+                            Xem đánh giá của khách hàng
+                        </button>
+                    )}
                 </div>
 
                 {loading ? (
                     <TableLoading />
                 ) : visibleDishes.length === 0 ? (
                     <p className="py-8 text-center text-gray-500">Không có món ăn nào phù hợp</p>
+                ) : viewMode === 'rating' ? (
+                    <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+                        {visibleDishes.map((dish) => {
+                            const stat = ratingStats[dish.dish_id];
+                            return (
+                                <div
+                                    key={dish.dish_id}
+                                    className={`bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col ${!dish.is_active ? 'opacity-60' : ''}`}
+                                >
+                                    <img
+                                        src={getImageUrl(dish.image_url)}
+                                        alt={dish.dish_name}
+                                        className="w-full h-36 object-cover"
+                                    />
+                                    <div className="p-3">
+                                        <p className="font-semibold text-gray-800 leading-snug line-clamp-2">{dish.dish_name}</p>
+                                        {stat ? (
+                                            <p className="mt-2 text-sm text-gray-700">
+                                                <span className="text-yellow-500">★</span>{' '}
+                                                <span className="font-bold">{Number(stat.avg_rating).toFixed(1)}</span>
+                                                <span className="text-gray-500"> / 5 ({stat.review_count} đánh giá)</span>
+                                            </p>
+                                        ) : (
+                                            <p className="mt-2 text-sm text-gray-400">Chưa có đánh giá</p>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 ) : viewMode === 'table' ? (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
@@ -549,6 +635,80 @@ const AdminMenuManagement = () => {
                     </div>
                 </div>
             )}
+
+            {/* Modal chi tiết đánh giá của 1 món */}
+            <Modal
+                isOpen={!!reviewDish}
+                title={reviewDish?.dish_name || ''}
+                className="max-w-lg"
+                onClose={() => setReviewDish(null)}
+                cancelText="Đóng"
+            >
+                {!reviewSummary ? (
+                    <TableLoading />
+                ) : reviewSummary.review_count === 0 ? (
+                    <p className="py-6 text-center text-gray-500">Chưa có đánh giá</p>
+                ) : (
+                    <>
+                        <p className="mb-4 text-gray-700">
+                            <span className="text-yellow-500 text-xl">★</span>{' '}
+                            <span className="font-bold text-lg">{Number(reviewSummary.avg_rating).toFixed(1)}</span>
+                            <span className="text-gray-500"> / 5 ({reviewSummary.review_count} đánh giá)</span>
+                        </p>
+                        <div className="space-y-3">
+                            {reviewList.map((r) => (
+                                <div key={r.review_id} className="border-b border-gray-100 pb-3 last:border-b-0">
+                                    <div className="flex flex-wrap items-center justify-between gap-x-3">
+                                        <span className="font-semibold text-gray-800">{r.username}</span>
+                                        <span className="text-xs text-gray-500">{formatReviewDate(r.created_at)}</span>
+                                    </div>
+                                    <div className="text-lg leading-none">
+                                        <span className="text-yellow-400">{'★'.repeat(r.rating)}</span>
+                                        <span className="text-gray-300">{'★'.repeat(5 - r.rating)}</span>
+                                    </div>
+                                    {r.comment && <p className="mt-1 text-sm text-gray-700 break-words">{r.comment}</p>}
+                                </div>
+                            ))}
+                        </div>
+                        {reviewHasMore && (
+                            <div className="mt-4 text-center">
+                                <button
+                                    onClick={() => loadReviews(reviewDish.dish_id, reviewPage + 1)}
+                                    disabled={reviewLoading}
+                                    className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50"
+                                >
+                                    {reviewLoading ? 'Đang tải...' : 'Xem thêm'}
+                                </button>
+                            </div>
+                        )}
+                    </>
+                )}
+            </Modal>
+
+            {/* Modal chọn món để xem đánh giá */}
+            <Modal
+                isOpen={isPickerOpen}
+                title="Chọn món muốn xem đánh giá"
+                className="max-w-3xl"
+                onClose={() => setIsPickerOpen(false)}
+                cancelText="Quay lại"
+            >
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {dishes.map((dish) => (
+                        <div
+                            key={dish.dish_id}
+                            onClick={() => {
+                                setReviewDish(dish);
+                                setIsPickerOpen(false);
+                            }}
+                            className="cursor-pointer rounded-lg border-2 border-transparent hover:border-red-600 overflow-hidden transition"
+                        >
+                            <img src={getImageUrl(dish.image_url)} alt={dish.dish_name} className="w-full h-20 object-cover" />
+                            <p className="text-xs p-1 truncate">{dish.dish_name}</p>
+                        </div>
+                    ))}
+                </div>
+            </Modal>
 
             {/* Modal thông báo (thay cho alert) */}
             <Modal

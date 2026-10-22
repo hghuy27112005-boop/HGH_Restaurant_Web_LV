@@ -13,6 +13,7 @@ import ScrollToTop from './components/ScrollToTop';
 // Pages
 import HomeApp from './pages/Home/HomeApp';
 import LoginPage from './pages/Auth/LoginPage';
+import ForgotPasswordPage from './pages/Auth/ForgotPasswordPage';
 import MenuPage from './pages/Menu/MenuPage';
 import DishDetailPage from './pages/Menu/DishDetailPage';
 import ProfilePage from './pages/User/ProfilePage';
@@ -26,24 +27,23 @@ import AdminUsersPage from './pages/Admin/AdminUsersPage';
 import AdminStockPage from './pages/Admin/AdminStockPage';
 import AdminDeliveriesTab from './pages/Admin/Orders/AdminDeliveriesTab';
 import AdminBookingsTab from './pages/Admin/Orders/AdminBookingsTab';
-import AdminRevenuePage from './pages/Admin/AdminRevenuePage';
 import AdminDashboardPage from './pages/Admin/AdminDashboardPage';
 import AdminMenuManagement from './pages/Admin/AdminMenuManagement';
-import AdminReportPage from './pages/Admin/AdminReportPage';
 import AdminSaleOffPage from './pages/Admin/AdminSaleOffPage';
 import AdminOrdersLayout from './pages/Admin/Orders/AdminOrdersLayout';
 
 
 (function handleGoogleAuthRedirect() {
-  const params = new URLSearchParams(window.location.search);
+  // Token nằm trong URL fragment (#), không được gửi lên server hay header Referer
+  const params = new URLSearchParams(window.location.hash.slice(1));
   const googleToken = params.get('google_token');
   const googleUserPayload = params.get('google_user');
 
   if (googleToken && googleUserPayload) {
     try {
       const userData = JSON.parse(atob(googleUserPayload));
-      localStorage.setItem('auth_token', googleToken);
-      localStorage.setItem('user', JSON.stringify(userData));
+      sessionStorage.setItem('auth_token', googleToken);
+      sessionStorage.setItem('user', JSON.stringify(userData));
     } catch (e) {
       console.error('Lỗi xử lý đăng nhập Google:', e);
     } finally {
@@ -66,6 +66,7 @@ function App() {
 
               {/* Auth */}
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
               {/* Menu */}
               <Route path="/menu" element={<MenuPage />} />
@@ -95,8 +96,6 @@ function App() {
                 <Route path="bookings" element={<AdminBookingsTab />} />
                 <Route path="deliveries" element={<AdminDeliveriesTab />} />
               </Route>
-              <Route path="/admin/revenue" element={<ProtectedRoute requireAdmin={true}><AdminRevenuePage /></ProtectedRoute>} />
-              <Route path="/admin/reports" element={<ProtectedRoute requireAdmin={true}><AdminReportPage /></ProtectedRoute>} />
               <Route path="/admin/sale-off" element={<ProtectedRoute requireAdmin={true}><AdminSaleOffPage /></ProtectedRoute>} />
               {/*Payment*/}
               <Route path="/payment-result" element={<PaymentResultPage />} />

@@ -5,6 +5,7 @@ import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from '../Menu/DishDetailPage';
 import { getCartKey, getSessionKey } from '../../utils/cartStorage';
+import EditBookingModal from './EditBookingModal';
 
 
 const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
@@ -66,6 +67,16 @@ const BookingsPage = () => {
     const [cancelModalOpen, setCancelModalOpen] = useState(false);
     const [cancelingBill, setCancelingBill] = useState(null);
     const [cancelErrorMessage, setCancelErrorMessage] = useState(null);
+    const [cancelAttemptsLeft, setCancelAttemptsLeft] = useState(0); // số lượt hủy còn lại lúc mở modal xác nhận
+    const [checkingCancel, setCheckingCancel] = useState(false); // đang hỏi server số lượt, khóa nút tránh bấm đúp
+
+    // Chỉnh sửa đơn đặt bàn đã thanh toán
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editingBill, setEditingBill] = useState(null);
+    const [modifyAttemptsLeft, setModifyAttemptsLeft] = useState(0); // số lượt sửa còn lại lúc mở modal
+    const [checkingModify, setCheckingModify] = useState(false); // đang hỏi server số lượt, khóa nút tránh bấm đúp
+    const [modifyErrorMessage, setModifyErrorMessage] = useState(null);
+    const [modifySuccessMessage, setModifySuccessMessage] = useState(null);
 
     // Thông báo / xác nhận dạng modal (thay cho alert / window.confirm)
     const [alertMessage, setAlertMessage] = useState('');
@@ -771,6 +782,61 @@ const BookingsPage = () => {
         });
     };
 
+    // Bấm "Hủy đơn hàng": lấy số lượt hủy mới nhất từ server (không dùng bản cache ở AuthContext vì có thể cũ / chưa reset tuần).
+    // Hết lượt thì báo lỗi luôn, còn lượt thì mở modal xác nhận.
+    const handleCancelClick = async (bill) => {
+        if (checkingCancel) return;
+        setCheckingCancel(true);
+        try {
+            const res = await userAPI.getProfile();
+            const left = Number(res.data?.data?.cancel_attempts_left ?? 0);
+            if (left <= 0) {
+                setCancelErrorMessage('Bạn đã hết lượt hủy đơn trong tuần này (tối đa 2 lượt/tuần, tính chung cho cả đặt bàn và đặt ship). Lượt hủy sẽ được làm mới vào thứ Hai tuần sau.');
+                return;
+            }
+            setCancelAttemptsLeft(left);
+            setCancelingBill(bill);
+            setCancelModalOpen(true);
+        } catch (err) {
+            setCancelErrorMessage(err.response?.data?.message || 'Không thể kiểm tra số lượt hủy đơn. Vui lòng thử lại.');
+        } finally {
+            setCheckingCancel(false);
+        }
+    };
+
+    // Bấm "Chỉnh sửa thông tin": lấy số lượt sửa mới nhất từ server (không dùng bản cache ở AuthContext).
+    // Hết lượt thì báo lỗi luôn, còn lượt thì mở modal chỉnh sửa.
+    const handleEditClick = async (bill) => {
+        if (checkingModify) return;
+        setCheckingModify(true);
+        try {
+            const res = await userAPI.getProfile();
+            const left = Number(res.data?.data?.modify_attempts_left ?? 0);
+            if (left <= 0) {
+                setModifyErrorMessage('Bạn đã hết lượt chỉnh sửa đơn trong tuần này (tối đa 2 lượt/tuần). Lượt chỉnh sửa sẽ được làm mới vào thứ Hai tuần sau.');
+                return;
+            }
+            setModifyAttemptsLeft(left);
+            setEditingBill(bill);
+            setEditModalOpen(true);
+        } catch (err) {
+            setModifyErrorMessage(err.response?.data?.message || 'Không thể kiểm tra số lượt chỉnh sửa. Vui lòng thử lại.');
+        } finally {
+            setCheckingModify(false);
+        }
+    };
+
+    // Lưu thành công: đóng modal, chuyển bộ lọc ngày sang ngày mới của đơn (nếu không thì đơn sửa sang
+    // ngày khác sẽ biến mất khỏi danh sách đang lọc), tải lại danh sách rồi báo thành công.
+    const handleEditSaved = async ({ date, attemptsLeft }) => {
+        setEditModalOpen(false);
+        setEditingBill(null);
+        if (date) setArrivalDateFilter(date);
+        setFilter('all');
+        await fetchBookings();
+        setModifySuccessMessage(`Chỉnh sửa đơn đặt bàn thành công. Bạn còn ${attemptsLeft ?? '—'} lượt chỉnh sửa trong tuần này.`);
+    };
+
     const confirmCancelOrder = async () => {
         if (!cancelingBill) return;
         try {
@@ -1355,8 +1421,11 @@ const BookingsPage = () => {
                                 Hủy đơn hàng
                             </div>
                             <div className="p-6">
-                                <p className="text-gray-700 text-center mb-6">
-                                    Bạn có chắc muốn hủy đơn hàng {cancelingBill?.order_stt || cancelingBill?.order_id} không
+                                <p className="text-gray-700 text-center mb-3">
+                                    Bạn có chắc muốn hủy đơn hàng {cancelingBill?.order_stt || cancelingBill?.order_id} không?
+                                </p>
+                                <p className="text-sm text-center mb-6 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">
+                                    Việc hủy sẽ tiêu hao <strong>1 lượt hủy đơn</strong> trong tuần (hiện còn <strong>{cancelAttemptsLeft}</strong> lượt). Lượt chỉ bị trừ khi đơn đã được hủy và hoàn tiền/điểm xong.
                                 </p>
                                 <div className="flex gap-4">
                                     <button
@@ -1517,15 +1586,22 @@ const BookingsPage = () => {
                                         </Badge>
 
                                         {canCancelBooking(bill) && (
-                                            <button
-                                                onClick={() => {
-                                                    setCancelingBill(bill);
-                                                    setCancelModalOpen(true);
-                                                }}
-                                                className="px-4 py-2 bg-red-600 text-white rounded font-bold text-sm hover:bg-red-700 transition"
-                                            >
-                                                Hủy đơn hàng
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleEditClick(bill)}
+                                                    disabled={checkingModify || checkingCancel}
+                                                    className="px-4 py-2 bg-white border border-red-600 text-red-600 rounded font-bold text-sm hover:bg-red-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    Chỉnh sửa thông tin
+                                                </button>
+                                                <button
+                                                    onClick={() => handleCancelClick(bill)}
+                                                    disabled={checkingCancel || checkingModify}
+                                                    className="px-4 py-2 bg-red-600 text-white rounded font-bold text-sm hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    Hủy đơn hàng
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 </Card>
@@ -1534,6 +1610,36 @@ const BookingsPage = () => {
                     </div>
                 )}
             </div>
+
+            {/* Chỉnh sửa đơn đặt bàn đã thanh toán */}
+            <EditBookingModal
+                isOpen={editModalOpen}
+                bill={editingBill}
+                attemptsLeft={modifyAttemptsLeft}
+                getServerNow={getServerNow}
+                onClose={() => { setEditModalOpen(false); setEditingBill(null); }}
+                onSaved={handleEditSaved}
+            />
+
+            {/* Lỗi chỉnh sửa đơn (vd hết lượt) */}
+            <Modal
+                isOpen={!!modifyErrorMessage}
+                title="Lỗi chỉnh sửa đơn"
+                onClose={() => setModifyErrorMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{modifyErrorMessage}</p>
+            </Modal>
+
+            {/* Chỉnh sửa đơn thành công */}
+            <Modal
+                isOpen={!!modifySuccessMessage}
+                title="Thông báo"
+                onClose={() => setModifySuccessMessage(null)}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{modifySuccessMessage}</p>
+            </Modal>
 
             {/* Lỗi hủy đơn */}
             <Modal

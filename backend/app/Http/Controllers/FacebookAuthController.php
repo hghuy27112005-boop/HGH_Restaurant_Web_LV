@@ -67,6 +67,8 @@ class FacebookAuthController extends Controller
         Auth::login($user);
         request()->session()->regenerate();
 
+        // Chỉ cho 1 phiên sống: xóa hết token cũ
+        $user->tokens()->delete();
         $token = $user->createToken('facebook_login')->plainTextToken;
 
         $payload = base64_encode(json_encode([
@@ -82,8 +84,9 @@ class FacebookAuthController extends Controller
         // hiện có ở frontend (đang đọc các param này khi load trang chủ).
         // Nếu frontend của bạn xử lý riêng cho từng provider, đổi sang fb_token/fb_user
         // và cập nhật lại handler tương ứng.
+        // Dùng fragment (#) để token không bị gửi lên server/log/Referer
         return redirect(
-            "{$frontendUrl}/?google_token=" . urlencode($token) .
+            "{$frontendUrl}/#google_token=" . urlencode($token) .
             "&google_user=" . urlencode($payload)
         );
     }

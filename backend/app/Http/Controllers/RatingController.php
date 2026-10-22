@@ -116,10 +116,28 @@ class RatingController extends Controller
                 'user_id' => Auth::id(),
                 'dish_id' => $orderItem->dish_id,
             ]);
+            // Lần chấm gần nhất thắng: món vừa bị chê thì không còn là món yêu thích.
+            FavoriteDish::where('user_id', Auth::id())
+                ->where('dish_id', $orderItem->dish_id)
+                ->delete();
         } else {
+            // Lần chấm gần nhất thắng: món vừa được khen thì gỡ khỏi danh sách loại trừ.
+            RecommendationExclusion::where('user_id', Auth::id())
+                ->where('dish_id', $orderItem->dish_id)
+                ->delete();
             // "Khen" (>=4 sao) -> tự động đẩy món lên đầu danh sách đề xuất.
             $this->promoteToFavorite(Auth::id(), $orderItem->dish_id, $rating);
         }
+
+        // Tính lại độ tương đồng ngầm SAU khi đã trả kết quả cho khách, để nút "Gửi đánh giá" không bị chậm.
+        dispatch(function () {
+            try {
+                \Illuminate\Support\Facades\Cache::lock('dish-similarity-recompute', 60)
+                    ->block(20, fn () => app(\App\Services\DishSimilarityService::class)->recompute());
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Không tính lại được dish_similarities: ' . $e->getMessage());
+            }
+        })->afterResponse();
 
         return response()->json([
             'success' => true,

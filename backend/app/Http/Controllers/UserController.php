@@ -36,6 +36,7 @@ class UserController extends Controller
     public function profile(Request $request)
     {
         $user = $request->user();
+        $user->refreshWeeklyAttempts();
 
         return response()->json([
             'success' => true,
@@ -48,6 +49,8 @@ class UserController extends Controller
                 'role'        => $user->role,
                 'membership'  => $user->membership,
                 'points'      => $user->points,
+                'cancel_attempts_left' => (int) $user->cancel_attempts_left,
+                'modify_attempts_left' => (int) $user->modify_attempts_left,
                 'created_at'  => $user->created_at,
             ],
         ]);

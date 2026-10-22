@@ -4,7 +4,7 @@
 
 const getCurrentUserId = () => {
     try {
-        const raw = localStorage.getItem('user');
+        const raw = sessionStorage.getItem('user');
         const userId = raw ? JSON.parse(raw)?.user_id : null;
         return userId ?? 'guest';
     } catch (e) {

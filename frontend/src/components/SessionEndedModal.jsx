@@ -2,10 +2,10 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext';
 
-const AccountDeletedModal = () => {
-    const { accountDeleted, accountLocked, logout } = useAuthContext();
+const SessionEndedModal = () => {
+    const { sessionKicked, accountLocked, logout } = useAuthContext();
     const navigate = useNavigate();
-    const visible = accountDeleted || !!accountLocked;
+    const visible = sessionKicked || !!accountLocked;
 
     useEffect(() => {
         if (!visible) return;
@@ -13,7 +13,7 @@ const AccountDeletedModal = () => {
         const timer = setTimeout(async () => {
             await logout();
             navigate('/login', { replace: true });
-        }, 4000);
+        }, 3000);
 
         return () => clearTimeout(timer);
     }, [visible, logout, navigate]);
@@ -44,7 +44,7 @@ const AccountDeletedModal = () => {
                             Lý do: vi phạm chính sách nội quy Nhà hàng. Đang đăng xuất...
                         </p>
                     ) : (
-                        <p>Tài khoản của bạn đã bị xóa. Đang đăng xuất...</p>
+                        <p>Phiên đăng nhập của bạn đã kết thúc (hết hạn hoặc tài khoản được đăng nhập ở nơi khác). Đang đăng xuất...</p>
                     )}
                 </div>
             </div>
@@ -52,4 +52,4 @@ const AccountDeletedModal = () => {
     );
 };
 
-export default AccountDeletedModal;
+export default SessionEndedModal;

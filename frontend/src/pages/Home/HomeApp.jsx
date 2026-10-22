@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { dishAPI } from '../../services/api';
 import { Link } from 'react-router-dom';
 import Footer from '../../components/Footer';
+import { useAuthContext } from '../../context/AuthContext';
 
 // Ảnh nền của trang chủ: muốn đổi ảnh chỉ cần sửa dòng này
 const HOME_BACKGROUND = '/pics/30.jpg';
@@ -11,6 +12,8 @@ const glassPanel = 'rounded-2xl border border-white/20 bg-black/40 shadow-2xl ba
 
 export default function HomeApp() {
     const [highlights, setHighlights] = useState([]);
+    const { user, isAuthenticated } = useAuthContext();
+    const isAdmin = isAuthenticated && user?.role === 'admin';
 
     useEffect(() => {
         const fetchHighlights = async () => {
@@ -45,12 +48,14 @@ export default function HomeApp() {
                     <div className="mx-auto max-w-lg text-center drop-shadow-lg lg:mx-0 lg:text-left">
                         <h1 className="text-4xl sm:text-5xl font-bold leading-tight">NHÀ HÀNG HGH</h1>
                         <p className="mt-4 text-xl sm:text-2xl text-white/90">Hương vị cơm gia đình thuần túy</p>
-                        <Link
-                            to="/menu"
-                            className="mt-6 inline-block rounded-full bg-red-600 px-6 py-2.5 font-semibold text-white transition hover:bg-red-700"
-                        >
-                            Xem thực đơn
-                        </Link>
+                        {!isAdmin && (
+                            <Link
+                                to="/menu"
+                                className="mt-6 inline-block rounded-full bg-red-600 px-6 py-2.5 font-semibold text-white transition hover:bg-red-700"
+                            >
+                                Xem thực đơn
+                            </Link>
+                        )}
                     </div>
                 </section>
 

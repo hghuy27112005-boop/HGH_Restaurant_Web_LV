@@ -10,8 +10,8 @@ export const useAuth = () => {
     // Đọc user từ localStorage ngay từ lần render đầu để Layout biết role ngay (tránh nháy navbar khi F5 lúc là admin)
     const [user, setUser] = useState(() => {
         try {
-            const token = localStorage.getItem('auth_token');
-            const savedUser = localStorage.getItem('user');
+            const token = sessionStorage.getItem('auth_token');
+            const savedUser = sessionStorage.getItem('user');
             return token && savedUser ? JSON.parse(savedUser) : null;
         } catch (e) {
             return null;
@@ -19,7 +19,7 @@ export const useAuth = () => {
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [accountDeleted, setAccountDeleted] = useState(false);
+    const [sessionKicked, setSessionKicked] = useState(false); // true khi token bị thu hồi (đăng nhập/đăng xuất nơi khác)
     const [accountLocked, setAccountLocked] = useState(null); // { until } khi bị khóa, null khi bình thường
     const pollingRef = useRef(null);
 
@@ -28,8 +28,8 @@ export const useAuth = () => {
         const loadUser = async () => {
             try {
                 setLoading(true);
-                const token = localStorage.getItem('auth_token');
-                const savedUser = localStorage.getItem('user');
+                const token = sessionStorage.getItem('auth_token');
+                const savedUser = sessionStorage.getItem('user');
 
                 if (token && savedUser) {
                     setUser(JSON.parse(savedUser));
@@ -42,8 +42,8 @@ export const useAuth = () => {
             } catch (err) {
                 console.error('Auth load error:', err);
                 setUser(null);
-                localStorage.removeItem('auth_token');
-                localStorage.removeItem('user');
+                sessionStorage.removeItem('auth_token');
+                sessionStorage.removeItem('user');
             } finally {
                 setLoading(false);
             }
@@ -59,8 +59,8 @@ export const useAuth = () => {
             const response = await authAPI.authAPI.login(email, password);
 
             const { user, token } = response.data;
-            localStorage.setItem('auth_token', token);
-            localStorage.setItem('user', JSON.stringify(user));
+            sessionStorage.setItem('auth_token', token);
+            sessionStorage.setItem('user', JSON.stringify(user));
             setUser(user);
 
             return { success: true, user };
@@ -85,8 +85,8 @@ export const useAuth = () => {
             const response = await authAPI.authAPI.register(data);
 
             const { user, token } = response.data;
-            localStorage.setItem('auth_token', token);
-            localStorage.setItem('user', JSON.stringify(user));
+            sessionStorage.setItem('auth_token', token);
+            sessionStorage.setItem('user', JSON.stringify(user));
             setUser(user);
 
             return { success: true, user };
@@ -105,10 +105,10 @@ export const useAuth = () => {
         } catch (err) {
             console.error('Logout error:', err);
         } finally {
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('user');
+            sessionStorage.removeItem('auth_token');
+            sessionStorage.removeItem('user');
             setUser(null);
-            setAccountDeleted(false);
+            setSessionKicked(false);
             setAccountLocked(null);
         }
     }, []);
@@ -116,15 +116,21 @@ export const useAuth = () => {
     const updateUser = useCallback((partialData) => {
         setUser((prev) => {
             const updated = { ...prev, ...partialData };
-            localStorage.setItem('user', JSON.stringify(updated));
+            sessionStorage.setItem('user', JSON.stringify(updated));
             return updated;
         });
     }, []);
 
-    // Polling: kiểm tra tài khoản còn tồn tại không (chỉ áp dụng cho user thường,
-    // không áp dụng cho admin). Nếu token không còn hợp lệ (401) -> tài khoản đã bị xóa.
+        // Interceptor báo token bị thu hồi (401) -> hiện modal rồi tự đăng xuất
     useEffect(() => {
-        if (!user || user.role === 'admin') {
+        const onKicked = () => setSessionKicked(true);
+        window.addEventListener('session-kicked', onKicked);
+        return () => window.removeEventListener('session-kicked', onKicked);
+    }, []);
+
+    // Polling 10 giây cho mọi role. 401 do interceptor xử lý, ở đây chỉ bắt thêm trường hợp bị khóa (403)
+    useEffect(() => {
+        if (!user || sessionKicked) {
             if (pollingRef.current) {
                 clearInterval(pollingRef.current);
                 pollingRef.current = null;
@@ -136,17 +142,13 @@ export const useAuth = () => {
             try {
                 await userAPI.checkAccountAlive();
             } catch (err) {
-                if (err.response?.status === 401) {
-                    setAccountDeleted(true);
-                    clearInterval(pollingRef.current);
-                    pollingRef.current = null;
-                } else if (err.response?.status === 403 && err.response?.data?.code === 'account_locked') {
+                if (err.response?.status === 403 && err.response?.data?.code === 'account_locked') {
                     setAccountLocked({ until: err.response.data.locked_until });
                     clearInterval(pollingRef.current);
                     pollingRef.current = null;
                 }
             }
-        }, 30000);
+        }, 10000);
 
         return () => {
             if (pollingRef.current) {
@@ -154,7 +156,7 @@ export const useAuth = () => {
                 pollingRef.current = null;
             }
         };
-    }, [user]);
+    }, [user, sessionKicked]);
 
     return {
         user,
@@ -166,7 +168,7 @@ export const useAuth = () => {
         logout,
         updateUser,
         isAuthenticated: !!user,
-        accountDeleted,
+        sessionKicked,
         accountLocked,
     };
 };

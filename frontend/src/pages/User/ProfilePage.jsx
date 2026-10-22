@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import Cropper from "react-easy-crop"; // npm install react-easy-crop
+import { useNavigate } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
 function getToken() {
-  return localStorage.getItem("auth_token") || "";
+  return sessionStorage.getItem("auth_token") || "";
 }
 
 function authHeaders(extra = {}) {
@@ -255,7 +256,8 @@ function Btn({ children, onClick, variant = "outline", disabled, style = {}, typ
 //  ProfilePage
 // ═══════════════════════════════════════════════════════════════════════════
 export default function ProfilePage() {
-  const { updateUser } = useAuthContext();
+  const { updateUser, logout } = useAuthContext();
+  const navigate = useNavigate();
   const { toast, show: showToast } = useToast();
 
   const [user, setUser] = useState(null);
@@ -282,6 +284,11 @@ export default function ProfilePage() {
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/user`, { headers: authHeaders() });
+        if (res.status === 401) {
+          // Token bị thu hồi: báo cho useAuth hiện modal, không hiện toast lỗi
+          window.dispatchEvent(new Event('session-kicked'));
+          return;
+        }
         if (!res.ok) throw new Error("Unauthorized");
         const json = await res.json();
         const u = json.data;
@@ -420,13 +427,8 @@ export default function ProfilePage() {
 
   // ── Đăng xuất ──────────────────────────────────────────────────────────
   async function handleLogout() {
-    try {
-      await fetch(`${API_BASE}/logout`, { method: "POST", headers: authHeaders() });
-    } finally {
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("user");
-      window.location.href = "/login";
-    }
+    await logout();
+    navigate("/login", { replace: true });
   }
 
   const displayAvatarUrl = previewAvatarUrl || user?.avatar_url || (user?.role === 'admin' ? '/hgh-apple.png' : null);
@@ -535,8 +537,23 @@ export default function ProfilePage() {
                 <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>
                   Cấp bậc thành viên: <strong style={{ color: "#333" }}>{user?.membership}</strong>
                 </p>
-                <p style={{ color: "#555", margin: "0 0 16px", fontSize: 15, fontWeight: 600 }}>
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>
                   Điểm tích lũy: <strong style={{ color: "#C0392B" }}>{user?.points ?? 0}</strong>
+                </p>
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>
+                  Lượt hủy đơn:{" "}
+                  <strong style={{ color: (user?.cancel_attempts_left ?? 0) === 0 ? "#C0392B" : "#333" }}>
+                    {user?.cancel_attempts_left ?? 0}/2
+                  </strong>
+                </p>
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>
+                  Lượt chỉnh sửa đơn:{" "}
+                  <strong style={{ color: (user?.modify_attempts_left ?? 0) === 0 ? "#C0392B" : "#333" }}>
+                    {user?.modify_attempts_left ?? 0}/2
+                  </strong>
+                </p>
+                <p style={{ color: "#999", margin: "0 0 16px", fontSize: 12 }}>
+                  Lượt được làm mới vào thứ Hai hàng tuần, tính chung đặt bàn và đặt ship.
                 </p>
               </>
             )}

@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext';
 
 // Sidebar chỉ dùng cho admin (khách và người dùng thường dùng Navbar ở trên cùng)
-const Sidebar = ({ collapsed, setCollapsed }) => {
+const Sidebar = ({ open, setOpen }) => {
     const { user } = useAuthContext();
     const navigate = useNavigate();
     const location = useLocation();
@@ -12,8 +12,6 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
 
     const links = [
         { path: '/admin/dashboard', label: 'Dashboard' },
-        { path: '/admin/revenue', label: 'Doanh thu' },
-        { path: '/admin/reports', label: 'Báo cáo' },
         { path: '/admin/sale-off', label: 'Quản lý sự kiện' },
         { path: '/admin/users', label: 'Quản lý người dùng' },
         { path: '/admin/stocks', label: 'Quản lý kho hàng' },
@@ -26,49 +24,55 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
         : '';
     const displayAvatarUrl = user?.avatar_url || '/hgh-apple.png';
 
+    // Chọn mục: chuyển trang rồi tự đóng sidebar (giống CTU)
+    const go = (path) => {
+        navigate(path);
+        setOpen(false);
+    };
+
     return (
-        <aside
-            className={`fixed left-0 top-0 h-screen bg-white border-r border-gray-200 flex flex-col z-40 transition-all duration-300 ${collapsed ? 'w-16' : 'w-64'
-                }`}
-        >
-            {/* HEADER */}
-            {collapsed ? (
-                <div className="relative group flex justify-center py-4">
-                    <button
-                        onClick={() => setCollapsed(false)}
-                        className="w-10 h-10 rounded-lg overflow-hidden hover:ring-2 hover:ring-red-600"
+        <>
+            {/* NỀN MỜ: bấm vào để đóng */}
+            <div
+                onClick={() => setOpen(false)}
+                className={`fixed inset-0 bg-black/50 z-40 transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                    }`}
+            />
+
+            <aside
+                className={`fixed left-0 top-0 h-screen w-64 max-w-[85vw] bg-white border-r border-gray-200 flex flex-col z-50 transition-transform duration-300 ${open ? 'translate-x-0' : '-translate-x-full'
+                    }`}
+            >
+                {/* HEADER */}
+                <div className="flex items-center justify-between gap-3 px-4 py-4 border-b border-gray-200">
+                    <Link
+                        to="/"
+                        onClick={() => setOpen(false)}
+                        className="flex items-center gap-3 font-bold text-red-600 whitespace-nowrap"
                     >
-                        <img src="/hgh-apple.png" alt="HGH" className="w-full h-full object-cover" />
-                    </button>
-                    {/* Tooltip: nền trắng, chữ đen */}
-                    <span className="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 whitespace-nowrap bg-white text-black text-xs px-2 py-1 rounded shadow border border-gray-200 opacity-0 group-hover:opacity-100 transition-opacity z-50">
-                        Open sidebar
-                    </span>
-                </div>
-            ) : (
-                <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-200">
-                    <button
-                        onClick={() => setCollapsed(true)}
-                        className="w-10 h-10 flex-shrink-0 bg-red-600 hover:bg-red-700 rounded-lg flex flex-col items-center justify-center gap-[5px]"
-                        title="Close sidebar"
-                    >
-                        <span className="block w-5 h-0.5 bg-white rounded"></span>
-                        <span className="block w-5 h-0.5 bg-white rounded"></span>
-                        <span className="block w-5 h-0.5 bg-white rounded"></span>
-                    </button>
-                    <Link to="/" className="font-bold text-red-600 whitespace-nowrap">
+                        <img
+                            src="/hgh-apple.png"
+                            alt="HGH"
+                            className="w-10 h-10 object-contain flex-shrink-0"
+                        />
                         NHÀ HÀNG HGH
                     </Link>
+                    <button
+                        onClick={() => setOpen(false)}
+                        className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 text-2xl leading-none"
+                        aria-label="Đóng menu"
+                        title="Đóng"
+                    >
+                        ✕
+                    </button>
                 </div>
-            )}
 
-            {/* NAV - chỉ hiện khi mở rộng */}
-            {!collapsed ? (
+                {/* NAV */}
                 <nav className="flex-1 flex flex-col justify-end p-3 space-y-2">
                     {links.map((item) => (
                         <button
                             key={item.path}
-                            onClick={() => navigate(item.path)}
+                            onClick={() => go(item.path)}
                             className={`w-full text-left px-4 py-3 rounded-lg transition ${isActive(item.path)
                                 ? 'bg-red-600 text-white'
                                 : 'text-red-600 hover:bg-red-50'
@@ -78,29 +82,12 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
                         </button>
                     ))}
                 </nav>
-            ) : (
-                <div className="flex-1" />
-            )}
 
-            {/* PROFILE */}
-            {collapsed ? (
-                <div className="flex justify-center py-4">
-                    <Link
-                        to="/profile"
-                        className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0"
-                    >
-                        <img
-                            src={displayAvatarUrl}
-                            alt="Avatar"
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                        />
-                    </Link>
-                </div>
-            ) : (
+                {/* PROFILE */}
                 <div className="p-3 border-t border-gray-200">
                     <Link
                         to="/profile"
+                        onClick={() => setOpen(false)}
                         className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-red-50"
                     >
                         <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0">
@@ -114,8 +101,8 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
                         <span className="text-sm text-red-600">{roleLabel}</span>
                     </Link>
                 </div>
-            )}
-        </aside>
+            </aside>
+        </>
     );
 };
 

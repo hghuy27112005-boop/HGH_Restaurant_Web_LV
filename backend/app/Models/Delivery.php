@@ -182,6 +182,77 @@ class Delivery extends Model
         return $cookAt !== null && $cookAt->lt($now->copy()->addMinutes(15));
     }
 
+    // ============================================
+    // CHỈNH SỬA ĐƠN ĐÃ THANH TOÁN (địa chỉ + giờ hẹn nhận hàng)
+    // ============================================
+
+    /** Giờ nấu mới của đơn đã thanh toán phải cách hiện tại ít nhất bấy nhiêu phút (cùng ngưỡng isPreferredTimeTooClose). */
+    public const EDIT_MIN_LEAD_MINUTES = 15;
+
+    /**
+     * Đơn còn sửa được khi: đã thanh toán, đang 'scheduled' và CHƯA tới giờ nấu.
+     * Kiểm tra cooking_at thật chứ không chỉ dựa vào trạng thái, vì job chuyển sang 'preparing' có thể chạy trễ.
+     */
+    public function canBeModified(?Carbon $now = null): bool
+    {
+        $now = $now ?? now();
+
+        return $this->delivery_status === 'scheduled'
+            && $this->D_payment_status === 'paid'
+            && $this->cooking_at !== null
+            && $this->cooking_at->gt($now);
+    }
+
+    /**
+     * Giờ hàng tới sớm nhất khi SỬA đơn đã thanh toán (không còn khâu chờ thanh toán 45'):
+     * max(now + 15' đệm + 15' chuẩn bị + giao, 7:30 + 15' chuẩn bị + giao). Làm tròn lên phút.
+     */
+    public static function earliestArrivalForEdit(Carbon $now, int $durationMinutes): Carbon
+    {
+        $byClock = $now->copy()->addMinutes(self::EDIT_MIN_LEAD_MINUTES + self::PREP_MINUTES + $durationMinutes);
+        $byOpening = $now->copy()->setTime(7, 30, 0)->addMinutes(self::PREP_MINUTES + $durationMinutes);
+
+        $earliest = $byClock->gt($byOpening) ? $byClock : $byOpening;
+        $floor = $earliest->copy()->startOfMinute();
+
+        return $floor->lt($earliest) ? $floor->addMinute() : $floor;
+    }
+
+    /** Giống isPreferredArrivalTooEarly nhưng theo quy tắc sửa đơn. Hẹn sau 22:00 thì không coi là quá sớm. */
+    public static function isPreferredArrivalTooEarlyForEdit(?string $preferredTime, int $durationMinutes, Carbon $now): bool
+    {
+        if (!$preferredTime) {
+            return false;
+        }
+
+        $preferredAt = $now->copy()->setTimeFromTimeString($preferredTime);
+        if ($preferredAt->gt($now->copy()->setTime(22, 0, 0))) {
+            return false;
+        }
+
+        return $preferredAt->lt(self::earliestArrivalForEdit($now, $durationMinutes));
+    }
+
+    /** Lịch dự kiến khi sửa đơn (không lưu DB), kèm giờ tới sớm nhất theo quy tắc sửa. */
+    public static function previewEditSchedule(int $durationMinutes, ?string $preferredTime, ?Carbon $now = null): array
+    {
+        $now = ($now ?? now())->copy();
+
+        $draft = new self([
+            'estimated_duration_minutes' => $durationMinutes,
+            'preferred_delivery_time' => $preferredTime,
+        ]);
+        $draft->applyCookingSchedule($now);
+
+        return [
+            'cooking_at' => $draft->cooking_at?->toIso8601String(),
+            'ship_at' => $draft->ship_at?->toIso8601String(),
+            'estimated_completion_at' => $draft->estimated_completion_at?->toIso8601String(),
+            'earliest_arrival_at' => self::earliestArrivalForEdit($now, $durationMinutes)->toIso8601String(),
+            'preferred_time_too_early' => self::isPreferredArrivalTooEarlyForEdit($preferredTime, $durationMinutes, $now),
+        ];
+    }
+
     /**
      * Tính và gán (chưa save) lịch: cooking_at, ship_at, estimated_completion_at, paid_at.
      * - Không hẹn giờ: nấu ngay khi thanh toán.

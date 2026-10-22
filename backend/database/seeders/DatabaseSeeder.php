@@ -97,95 +97,63 @@ class DatabaseSeeder extends Seeder
         }
 
         // 3. Seed Users
-        DB::table('users')->insert([
-            [
-                'username' => 'admin',
-                'email' => 'admin@gmail.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => '0123456789',
-                'role' => 'admin',
-                'points' => 0,
-                'membership' => 'administrator',
-                'created_at' => now(),
-            ],
+        //    - user_id 1001-1006: admin + 5 tài khoản demo (Bronze → Diamond)
+        //    - user_id 1-100    : 100 user seed (user101 → user200), mỗi 20 người một hạng
+        $passwordHash = Hash::make('password'); // dùng chung 1 hash cho nhanh (cùng mật khẩu "password")
+        $now = now();
 
-            [
-                'username' => 'user1',
-                'email' => 'user1@gmail.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => '0223456789',
+        $tiers = [
+            ['membership' => 'bronze', 'points' => 990],
+            ['membership' => 'silver', 'points' => 2990],
+            ['membership' => 'gold', 'points' => 5990],
+            ['membership' => 'platinum', 'points' => 9990],
+            ['membership' => 'diamond', 'points' => 999999999],
+        ];
+
+        $userRows = [];
+
+        $demoAccounts = [
+            ['admin', 'administrator', 0, 'admin'],
+            ['Bronze', 'bronze', 990, 'user'],
+            ['Silver', 'silver', 2990, 'user'],
+            ['Gold', 'gold', 5990, 'user'],
+            ['Platinum', 'platinum', 9990, 'user'],
+            ['Diamond', 'diamond', 999999999, 'user'],
+        ];
+        foreach ($demoAccounts as $i => [$username, $membership, $points, $role]) {
+            $userRows[] = [
+                'user_id' => 1001 + $i,
+                'username' => $username,
+                'email' => $username . '@gmail.com',
+                'password_hash' => $passwordHash,
+                'tele_number' => '099' . ($i + 1) . '456789',
+                'role' => $role,
+                'points' => $points,
+                'membership' => $membership,
+                'created_at' => $now,
+            ];
+        }
+
+        for ($n = 1; $n <= 100; $n++) {
+            $stt = 100 + $n; // 101 → 200
+            $tier = $tiers[intdiv($n - 1, 20)];
+            $userRows[] = [
+                'user_id' => $n,
+                'username' => 'user' . $stt,
+                'email' => 'user' . $stt . '@gmail.com',
+                'password_hash' => $passwordHash,
+                'tele_number' => '0' . $stt . '456789',
                 'role' => 'user',
-                'points' => 0,
-                'membership' => 'bronze',
-                'created_at' => now(),
-            ],
+                'points' => $tier['points'],
+                'membership' => $tier['membership'],
+                'created_at' => $now,
+            ];
+        }
 
-            [
-                'username' => 'user2',
-                'email' => 'user2@gmail.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => '0323456789',
-                'role' => 'user',
-                'points' => 0,
-                'membership' => 'bronze',
-                'created_at' => now(),
-            ],
+        DB::table('users')->insert($userRows);
 
-            [
-                'username' => 'Bronze',
-                'email' => 'Bronze@gmail.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => '0423456789',
-                'role' => 'user',
-                'points' => 990,
-                'membership' => 'bronze',
-                'created_at' => now(),
-            ],
-
-            [
-                'username' => 'Silver',
-                'email' => 'Silver@gmail.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => '0523456789',
-                'role' => 'user',
-                'points' => 2990,
-                'membership' => 'silver',
-                'created_at' => now(),
-            ],
-
-            [
-                'username' => 'Gold',
-                'email' => 'Gold@gmail.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => '0623456789',
-                'role' => 'user',
-                'points' => 5990,
-                'membership' => 'gold',
-                'created_at' => now(),
-            ],
-
-            [
-                'username' => 'Platinum',
-                'email' => 'Platinum@gmail.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => '0723456789',
-                'role' => 'user',
-                'points' => 9990,
-                'membership' => 'platinum',
-                'created_at' => now(),
-            ],
-
-            [
-                'username' => 'Diamond',
-                'email' => 'Diamond@gmail.com',
-                'password_hash' => Hash::make('password'),
-                'tele_number' => '0823456789',
-                'role' => 'user',           
-                'points' => 999999999,
-                'membership' => 'diamond',
-                'created_at' => now(),
-            ],
-        ]);
+        // Đã chèn user_id thủ công nên phải đồng bộ lại sequence (user đăng ký mới sẽ nhận id 1007 trở đi)
+        DB::statement("SELECT setval(pg_get_serial_sequence('users', 'user_id'), (SELECT MAX(user_id) FROM users))");
 
         // 4. Seed Table
         DB::table('table_types')->insert([
@@ -744,7 +712,11 @@ class DatabaseSeeder extends Seeder
 
         $this->call(SaleOffEventSeeder::class);
         $this->call(OrdersSeeder::class);
-        $this->call(DishSimilaritySeeder::class);
+        $this->call(ReviewsSeeder::class);
+
+        // Độ tương đồng giữa các món được tính từ chính các đánh giá vừa seed (adjusted cosine)
+        $similarityCount = app(\App\Services\DishSimilarityService::class)->recompute();
+        $this->command->info("✅ Đã tính {$similarityCount} cặp độ tương đồng từ đánh giá.");
 
         $this->command->info('✅ CSDL mới đã được seed thành công với dữ liệu của bạn!');
     }        

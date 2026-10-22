@@ -32,6 +32,28 @@ return new class extends Migration {
 
             // --- Khóa tài khoản: null = không khóa; có giá trị = bị khóa tới thời điểm đó ---
             $table->timestamp('locked_until')->nullable();
+
+            // --- Giới hạn hủy/sửa đơn theo tuần (reset lười, xem User::refreshWeeklyAttempts) ---
+            $table->unsignedSmallInteger('cancel_attempts_left')->default(2);
+            $table->unsignedSmallInteger('modify_attempts_left')->default(2);
+            $table->date('attempts_week_start')->nullable();
+
+            // --- Link hoàn tiền VNPay đang chờ (mỗi khách tối đa 1 đơn tại một thời điểm) ---
+            $table->string('refund_pending_order_id', 100)->nullable();
+            $table->timestamp('refund_pending_until')->nullable();
+        });
+
+        Schema::create('password_reset_otps', function (Blueprint $table) {
+            $table->id();
+            $table->string('email', 255)->unique();
+            $table->string('otp_hash', 255)->nullable();
+            $table->unsignedTinyInteger('attempts')->default(0);
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamp('last_sent_at')->nullable();
+            $table->string('reset_token_hash', 255)->nullable();
+            $table->timestamp('reset_token_expires_at')->nullable();
+            $table->timestamp('blocked_until')->nullable();
+            $table->timestamps();
         });
 
         Schema::create('sessions', function (Blueprint $table) {
@@ -50,6 +72,7 @@ return new class extends Migration {
     public function down(): void
     {
         Schema::dropIfExists('users');
+        Schema::dropIfExists('password_reset_otps');
         Schema::dropIfExists('sessions');
     }
 };

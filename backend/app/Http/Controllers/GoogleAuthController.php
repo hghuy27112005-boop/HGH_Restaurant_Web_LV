@@ -59,6 +59,8 @@ class GoogleAuthController extends Controller
         Auth::login($user);
         request()->session()->regenerate();
 
+        // Chỉ cho 1 phiên sống: xóa hết token cũ
+        $user->tokens()->delete();
         $token = $user->createToken('google_login')->plainTextToken;
 
         $payload = base64_encode(json_encode([
@@ -70,8 +72,9 @@ class GoogleAuthController extends Controller
             'avatar_url' => $user->avatar_url,
         ]));
 
+        // Dùng fragment (#) để token không bị gửi lên server/log/Referer
         return redirect(
-            "{$frontendUrl}/?google_token=" . urlencode($token) .
+            "{$frontendUrl}/#google_token=" . urlencode($token) .
             "&google_user=" . urlencode($payload)
         );
     }
