@@ -11,6 +11,7 @@ use App\Models\Dish;
 use App\Models\DishCustomization;
 use App\Models\Stock;
 use App\Services\OrderCodeGenerator;
+use App\Support\PreferredLanguage;
 
 class OrderController extends Controller
 {
@@ -37,6 +38,11 @@ class OrderController extends Controller
             'booking_table.start_time' => 'required_if:order_type,booking_table|string',
             'booking_table.end_time' => 'required_if:order_type,booking_table|string',
         ]);
+
+        app(\App\Services\DishCustomizationService::class)->assertOwnedVariants(
+            $validated['items'],
+            (int) $request->user()->user_id
+        );
 
         $over50 = \App\Models\Stock::findIngredientDemandOver50($validated['items']);
         if ($over50) {
@@ -66,13 +72,17 @@ class OrderController extends Controller
 
                 $realPrice = (float) $dish->price;
                 $subtotalBeforePoints += $realPrice * $item['quantity'];
+                $recipeSnapshot = app(\App\Services\DishCustomizationService::class)->orderVariantSnapshot(
+                    $dish,
+                    isset($item['customization_id']) ? (int) $item['customization_id'] : null
+                );
 
                 $itemsWithRealPrice[] = [
                     'dish_id'  => $item['dish_id'],
                     'customization_id' => $item['customization_id'] ?? null,
-                    'customization_name' => $item['customization_name'] ?? null,
-                    'ingredients' => $item['ingredients'] ?? null,
-                    'removed_ingredients' => $item['removed_ingredients'] ?? [],
+                    'customization_name' => $recipeSnapshot['customization_name'],
+                    'ingredients' => $recipeSnapshot['ingredients'],
+                    'removed_ingredients' => $recipeSnapshot['removed_ingredients'],
                     'quantity' => $item['quantity'],
                     'price'    => $realPrice,
                 ];
@@ -127,7 +137,8 @@ class OrderController extends Controller
                     if (!empty($validated['delivery']['lat']) && !empty($validated['delivery']['lng'])) {
                         $shippingResult = $distanceService->calculateForCoordinates(
                             (float) $validated['delivery']['lat'],
-                            (float) $validated['delivery']['lng']
+                            (float) $validated['delivery']['lng'],
+                            PreferredLanguage::fromRequest($request)
                         );
                     } else {
                         $shippingResult = $distanceService->calculateForAddress($validated['delivery']['address']);
@@ -227,6 +238,11 @@ class OrderController extends Controller
             'items.*.ingredients' => 'nullable|string',
             'items.*.quantity' => 'required|integer|min:1',
         ]);
+
+        app(\App\Services\DishCustomizationService::class)->assertOwnedVariants(
+            $validated['items'],
+            (int) $request->user()->user_id
+        );
 
         $over50 = Stock::findIngredientDemandOver50($validated['items']);
         if ($over50) {

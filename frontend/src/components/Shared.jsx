@@ -72,7 +72,7 @@ let modalOpenCount = 0;
 
 const translateModalContent = (node) => {
     if (typeof node === 'string') return translatePageText(node);
-    if (Array.isArray(node)) return node.map(translateModalContent);
+    if (Array.isArray(node)) return React.Children.map(node, translateModalContent);
     if (React.isValidElement(node) && node.props.children !== undefined) {
         return React.cloneElement(node, undefined, translateModalContent(node.props.children));
     }

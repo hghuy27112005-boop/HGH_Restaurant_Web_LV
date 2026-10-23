@@ -45,6 +45,11 @@ class BillController extends Controller
             'booking_table.end_time' => 'required_if:order_type,booking_table|date_format:H:i',
         ]);
 
+        app(\App\Services\DishCustomizationService::class)->assertOwnedVariants(
+            $validated['items'],
+            (int) $request->user()->user_id
+        );
+
         if ($validated['order_type'] === 'booking_table') {
             // Kiểm tra khung giờ ở backend (không chỉ tin frontend): 07:00-22:00, tối đa 90 phút
             [$sH, $sM] = array_map('intval', explode(':', $validated['booking_table']['start_time']));
@@ -100,15 +105,19 @@ class BillController extends Controller
 
                 $realPrice = (float) $dish->price;
                 $subtotalBeforePoints += $realPrice * $item['quantity'];
+                $recipeSnapshot = app(\App\Services\DishCustomizationService::class)->orderVariantSnapshot(
+                    $dish,
+                    isset($item['customization_id']) ? (int) $item['customization_id'] : null
+                );
 
                 $itemsWithRealPrice[] = [
                     'dish_id'  => $item['dish_id'],
                     'quantity' => $item['quantity'],
                     'price'    => $realPrice,
                     'customization_id' => $item['customization_id'] ?? null,
-                    'customization_name' => $item['customization_name'] ?? null,
-                    'ingredients' => $item['ingredients'] ?? null,
-                    'removed_ingredients' => $item['removed_ingredients'] ?? [],
+                    'customization_name' => $recipeSnapshot['customization_name'],
+                    'ingredients' => $recipeSnapshot['ingredients'],
+                    'removed_ingredients' => $recipeSnapshot['removed_ingredients'],
                 ];
             }
 

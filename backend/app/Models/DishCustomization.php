@@ -15,13 +15,16 @@ class DishCustomization extends Model
         'recipe_name',
         'ingredients',
         'recipe_instructions',
+        'recipe_instructions_en',
         'removed_ingredients',
         'replacements',
+        'add_on_ingredients',
     ];
 
     protected $casts = [
         'removed_ingredients' => 'array',
         'replacements' => 'array',
+        'add_on_ingredients' => 'array',
     ];
 
     public function dish()

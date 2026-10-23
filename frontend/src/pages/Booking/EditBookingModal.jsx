@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { bookingService } from '../../services/api';
 import { Modal } from '../../components/Shared';
-import { translatePageText } from '../../pageTextTranslations';
+import { translatePageText, translateTableSelectionLimit } from '../../pageTextTranslations';
 
 // Modal chỉnh sửa đơn đặt bàn ĐÃ thanh toán: ngày giờ, số lượng + loại bàn, số thứ tự bàn.
 // Dùng state riêng, không dùng chung với wizard đặt bàn mới ở BookingsPage (wizard gắn chặt
@@ -10,8 +10,6 @@ import { translatePageText } from '../../pageTextTranslations';
 
 const HR_REGEX = /^([0-1]?[0-9]|2[0-3])$/;
 const MIN_REGEX = /^[0-5]?[0-9]$/;
-
-const TYPE_SHORT = { type5: 'nhỏ', type10: 'vừa', type15: 'lớn' };
 
 const TABLE_GROUPS = [
     { key: 'type5', name: 'Bàn nhỏ', cap: '≤ 5 người', range: '1 - 25', from: 1, count: 25 },
@@ -259,14 +257,14 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
         }
 
         if (selectedTables.length >= totalTables) {
-            setHint(`Bạn chỉ được chọn tối đa ${totalTables} bàn.`);
+            setHint(translateTableSelectionLimit(totalTables));
             return;
         }
 
         const type = getTableType(num);
         const selectedOfType = selectedTables.filter((t) => getTableType(t) === type).length;
         if (selectedOfType >= tableTypes[type]) {
-            setHint(`Bạn chỉ được chọn tối đa ${tableTypes[type]} bàn loại ${TYPE_SHORT[type]}.`);
+            setHint(translateTableSelectionLimit(tableTypes[type], type));
             return;
         }
 
@@ -275,6 +273,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
     const handleClose = () => {
         if (saving) return;
+        setHint('');
         onClose?.();
     };
 
@@ -397,7 +396,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                             {TABLE_GROUPS.map((g) => (
                                 <div key={g.key} className="flex justify-between items-center bg-white p-3 border rounded-lg">
                                     <div>
-                                        <div className="font-bold">{g.name} ({g.cap})</div>
+                                        <div className="font-bold">{translatePageText(g.name)} ({translatePageText(g.cap)})</div>
                                         <div className="text-xs text-gray-500">{translatePageText("STT từ") + " "}{g.range}</div>
                                     </div>
                                     <div className="flex items-center gap-3">
@@ -428,7 +427,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                             {TABLE_GROUPS.map((g) => tableTypes[g.key] > 0 && (
                                 <div key={g.key} className="mb-4">
                                     <div className="font-bold text-sm mb-2 text-gray-700 border-b pb-1">
-                                        {g.name} ({g.range.replace(' - ', '-')}{translatePageText(") - Cần chọn") + " "}{tableTypes[g.key]}{" " + translatePageText("bàn") + " "}</div>
+                                        {translatePageText(g.name)} ({g.range.replace(' - ', '-')}{translatePageText(") - Cần chọn") + " "}{tableTypes[g.key]}{" " + translatePageText("bàn") + " "}</div>
                                     <div className="grid grid-cols-5 gap-2">
                                         {Array.from({ length: g.count }, (_, i) => i + g.from).map((num) => {
                                             const occupied = unavailableTables.includes(num);
@@ -458,7 +457,6 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                                 <p className="text-gray-500 p-2">{translatePageText("Hãy chọn loại bàn ở phần 2 trước.")}</p>
                             )}
                         </div>
-                        {hint && <p className="mt-2 text-sm font-semibold text-red-600">{hint}</p>}
                         {tableSelectError && (
                             <p className="mt-2 text-sm font-semibold text-red-600">{tableSelectError}</p>
                         )}
@@ -477,6 +475,14 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
             >
                 <p className="text-gray-700 mb-3">{translatePageText("Bạn có chắc muốn lưu các thay đổi cho đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{" " + translatePageText("không?") + " "}</p>
                 <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Việc chỉnh sửa sẽ tiêu hao") + " "}<strong>{translatePageText("1 lượt chỉnh sửa đơn")}</strong>{" " + translatePageText("trong tuần (hiện còn") + " "}<strong>{attemptsLeft}</strong>{" " + translatePageText("lượt). Đơn không cần thanh toán lại.") + " "}</p>
+            </Modal>
+            <Modal
+                isOpen={Boolean(hint)}
+                title={translatePageText("Thông báo")}
+                onClose={() => setHint('')}
+                cancelText="Đóng"
+            >
+                <p className="text-gray-700">{hint}</p>
             </Modal>
         </>
     );

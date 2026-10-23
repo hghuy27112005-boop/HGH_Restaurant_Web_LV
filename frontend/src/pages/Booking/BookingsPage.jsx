@@ -6,8 +6,9 @@ import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from '../Menu/DishDetailPage';
 import { getCartKey, getSessionKey } from '../../utils/cartStorage';
 import EditBookingModal from './EditBookingModal';
-import { translatePageText } from '../../pageTextTranslations';
+import { translatePageText, translateTableSelectionLimit, translateModifySuccessMessage } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
+import i18n from '../../i18n';
 
 
 const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
@@ -645,8 +646,6 @@ const BookingsPage = () => {
         return 'type15';
     };
 
-    const tableTypeLabels = { type5: 'nhỏ', type10: 'vừa', type15: 'lớn' };
-
     const handleTableSelect = (tableNum) => {
         if (unavailableTables.includes(tableNum)) return;
 
@@ -654,14 +653,14 @@ const BookingsPage = () => {
             setSelectedTables(selectedTables.filter(t => t !== tableNum));
         } else {
             if (selectedTables.length >= totalTables) {
-                setError(`Bạn chỉ được chọn tối đa ${totalTables} bàn.`);
+                setAlertMessage(translateTableSelectionLimit(totalTables));
                 return;
             }
 
             const type = getTableType(tableNum);
             const selectedOfType = selectedTables.filter(t => getTableType(t) === type).length;
             if (selectedOfType >= tableTypes[type]) {
-                setError(`Bạn chỉ được chọn tối đa ${tableTypes[type]} bàn loại ${tableTypeLabels[type]}.`);
+                setAlertMessage(translateTableSelectionLimit(tableTypes[type], type));
                 return;
             }
 
@@ -836,7 +835,7 @@ const BookingsPage = () => {
         if (date) setArrivalDateFilter(date);
         setFilter('all');
         await fetchBookings();
-        setModifySuccessMessage(`Chỉnh sửa đơn đặt bàn thành công. Bạn còn ${attemptsLeft ?? '—'} lượt chỉnh sửa trong tuần này.`);
+        setModifySuccessMessage(translateModifySuccessMessage('booking', attemptsLeft));
     };
 
     const confirmCancelOrder = async () => {
@@ -1467,7 +1466,7 @@ const BookingsPage = () => {
                                     key={bill.bill_id || idx}
                                     title={
                                         <div className="flex items-baseline flex-wrap">
-                                            <span>{`Đơn hàng ${bill.order_stt || bill.order_id || bill.bill_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}</span>
+                                            <span>{`${translatePageText("Đơn hàng")} ${bill.order_stt || bill.order_id || bill.bill_id || ''} · ${bill.created_at ? new Date(bill.created_at).toLocaleDateString(i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'vi-VN') : '—'}`}</span>
                                             <span className="sm:ml-[2.5cm] w-full sm:w-auto text-sm font-normal text-gray-500">{translatePageText("Mã hóa đơn:") + " "}{bill.bill_id || '—'}</span>
                                         </div>
                                     }

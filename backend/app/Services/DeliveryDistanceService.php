@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class DeliveryDistanceService
 {
@@ -74,9 +75,9 @@ class DeliveryDistanceService
      * @return array{address: string, lat: float, lng: float, distance_km: float, duration_minutes: int, shipping_fee: int}
      * @throws \RuntimeException
      */
-    public function calculateForCoordinates(float $lat, float $lng): array
+    public function calculateForCoordinates(float $lat, float $lng, string $language = 'vi'): array
     {
-        $reverse = $this->reverseGeocode($lat, $lng);
+        $reverse = $this->reverseGeocode($lat, $lng, $language);
 
         if ($reverse && $this->isIslandAddress($reverse['address_text'])) {
             throw new \RuntimeException('Vị trí hiện tại nằm ngoài phạm vi đất liền Việt Nam, không giao tới các đảo/quần đảo.');
@@ -98,7 +99,9 @@ class DeliveryDistanceService
         $shippingFee = $this->calculateShippingFee($distanceKm);
 
         return [
-            'address' => $reverse['display_name'] ?? sprintf('%.6f, %.6f', $lat, $lng),
+            'address' => $reverse
+                ? $this->formatReverseGeocodedAddress($reverse['display_name'] ?? '', $language)
+                : sprintf('%.6f, %.6f', $lat, $lng),
             'lat' => $lat,
             'lng' => $lng,
             'distance_km' => round($distanceKm, 2),
@@ -111,16 +114,18 @@ class DeliveryDistanceService
      * Reverse geocode: từ toạ độ suy ra tên địa chỉ (chỉ dùng để hiển thị/lưu, không
      * dùng để tính toán khoảng cách).
      */
-    private function reverseGeocode(float $lat, float $lng): ?array
+    private function reverseGeocode(float $lat, float $lng, string $language): ?array
     {
         try {
             $response = Http::withHeaders([
                 'User-Agent' => 'HGH-Restaurant-App/1.0',
+                'Accept-Language' => $language === 'en' ? 'en' : 'vi',
             ])->get('https://nominatim.openstreetmap.org/reverse', [
                 'lat' => $lat,
                 'lon' => $lng,
                 'format' => 'jsonv2',
                 'addressdetails' => 1,
+                'accept-language' => $language === 'en' ? 'en' : 'vi',
             ]);
 
             if (!$response->successful()) {
@@ -144,6 +149,39 @@ class DeliveryDistanceService
             Log::error('Nominatim reverse geocode failed: ' . $e->getMessage());
             return null;
         }
+    }
+
+    private function formatReverseGeocodedAddress(string $address, string $language): string
+    {
+        if ($language !== 'en') {
+            return $address;
+        }
+
+        $address = preg_replace_callback(
+            '/\b(Phường|Xã|Thị trấn|Quận|Huyện|Thành phố|Tỉnh)\s+([^,]+)/iu',
+            function (array $matches): string {
+                $suffix = match (mb_strtolower($matches[1])) {
+                    'phường' => 'Ward',
+                    'xã' => 'Commune',
+                    'thị trấn' => 'Town',
+                    'quận', 'huyện' => 'District',
+                    'thành phố' => 'City',
+                    'tỉnh' => 'Province',
+                    default => '',
+                };
+
+                return trim($matches[2]) . ' ' . $suffix;
+            },
+            $address
+        );
+        $address = preg_replace_callback(
+            '/\bĐường\s+số\s+([^,]+)/iu',
+            fn (array $matches): string => 'Street ' . trim($matches[1]),
+            $address
+        );
+        $address = preg_replace('/\bViệt Nam\b/iu', 'Vietnam', $address);
+
+        return Str::ascii($address);
     }
 
     /**

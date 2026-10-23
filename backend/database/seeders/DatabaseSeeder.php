@@ -710,6 +710,8 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
+        $this->call(RecipeIngredientSeeder::class);
+
         $this->call(SaleOffEventSeeder::class);
         $this->call(OrdersSeeder::class);
         $this->call(ReviewsSeeder::class);

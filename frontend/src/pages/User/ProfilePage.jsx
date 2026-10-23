@@ -577,7 +577,7 @@ export default function ProfilePage() {
             }}>{translatePageText("Thông tin cá nhân") + " "}</h2>
 
             <div>
-              <Field label="Tên người dùng (*):">
+              <Field label={translatePageText("Tên người dùng (*):")}>
                 <input className="profile-input" value={form.username}
                   readOnly={!editMode} maxLength={50}
                   onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
@@ -587,7 +587,7 @@ export default function ProfilePage() {
                   readOnly={!editMode} maxLength={255}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
               </Field>
-              <Field label="Số điện thoại:">
+              <Field label={translatePageText("Số điện thoại:")}>
                 <input className="profile-input" value={form.tele_number}
                   readOnly={!editMode} maxLength={20}
                   onChange={(e) => setForm((f) => ({ ...f, tele_number: e.target.value }))} />

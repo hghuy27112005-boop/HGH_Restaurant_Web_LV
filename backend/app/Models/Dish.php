@@ -56,6 +56,13 @@ class Dish extends Model
         return $this->hasMany(DishCustomization::class, 'dish_id', 'dish_id');
     }
 
+    public function ingredientRules()
+    {
+        return $this->hasMany(DishIngredientRule::class, 'dish_id', 'dish_id')
+            ->with('ingredient')
+            ->orderBy('sort_order');
+    }
+
     // ============================================
     // SCOPES
     // ============================================

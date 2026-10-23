@@ -110,6 +110,7 @@ export const dishAPI = {
 export const dishCustomizationAPI = {
     getAll: () => axiosInstance.get('/dish-customizations'),
     getByDish: (dishId) => axiosInstance.get(`/dish-customizations/${dishId}`),
+    getOptions: (dishId) => axiosInstance.get(`/dish-customizations/${dishId}/options`),
     save: (dishId, data) => axiosInstance.put(`/dish-customizations/${dishId}`, data),
     remove: (dishId, customizationId) => axiosInstance.delete(`/dish-customizations/${dishId}/${customizationId}`),
     preview: (dishId, data) => axiosInstance.post(`/dish-customizations/${dishId}/preview`, data),

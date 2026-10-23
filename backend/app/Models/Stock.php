@@ -505,11 +505,16 @@ class Stock extends Model
             'quantity' => (int) $item->quantity,
             'customization_id' => $item->customization_id,
             'ingredients' => $item->ingredients,
+            'is_order_snapshot' => true,
         ])->all();
     }
 
     protected static function resolveItemIngredients(?Dish $dish, array $item): array
     {
+        if (!empty($item['is_order_snapshot']) && !empty($item['ingredients'])) {
+            return self::splitList($item['ingredients']);
+        }
+
         if (!empty($item['customization_id'])) {
             $customization = DishCustomization::find($item['customization_id']);
             if ($customization && $customization->dish_id == ($dish?->dish_id ?? null)) {
@@ -518,6 +523,10 @@ class Stock extends Model
                     return $list;
                 }
             }
+        }
+
+        if ($dish && $dish->ingredientRules()->exists()) {
+            return self::splitList($dish->ingredients);
         }
 
         $list = self::splitList($item['ingredients'] ?? null);

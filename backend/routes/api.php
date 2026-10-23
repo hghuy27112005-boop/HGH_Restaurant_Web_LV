@@ -43,6 +43,7 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
     Route::get('/dish-details/{id}', [\App\Http\Controllers\DishController::class, 'show']);
     Route::get('/dish-customizations', [\App\Http\Controllers\DishCustomizationController::class, 'index']);
     Route::get('/dish-customizations/{dishId}', [\App\Http\Controllers\DishCustomizationController::class, 'show']);
+    Route::get('/dish-customizations/{dishId}/options', [\App\Http\Controllers\DishCustomizationController::class, 'options']);
     Route::put('/dish-customizations/{dishId}', [\App\Http\Controllers\DishCustomizationController::class, 'store']);
     Route::post('/dish-customizations/{dishId}/preview', [\App\Http\Controllers\DishCustomizationController::class, 'preview']);
     Route::delete('/dish-customizations/{dishId}/{customizationId}', [\App\Http\Controllers\DishCustomizationController::class, 'destroy']);

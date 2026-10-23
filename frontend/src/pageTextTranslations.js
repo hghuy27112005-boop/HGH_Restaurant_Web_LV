@@ -1,6 +1,24 @@
 import i18n from './i18n';
 
 const englishPageText = new Map([
+    ['Nguyên liệu tối thiểu', 'Required ingredients'],
+    ['Thay đổi', 'Change'],
+    ['Mỗi nguyên liệu tối thiểu phải được giữ lại; quý khách chỉ có thể thay thế bằng nguyên liệu cùng loại.', 'Every required ingredient must remain; it can only be replaced with an ingredient of the same type.'],
+    ['Nguyên liệu phụ (có thể bỏ)', 'Optional ingredients (can be removed)'],
+    ['Thêm gia vị / nguyên liệu phụ', 'Add seasonings / extras'],
+    ['bắt buộc giữ lại', 'must be kept'],
+    ['Quý khách có thể tùy ý thay đổi nguyên liệu, nhà hàng chúng tôi vẫn sẽ nấu đúng với giá thành của món ăn', 'You may customize the ingredients; we will prepare the dish at its original price.'],
+    ['Đang tải danh sách nguyên liệu...', 'Loading ingredients...'],
+    ['Không thể tải danh sách nguyên liệu. Vui lòng thử lại.', 'Unable to load ingredients. Please try again.'],
+    ['Thử tải lại', 'Retry loading'],
+    ['Danh sách nguyên liệu chưa sẵn sàng.', 'The ingredient list is not ready yet.'],
+    ['Nguyên liệu thay thế', 'Substitutions'],
+    ['Nguyên liệu thêm', 'Added ingredients'],
+    ['Chọn nguyên liệu thay thế', 'Choose a replacement ingredient'],
+    ['Chưa có nguyên liệu cùng loại để thay thế.', 'There are no replacement ingredients of the same type yet.'],
+    ['Vui lòng đăng nhập để tạo và xem công thức riêng.', 'Please sign in to create and view your personal recipes.'],
+    ['Nguyên liệu cuối cùng', 'Final ingredients'],
+    ['Công thức đã được tạo theo nguyên liệu đã chọn:', 'Recipe generated using the selected ingredients:'],
     ['Đang bán', 'On sale'],
     ['Đã ẩn', 'Hidden'],
     ['+ Thêm món ăn', '+ Add dish'],
@@ -165,6 +183,13 @@ const englishPageText = new Map([
     ['Chưa có tài khoản?', "Don't have an account?"],
     ['Đăng ký ngay!', 'Sign up now!'],
     ['Tên người dùng (*):', 'Username (*):'],
+    ['Số điện thoại:', 'Phone number:'],
+    ['Bàn nhỏ', 'Small table'],
+    ['Bàn vừa', 'Medium table'],
+    ['Bàn lớn', 'Large table'],
+    ['≤ 5 người', 'up to 5 people'],
+    ['≤ 10 người', 'up to 10 people'],
+    ['≤ 15 người', 'up to 15 people'],
     ['Số điện thoại (*):', 'Phone number (*):'],
     ['Xác nhận mật khẩu (*):', 'Confirm password (*):'],
     ['Đã có tài khoản?', 'Already have an account?'],
@@ -267,6 +292,8 @@ const englishPageText = new Map([
     ['Giờ hàng tới bạn chọn:', 'Your requested delivery time:'],
     ['Bắt đầu giao (dự kiến):', 'Estimated delivery start:'],
     ['Hàng tới (dự kiến):', 'Estimated arrival:'],
+    ['Sau khoảng', 'About'],
+    ['phút kể từ lúc thanh toán', 'minutes after payment'],
     ['Bắt đầu nấu:', 'Cooking starts:'],
     ['Ngay sau khi thanh toán', 'Immediately after payment'],
     ['Lịch trên là dự kiến, hệ thống tính lại chính xác vào lúc bạn thanh toán thành công.', 'These times are estimates. The system will recalculate them when payment succeeds.'],
@@ -298,6 +325,7 @@ const englishPageText = new Map([
     ['Bạn có chắc chắn muốn đặt hàng?', 'Are you sure you want to place this order?'],
     ['Lưu ý:', 'Note:'],
     ['Sau khi đồng ý sẽ không thể thay đổi thông tin đơn hàng.', 'You will not be able to change the order details after confirming.'],
+    ['Đồng ý đặt hàng', 'Place order'],
     ['Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món và đơn hàng hiện tại.', 'Are you sure you want to remove this order? This will remove all items and the current order.'],
     ['trong bao lâu?', 'For how long?'],
     ['bàn', 'tables'],
@@ -628,6 +656,7 @@ const englishPageText = new Map([
     ['Không thể tải thông tin món ăn.', 'Could not load dish information.'],
     ['Vui lòng đăng nhập để thực hiện thao tác này', 'Please sign in to perform this action.'],
     ['Vui lòng bỏ ít nhất một nguyên liệu để tạo công thức mới.', 'Remove at least one ingredient to create a new recipe.'],
+    ['Vui lòng thay đổi ít nhất một nguyên liệu trước khi tạo công thức.', 'Please change at least one ingredient before creating a recipe.'],
     ['Không thể tạo công thức mới lúc này. Vui lòng thử lại.', 'Could not create a new recipe right now. Please try again.'],
     ['Vui lòng nhập tên công thức.', 'Please enter a recipe name.'],
     ['Không thể lưu công thức thay thế. Vui lòng thử lại.', 'Could not save the alternative recipe. Please try again.'],
@@ -908,6 +937,35 @@ const seededEventNamesVi = new Map(
 export const translatePageText = (text) => {
     if (!i18n.resolvedLanguage?.startsWith('en')) return text;
     return englishPageText.get(text) ?? text;
+};
+
+export const translateTableSelectionLimit = (quantity, tableType = null) => {
+    const isEnglish = i18n.resolvedLanguage?.startsWith('en');
+    const englishTableTypes = { type5: 'small', type10: 'medium', type15: 'large' };
+
+    if (isEnglish) {
+        const tableLabel = tableType ? `${englishTableTypes[tableType]} table` : 'table';
+        return `You can select up to ${quantity} ${tableLabel}${quantity === 1 ? '' : 's'}.`;
+    }
+
+    const tableTypeLabels = { type5: 'nhỏ', type10: 'vừa', type15: 'lớn' };
+    return tableType
+        ? `Bạn chỉ được chọn tối đa ${quantity} bàn loại ${tableTypeLabels[tableType]}.`
+        : `Bạn chỉ được chọn tối đa ${quantity} bàn.`;
+};
+
+export const translateModifySuccessMessage = (orderType, attemptsLeft) => {
+    const remaining = attemptsLeft ?? '—';
+    const isEnglish = i18n.resolvedLanguage?.startsWith('en');
+
+    if (isEnglish) {
+        const orderLabel = orderType === 'delivery' ? 'Delivery order' : 'Table booking';
+        const editLabel = Number(remaining) === 1 ? 'edit' : 'edits';
+        return `${orderLabel} updated successfully. You have ${remaining} ${editLabel} remaining this week.`;
+    }
+
+    const orderLabel = orderType === 'delivery' ? 'đơn giao hàng' : 'đơn đặt bàn';
+    return `Chỉnh sửa ${orderLabel} thành công. Bạn còn ${remaining} lượt chỉnh sửa trong tuần này.`;
 };
 
 export const translateSeededEventName = (name) => {

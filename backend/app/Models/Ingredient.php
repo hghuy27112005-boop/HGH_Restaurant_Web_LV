@@ -12,6 +12,17 @@ class Ingredient extends Model
     protected $fillable = [
         'ingredient_key',
         'ingredient_name',
+        'ingredient_group',
+        'ingredient_name_vi',
+        'aliases',
+        'is_add_on',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'aliases' => 'array',
+        'is_add_on' => 'boolean',
+        'is_active' => 'boolean',
     ];
 
     public function stocks()

@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Delivery;
 use App\Models\Bill;
+use App\Support\PreferredLanguage;
 
 class DeliveryController extends Controller
 {
@@ -50,7 +51,11 @@ class DeliveryController extends Controller
         ]);
 
         try {
-            $result = $distanceService->calculateForCoordinates((float) $request->lat, (float) $request->lng);
+            $result = $distanceService->calculateForCoordinates(
+                (float) $request->lat,
+                (float) $request->lng,
+                PreferredLanguage::fromRequest($request)
+            );
             $result['schedule'] = Delivery::previewSchedule(
                 (int) $result['duration_minutes'],
                 $request->input('preferred_delivery_time')
@@ -110,7 +115,11 @@ class DeliveryController extends Controller
         }
 
         try {
-            $result = $this->resolveShipping($distanceService, $validated);
+            $result = $this->resolveShipping(
+                $distanceService,
+                $validated,
+                PreferredLanguage::fromRequest($request)
+            );
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -150,7 +159,11 @@ class DeliveryController extends Controller
 
         // Gọi dịch vụ bản đồ NGOÀI transaction để không giữ khóa DB trong lúc chờ mạng
         try {
-            $shippingResult = $this->resolveShipping($distanceService, $validated);
+            $shippingResult = $this->resolveShipping(
+                $distanceService,
+                $validated,
+                PreferredLanguage::fromRequest($request)
+            );
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
@@ -250,10 +263,10 @@ class DeliveryController extends Controller
     }
 
     /** Ưu tiên toạ độ GPS (nếu có) để tính khoảng cách, giống lúc tạo đơn ship (OrderController::store). */
-    private function resolveShipping(\App\Services\DeliveryDistanceService $service, array $data): array
+    private function resolveShipping(\App\Services\DeliveryDistanceService $service, array $data, string $language): array
     {
         if (!empty($data['lat']) && !empty($data['lng'])) {
-            return $service->calculateForCoordinates((float) $data['lat'], (float) $data['lng']);
+            return $service->calculateForCoordinates((float) $data['lat'], (float) $data['lng'], $language);
         }
 
         return $service->calculateForAddress($data['address']);

@@ -6,8 +6,9 @@ import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from '../Menu/DishDetailPage';
 import { getCartKey, getSessionKey } from '../../utils/cartStorage';
 import EditDeliveryModal from './EditDeliveryModal';
-import { translatePageText } from '../../pageTextTranslations';
+import { translatePageText, translateModifySuccessMessage } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
+import i18n from '../../i18n';
 
 const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong giỏ
 
@@ -388,7 +389,7 @@ const DeliveriesPage = () => {
     const getNextMorningLabel = () => {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
-        const label = tomorrow.toLocaleDateString('vi-VN', {
+        const label = tomorrow.toLocaleDateString(i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'vi-VN', {
             weekday: 'long',
             day: '2-digit',
             month: '2-digit',
@@ -700,7 +701,7 @@ const DeliveriesPage = () => {
         setEditModalOpen(false);
         setEditingBill(null);
         await fetchDeliveries();
-        setModifySuccessMessage(`Chỉnh sửa đơn giao hàng thành công. Bạn còn ${attemptsLeft ?? '—'} lượt chỉnh sửa trong tuần này.`);
+        setModifySuccessMessage(translateModifySuccessMessage('delivery', attemptsLeft));
     };
 
     const confirmCancelOrder = async () => {
@@ -858,7 +859,11 @@ const DeliveriesPage = () => {
                         </div>
                         <div className="flex justify-between gap-4">
                             <span className="text-gray-600">{translatePageText("Hàng tới (dự kiến):")}</span>
-                            <span className="font-semibold">{totalMinutes != null ? `Sau khoảng ${totalMinutes} phút kể từ lúc thanh toán` : '—'}</span>
+                            <span className="font-semibold">
+                                {totalMinutes != null
+                                    ? `${translatePageText("Sau khoảng")} ${totalMinutes} ${translatePageText("phút kể từ lúc thanh toán")}`
+                                    : '—'}
+                            </span>
                         </div>
                     </>
                 )}
@@ -1421,7 +1426,7 @@ const DeliveriesPage = () => {
                                 key={bill.order_id || idx}
                                 title={
                                     <div className="flex items-baseline flex-wrap">
-                                        <span>{`Đơn hàng ${bill.order_stt || bill.order_id || ''} ngày ${bill.created_at ? new Date(bill.created_at).toLocaleDateString('vi-VN') : '—'}`}</span>
+                                        <span>{`${translatePageText("Đơn hàng")} ${bill.order_stt || bill.order_id || ''} · ${bill.created_at ? new Date(bill.created_at).toLocaleDateString(i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'vi-VN') : '—'}`}</span>
                                         <span className="sm:ml-[2.5cm] w-full sm:w-auto text-sm font-normal text-gray-500">{translatePageText("Mã hóa đơn:") + " "}{bill.bill_id || '—'}</span>
                                     </div>
                                 }

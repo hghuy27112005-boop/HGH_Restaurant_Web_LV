@@ -284,38 +284,41 @@ class ChatbotController extends Controller
         }
 
         $dish = $dishes->firstWhere('dish_id', (int) ($result['dish_id'] ?? 0));
-        $ingredients = trim((string) ($result['ingredients'] ?? ''));
-        $instructions = trim((string) ($result['recipe_instructions'] ?? ''));
         $removed = array_values(array_filter($result['removed_ingredients'] ?? [], 'is_string'));
 
-        if (!$dish || $ingredients === '' || $instructions === '' || count($removed) === 0) {
+        if (!$dish || count($removed) === 0) {
             return null;
         }
 
-        foreach ($removed as $ingredient) {
-            if (!Str::contains(Str::lower((string) $dish->ingredients), Str::lower(trim($ingredient)))) {
-                return null;
-            }
-            if (Str::contains(Str::lower($ingredients), Str::lower(trim($ingredient)))) {
-                return null;
-            }
+        $options = $this->dishCustomization->options($dish);
+        $optionalByName = collect($options['optional'])->keyBy(fn ($ingredient) => Str::lower($ingredient['name']));
+        $removedIds = collect($removed)->map(function ($ingredient) use ($optionalByName) {
+            return $optionalByName->get(Str::lower(trim($ingredient)))['ingredient_id'] ?? null;
+        });
+        if ($removedIds->contains(null)) {
+            return null;
         }
-
-        $removedLabels = array_values(array_filter($result['removed_ingredient_labels'] ?? [] , 'is_string'));
-        if (count($removedLabels) !== count($removed)) {
-            $removedLabels = array_map(fn ($ingredient) => $this->dishCustomization->ingredientLabel($ingredient), $removed);
-        }
+        $selection = [
+            'replacements' => [],
+            'removed_ingredient_ids' => $removedIds->values()->all(),
+            'add_on_ingredient_ids' => [],
+        ];
+        $resolved = $this->dishCustomization->resolveSelection($dish, $selection);
+        $instructions = $this->gemini->generateRecipeFromIngredients(
+            (string) $dish->recipe_instructions,
+            $resolved['ingredients'],
+            'vi'
+        );
 
         $customization = $this->dishCustomization->save(
             $dish,
             $result['recipe_name'] ?? 'Công thức thay thế ' . now()->format('d/m/Y H:i'),
-            $ingredients,
             $instructions,
-            $removed,
-            is_array($result['replacements'] ?? null) ? $result['replacements'] : []
+            $selection
         );
 
         ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'user', 'content' => $input]);
+        $removedLabels = array_map(fn ($ingredient) => $this->dishCustomization->ingredientLabel($ingredient), $resolved['removed_ingredients']);
         $reply = "Tôi đã tạo và lưu công thức thay thế cho món {$dish->dish_name}, đã bỏ: " . implode(', ', $removedLabels) . ". Bạn có thể xem công thức này ở trang chi tiết món ăn.";
         ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'bot', 'content' => $reply]);
 
