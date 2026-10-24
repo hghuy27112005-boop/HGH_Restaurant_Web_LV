@@ -4,6 +4,7 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
+        "check:i18n": "node scripts/check-i18n.mjs",
         "dev": "vite",
         "tunnel": "node start-tunnel.js"
     },

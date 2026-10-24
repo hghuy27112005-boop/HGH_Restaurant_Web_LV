@@ -1,0 +1,336 @@
+{
+  "version": 1,
+  "updatedAt": "2026-10-24T20:58:15.921Z",
+  "findings": [
+    {
+      "id": "407e203b7b733b0bc34c15e122bf26a8c2c38b0f23f0281f53b3c02d928ab219",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/BookingDetail.jsx",
+      "message": "[vi] prop confirmText: \"Xác nhận\""
+    },
+    {
+      "id": "f8367ebb580d45711f764f52a0e81b974aaf75b80261d2b2312f19b7f9f22603",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/BookingDetail.jsx",
+      "message": "[vi] prop confirmText: \"Hủy\""
+    },
+    {
+      "id": "6778cc5ccd98e22422c0d79a1f65cdc68f54bdefb856fd29138a1637a283c138",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/RevenueChart.jsx",
+      "message": "[en] prop title: \"Doanh thu:  M\""
+    },
+    {
+      "id": "f54232f7b30c9e1fc49aa51254ae40855111112876c9cffeeb2278d66d125e38",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/RevenueChart.jsx",
+      "message": "[vi] prop title: \"Mục tiêu:  M\""
+    },
+    {
+      "id": "343cf7868ff7bb92339ab6d0e53b77c974af2bd9fde0c3fd4f2e40044e62b568",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/Shared.jsx",
+      "message": "[vi] prop confirmText: \"Xác nhận\""
+    },
+    {
+      "id": "229e2cf0ac525a679a1d46a97952b4acb0b2d999e601ca912eddd7bdf17735a3",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/Shared.jsx",
+      "message": "[vi] prop secondaryText: \"Quay lại\""
+    },
+    {
+      "id": "1d37da00b93e24784a75c24814efeb46ac3f99024cace49a63068f8de29b311f",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/Shared.jsx",
+      "message": "[vi] prop tertiaryText: \"Quay lại\""
+    },
+    {
+      "id": "98841ab79551855e421ecf0cdb0ca652106a618249ef555afe77d51bc7bff257",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/Chatbot/ChatbotWidget.jsx",
+      "message": "[vi] prop aria-label: \"Xem ảnh\""
+    },
+    {
+      "id": "88a05c4b2b25df5b8b8f201241187fd2981787d96ad30703b860d38424b8ea2b",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/Chatbot/ChatbotWidget.jsx",
+      "message": "[vi] prop aria-label: \"Tùy chọn\""
+    },
+    {
+      "id": "f16733f88f83b6c4574a58e6aebc71f9bd8409845df03766be39516b41751be6",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/Chatbot/ChatbotWidget.jsx",
+      "message": "[vi] prop aria-label: \"Xem ảnh chờ gửi\""
+    },
+    {
+      "id": "f8cddde84d10e3d13acee4853522fac774ee2de15628f4ee726e49b7c324358f",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/components/Chatbot/ChatbotWidget.jsx",
+      "message": "[en] prop aria-label: \"Xem\""
+    },
+    {
+      "id": "a79910cd2519980c8631afde66c54f4f514c0900f602ffa05753b456fffebb9c",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminDashboardPage.jsx",
+      "message": "[en] prop title: \"Dashboard\""
+    },
+    {
+      "id": "6555348942f386c545f10166f757775ab689a1c982a660cd7aae14a9e639cb1a",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminDashboardPage.jsx",
+      "message": "[vi] prop label: \"Tổng doanh thu\""
+    },
+    {
+      "id": "7be3fd3fb298f1cb5c4e80c82208f2a8b5ce88863a62ca1d34b618ed40146a3a",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminDashboardPage.jsx",
+      "message": "[vi] prop label: \"Tổng số đơn\""
+    },
+    {
+      "id": "bf5566c0dc99e559a92a5785854e2728fb0f9791ec39efdd91bf99d3095d538a",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminDashboardPage.jsx",
+      "message": "[vi] prop label: \"Doanh thu đặt bàn\""
+    },
+    {
+      "id": "0f29501b3eaae0e633f7a55abb2207a99d1473b90536421e3ef6b19e952f20c6",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminDashboardPage.jsx",
+      "message": "[vi] prop label: \"Doanh thu đặt ship\""
+    },
+    {
+      "id": "ca8dd6371ce21cd40ecc4bdd88bc518f204e44fb8e4f9ca5991e2ff0b13f658a",
+      "group": "3. translatePageText",
+      "file": "src/pages/Admin/AdminMenuManagement.jsx",
+      "message": "Missing translation entry for \"Vui lòng nhận và xác nhận lại nguyên liệu để tạo công thức trước khi lưu.\""
+    },
+    {
+      "id": "9c6632bc8faeca1a409dea07d9fd787fbe88c04c9f52fef365ea8c19bf91ec59",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminMenuManagement.jsx",
+      "message": "[vi] prop label: \"Tổng món\""
+    },
+    {
+      "id": "10d496b6650eb923bcf78fc7f4da74a7ea3c1eb818fef63cb7096a48e0318ecb",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminMenuManagement.jsx",
+      "message": "[vi] prop label: \"Đang bán\""
+    },
+    {
+      "id": "75dc0a64381e9d15a8c14188c7b6bc00a96bf9107d7f3eb82bbeca53ccd60d9b",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminMenuManagement.jsx",
+      "message": "[vi] prop label: \"Đã ẩn\""
+    },
+    {
+      "id": "c5d1f41d551a6b6c8f83be0fb4a88df95cfd4dda290040f9e857c7e2bf39d925",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminMenuManagement.jsx",
+      "message": "[en] prop label: \"Bestseller\""
+    },
+    {
+      "id": "8cda91159cb20ab64f1e77df185cfa933924b304646c710aa58b8f19d9fdc7f0",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminMenuManagement.jsx",
+      "message": "[vi] prop confirmText: \"Xác nhận\""
+    },
+    {
+      "id": "2406a7084c3332652843b4a826707b89f3d7cb646bb0f8e569aa2215b996c5f3",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminSaleOffPage.jsx",
+      "message": "[vi] prop label: \"Tổng sự kiện\""
+    },
+    {
+      "id": "c9be5339b152ad9b575ea6467dfa7bb1e9d819fc762ccc82ddbae0d222ed21cf",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminSaleOffPage.jsx",
+      "message": "[vi] prop label: \"Đang diễn ra\""
+    },
+    {
+      "id": "ed1922c241834c7657c2c38a462ae0f6948564ee43cadc1bedac262808fce27b",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminSaleOffPage.jsx",
+      "message": "[vi] prop label: \"Sắp diễn ra\""
+    },
+    {
+      "id": "46df6375be1f76d1e4aca982a973767f6c2840166e04cd987de2fa1ff2a8f497",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminSaleOffPage.jsx",
+      "message": "[vi] prop label: \"Đã kết thúc\""
+    },
+    {
+      "id": "d9f2d5a5b3d52e84082e22cb7a21f153bba128da3b51bb0c48184098f65bc682",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminStockPage.jsx",
+      "message": "[vi] message setError(): \"Lỗi tải kho hàng:\""
+    },
+    {
+      "id": "b94f0c4d1afe2a41548dc1639ca0df0c6d8fb51bca35ebfdb1b45e9210599fea",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminStockPage.jsx",
+      "message": "[vi] message setError(): \"Lỗi tải lịch sử nguyên liệu:\""
+    },
+    {
+      "id": "f9508f915a2138d85d25a8214dbe5eb419f5cf9403b7b7dbc1b9ef3a0084a4a1",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminUsersPage.jsx",
+      "message": "[vi] prop label: \"Tổng người dùng\""
+    },
+    {
+      "id": "55710039681dd0ce047933b1504c09421df1f6e67be9a3b0b95d35db051e3919",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/AdminUsersPage.jsx",
+      "message": "[vi] prop label: \"Đang bị khóa\""
+    },
+    {
+      "id": "80bfa82a01d12689805bb57d170a1d6f13038527b6d669ebeea418a777c47a7e",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/Orders/orderTools.jsx",
+      "message": "[en] prop title: \"day\""
+    },
+    {
+      "id": "0410e8695dcbac65f84685f514d8e6d58c27d2a453146d851b509521d5a1cc2d",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/Orders/AdminDeliveriesTab.jsx",
+      "message": "[vi] prop label: \"Tổng giao hàng\""
+    },
+    {
+      "id": "ff79f832e300f90e72c76b47312723eb5dde2526e207c7b2e591bf152cd51bbe",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/Orders/AdminBookingsTab.jsx",
+      "message": "[vi] prop label: \"Tổng đặt bàn\""
+    },
+    {
+      "id": "6f115ea3d7de75bfdeb6c4303dcb2a7a957434785c19610d011497cd4a2a2d44",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/DashboardSections/DishRankingSection.jsx",
+      "message": "[en] prop aria-label: \"Sort   descending\""
+    },
+    {
+      "id": "76b02026b343b81fad757976552042d7fef074bdf9d35405761fdadd44ede77f",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/DashboardSections/DishRankingSection.jsx",
+      "message": "[vi] prop aria-label: \"giảm dần\""
+    },
+    {
+      "id": "bde35b75cd2cdaa1bc008a00c29cb190a6ffedb221d135edd95059945cff432a",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/DashboardSections/DishRankingSection.jsx",
+      "message": "[en] prop aria-label: \"Sort   ascending\""
+    },
+    {
+      "id": "e2c1528506a94a606abcefeaa208124ef77a062f4028bc6d03d90187ea875ba9",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Admin/DashboardSections/DishRankingSection.jsx",
+      "message": "[vi] prop aria-label: \"tăng dần\""
+    },
+    {
+      "id": "16f7bdac8e14192a3164fb06be51b8829aebe2e28384fd7413bec312069ecf7d",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Auth/LoginPage.jsx",
+      "message": "[vi] message setLockedMessage(): \"Tài khoản của bạn đã bị khóa\""
+    },
+    {
+      "id": "db5568c3de2336787748a7d1627464a98a1ec2b8fd2096939f6df25289db866a",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Auth/ForgotPasswordPage.jsx",
+      "message": "[vi] prop aria-label: \"Chữ số thứ\""
+    },
+    {
+      "id": "2feee67672799ce5cf63e4dd9dc93b50095a8fb8223d2304ca093097ac218fac",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Booking/BookingsPage.jsx",
+      "message": "[vi] prop confirmText: \"Xác nhận\""
+    },
+    {
+      "id": "933e354eaabf3d42c0f32f41b66a598260751e7ae26bce1ba0405c8c6a218b5e",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Booking/BookingsPage.jsx",
+      "message": "[vi] message setAlertMessage(): \"Vui lòng chọn đúng   bàn. Bạn đang chọn   bàn.\""
+    },
+    {
+      "id": "23348d2dad4747d341da21a7025e64ffb65666e4df924a3d8a0344d9234099e7",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Booking/BookingsPage.jsx",
+      "message": "[vi] message setAlertMessage(): \"Vui lòng chọn đủ   bàn.\""
+    },
+    {
+      "id": "e0db30705eef53abc106225386fd6c83bcea90a5f4bb0a4a0db8fd790aeeb9a6",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Booking/BookingsPage.jsx",
+      "message": "[vi] message setBookingConfirmError(): \"Không thể lấy thông tin điểm:\""
+    },
+    {
+      "id": "09762e02af22159ede2251aa9ac004b0cd934077b22d31d6dd3486f4b737ff36",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Booking/EditBookingModal.jsx",
+      "message": "[vi] prop confirmText: \"Lưu thay đổi\""
+    },
+    {
+      "id": "dc8e3311e02a9809102108e5af0815ca1b13d39b847e45be86b6e4ac350015d8",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Delivery/DeliveriesPage.jsx",
+      "message": "[vi] prop confirmText: \"Đồng ý đặt hàng\""
+    },
+    {
+      "id": "7735decd7e88a6a7c6f1b2b79ffd70a3f9df550df61a29a24b7ac5505a5fe25e",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Delivery/DeliveriesPage.jsx",
+      "message": "[vi] prop confirmText: \"Xóa đơn hàng\""
+    },
+    {
+      "id": "21c94c107df7716cbf737829a23b730a0236c01043a4c88573841905da567edf",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Delivery/DeliveriesPage.jsx",
+      "message": "[vi] message setPointsErrorMessage(): \"Không thể lấy thông tin điểm:\""
+    },
+    {
+      "id": "e6f35949b9294f5cbedf35495f4aaac9f837a3a093c7487eb227a65768208c89",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Delivery/EditDeliveryModal.jsx",
+      "message": "[vi] prop confirmText: \"Lưu thay đổi\""
+    },
+    {
+      "id": "63c4dcfeada018c9c4b5b18ddfc0992633947e7503ca2b7c5151ca794ae13ace",
+      "group": "3. translatePageText",
+      "file": "src/pages/Menu/MenuPage.jsx",
+      "message": "Missing translation entry for \"Vui lòng nhập tên món muốn gợi ý.\""
+    },
+    {
+      "id": "4e952560259f5ed673ecb41d46cf29f64c5dc33c7435dfbc18bc22b729329c00",
+      "group": "3. translatePageText",
+      "file": "src/pages/Menu/MenuPage.jsx",
+      "message": "Missing translation entry for \"Không thể gợi ý món lúc này. Vui lòng thử lại.\""
+    },
+    {
+      "id": "24ed4aa016b13348ad09b1dbc9df5c80b95d75c883d8f1b059d660513b574ea6",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Menu/MenuPage.jsx",
+      "message": "[vi] prop confirmText: \"Xác nhận thêm vào giỏ hàng\""
+    },
+    {
+      "id": "0c4baffa46b65026a06c7ba298e24f4875a4666b5f11efb63f9aad98f536d5ef",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Menu/DishDetailPage.jsx",
+      "message": "[vi] prop confirmText: \"Xác nhận thêm vào giỏ hàng\""
+    },
+    {
+      "id": "e6773ce56f24e6c1c1ebba75572c35a1d1540fbdf3eb0a563eb90eca602dfa5f",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Menu/DishDetailPage.jsx",
+      "message": "[vi] prop tertiaryText: \"Quay lại\""
+    },
+    {
+      "id": "64ecb6879fdc01b7bc14ba728657d52aa6c2e7423c4cda4d615d7acb76fc6ed4",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Menu/DishDetailPage.jsx",
+      "message": "[vi] message setAlertMessage(): \"Trùng lặp nguyên liệu với công thức: \" \".\""
+    },
+    {
+      "id": "b7a938af425ce519f3f5c090257caa206140596837b261fcd3224a1c630ed58f",
+      "group": "4. Hardcoded Vietnamese",
+      "file": "src/pages/Rating/RatingPage.jsx",
+      "message": "[en] prop aria-label: \"sao\""
+    }
+  ]
+}
