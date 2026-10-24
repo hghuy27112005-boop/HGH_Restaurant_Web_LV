@@ -9,11 +9,11 @@ use App\Models\Ingredient;
 use App\Models\User;
 use App\Services\DishCustomizationService;
 use App\Services\GeminiChatbotService;
-use Database\Seeders\RecipeIngredientSeeder;
+use Database\Seeders\BilingualRecipeIngredientSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 use Tests\TestCase;
 
 class RecipeIngredientCustomizationTest extends TestCase
@@ -106,82 +106,275 @@ class RecipeIngredientCustomizationTest extends TestCase
         }
     }
 
-    public function test_recipe_catalog_seeder_normalizes_names_and_adds_recipe_requirements(): void
+    public function test_custom_recipe_saves_id_only_selection_and_returns_bilingual_ingredient_names(): void
     {
-        $type = DishType::create(['type_name' => 'Món sợi']);
-        $dish = Dish::create([
-            'dish_name' => 'Phở bò',
-            'type_id' => $type->type_id,
-            'image_url' => 'pho.jpg',
-            'price' => 50000,
-            'is_bestseller' => false,
-            'is_active' => true,
-        ]);
-        $dish->forceFill([
-            'ingredients' => 'filet of beef, fresh cilantro',
-            'recipe_instructions' => 'Cook rice noodles with beef broth and beef.',
-        ])->save();
+        [$dish, $required, $replacement, , $optional, $addOn] = $this->createRecipeIngredients();
+        $this->mockIngredientAnalysis();
+        $this->actingAs(User::factory()->create());
+        $selection = [
+            'replacements' => [[
+                'slot_key' => 'protein',
+                'from_ingredient_id' => $required->ingredient_id,
+                'to_ingredient_id' => $replacement->ingredient_id,
+            ]],
+            'removed_ingredient_ids' => [$optional->ingredient_id],
+            'add_on_ingredient_ids' => [$addOn->ingredient_id],
+        ];
 
-        app(RecipeIngredientSeeder::class)->run();
+        $service = app(DishCustomizationService::class);
+        $customization = $service->save($dish, 'Beef recipe', 'Cook the beef.', $selection);
 
-        $this->assertSame(
-            ['pho noodles', 'filet of beef', 'pho broth', 'cilantro', 'star anise', 'cinnamon', 'ginger', 'green onion', 'lime'],
-            explode(', ', $dish->fresh()->ingredients)
-        );
-        $this->assertCount(3, DishIngredientRule::where('dish_id', $dish->dish_id)->where('role', 'required')->get());
-        $this->assertTrue(Ingredient::where('ingredient_name', 'cilantro')->value('is_add_on'));
-        $this->assertNotNull(Ingredient::where('ingredient_name', 'cilantro')->value('ingredient_name_vi'));
+        $this->assertSame($selection, $customization->selection);
+        $displaySelection = $service->selectionWithNames($customization->selection);
+        $this->assertSame([
+            'slot_key' => 'protein',
+            'from_ingredient_id' => $required->ingredient_id,
+            'to_ingredient_id' => $replacement->ingredient_id,
+            'from_ingredient' => [
+                'ingredient_id' => $required->ingredient_id,
+                'name_vi' => 'chicken',
+                'name_en' => 'chicken',
+            ],
+            'to_ingredient' => [
+                'ingredient_id' => $replacement->ingredient_id,
+                'name_vi' => 'beef',
+                'name_en' => 'beef',
+            ],
+        ], $displaySelection['replacements'][0]);
+        $this->assertSame('cilantro', $displaySelection['removed_ingredients'][0]['name_en']);
+        $this->assertSame('chili', $displaySelection['add_ons'][0]['name_en']);
     }
 
-    public function test_gemini_ingredient_analysis_requires_a_complete_exclusive_catalog_partition(): void
+    public function test_resolved_ingredients_fall_back_to_vietnamese_when_english_name_is_missing(): void
+    {
+        [$dish] = $this->createRecipeIngredients();
+        $vietnameseOnly = Ingredient::create([
+            'ingredient_key' => 'vietnamese-only',
+            'ingredient_name' => null,
+            'ingredient_name_vi' => 'ớt xanh',
+            'ingredient_group' => 'seasoning',
+        ]);
+        DishIngredientRule::create([
+            'dish_id' => $dish->dish_id,
+            'ingredient_id' => $vietnameseOnly->ingredient_id,
+            'role' => 'required_fixed',
+            'slot_key' => 'seasoning',
+        ]);
+        $this->mockIngredientAnalysis();
+
+        $resolved = app(DishCustomizationService::class)->resolveSelection($dish, []);
+
+        $this->assertContains('ớt xanh', $resolved['ingredients']);
+    }
+
+    public function test_unconfigured_dishes_get_required_rules_from_their_saved_ingredient_lists(): void
+    {
+        $type = DishType::create(['type_name' => 'Món mới']);
+        $dish = Dish::create([
+            'dish_name' => 'Món do quản trị viên thêm',
+            'dish_name_en' => 'Admin-created dish',
+            'type_id' => $type->type_id,
+            'image_url' => 'new-dish.jpg',
+            'price' => 30000,
+            'is_bestseller' => false,
+            'is_active' => true,
+            'ingredients' => 'thịt gà, tỏi, nước mắm',
+            'ingredients_en' => 'chicken, garlic, fish sauce',
+            'recipe_instructions' => 'Nấu chín thịt gà.',
+            'recipe_instructions_en' => 'Cook the chicken through.',
+        ]);
+
+        $options = app(DishCustomizationService::class)->options($dish);
+
+        $this->assertCount(3, $options['required']);
+        $this->assertSame(
+            ['chicken', 'garlic', 'fish sauce'],
+            $options['required']->pluck('ingredient.name')->all()
+        );
+        $this->assertSame(
+            ['thịt gà', 'tỏi', 'nước mắm'],
+            $options['required']->pluck('ingredient.name_vi')->all()
+        );
+        $this->assertSame(
+            ['chicken', 'garlic', 'fish sauce'],
+            $options['required']->pluck('ingredient.name_en')->all()
+        );
+        $this->assertTrue($options['required']->every(fn ($slot) => $slot['replaceable']));
+        $this->assertCount(0, $options['optional']);
+        $this->assertDatabaseCount('dish_ingredient_rules', 3);
+    }
+
+    public function test_auto_configuration_does_not_overwrite_existing_dish_rules(): void
+    {
+        $type = DishType::create(['type_name' => 'Món có cấu hình']);
+        $dish = Dish::create([
+            'dish_name' => 'Món đã cấu hình',
+            'dish_name_en' => 'Configured dish',
+            'type_id' => $type->type_id,
+            'image_url' => 'configured-dish.jpg',
+            'price' => 30000,
+            'is_bestseller' => false,
+            'is_active' => true,
+            'ingredients' => 'chicken, garlic',
+            'ingredients_en' => 'chicken, garlic',
+            'recipe_instructions' => 'Nấu.',
+            'recipe_instructions_en' => 'Cook.',
+        ]);
+        $ingredient = Ingredient::create([
+            'ingredient_key' => 'chicken',
+            'ingredient_name' => 'chicken',
+            'ingredient_group' => 'protein',
+        ]);
+        DishIngredientRule::create([
+            'dish_id' => $dish->dish_id,
+            'ingredient_id' => $ingredient->ingredient_id,
+            'role' => 'required',
+            'slot_key' => 'protein',
+            'sort_order' => 0,
+        ]);
+
+        app(DishCustomizationService::class)->createRequiredRulesFromDishIngredients($dish);
+
+        $this->assertDatabaseCount('dish_ingredient_rules', 1);
+    }
+
+    public function test_seeded_pho_uses_fixed_broth_and_noodle_optional_accompaniments_and_replaceable_protein(): void
+    {
+        $type = DishType::create(['type_name' => 'Món chính']);
+        $pho = collect(require base_path('database/seeders/DishCatalog.php'))
+            ->firstWhere('dish_id', 29);
+        $pho['type_id'] = $type->type_id;
+        $dish = Dish::create($pho);
+
+        app(BilingualRecipeIngredientSeeder::class)->run();
+
+        $roles = $dish->ingredientRules()->get()
+            ->mapWithKeys(fn (DishIngredientRule $rule) => [
+                $rule->ingredient->ingredient_name_vi => $rule->role,
+            ])->all();
+
+        $this->assertSame('required_fixed', $roles['Bánh phở']);
+        $this->assertSame('required_fixed', $roles['xương bò']);
+        $this->assertSame('required_replaceable', $roles['nạm bò']);
+        $this->assertSame('optional', $roles['giá đỗ']);
+        $this->assertSame('optional', $roles['tương đen']);
+        $this->assertCount(7, array_filter($roles, fn (string $role) => $role === 'required_fixed'));
+        $this->assertCount(1, array_filter($roles, fn (string $role) => $role === 'required_replaceable'));
+        $this->assertCount(8, array_filter($roles, fn (string $role) => $role === 'optional'));
+    }
+
+    public function test_all_seeded_dishes_have_explicit_ingredient_role_rules(): void
+    {
+        $typeIds = collect(range(1, 6))->mapWithKeys(fn (int $id) => [
+            $id => DishType::create(['type_name' => 'Seed type ' . $id])->type_id,
+        ]);
+
+        $catalog = require base_path('database/seeders/DishCatalog.php');
+        foreach ($catalog as $dishData) {
+            $dishData['type_id'] = $typeIds[$dishData['type_id']];
+            Dish::create($dishData);
+        }
+
+        app(BilingualRecipeIngredientSeeder::class)->run();
+
+        $this->assertSame(30, Dish::query()->count());
+        foreach ($catalog as $dishData) {
+            $dish = Dish::findOrFail($dishData['dish_id']);
+            $this->assertSame(
+                count(explode(',', $dishData['ingredients'])),
+                $dish->ingredientRules()->count(),
+                "Every seeded ingredient needs exactly one rule for {$dishData['dish_name']}."
+            );
+        }
+
+        $phoRoles = Dish::findOrFail(29)->ingredientRules()->get()
+            ->mapWithKeys(fn (DishIngredientRule $rule) => [
+                $rule->ingredient->ingredient_name_vi => $rule->role,
+            ])->all();
+        $this->assertSame('required_replaceable', $phoRoles['Thịt nạm bò']);
+        $this->assertSame('required_fixed', $phoRoles['xương bò']);
+        $this->assertSame('optional', $phoRoles['giá đỗ']);
+
+        $bunBoRoles = Dish::findOrFail(28)->ingredientRules()->get()
+            ->mapWithKeys(fn (DishIngredientRule $rule) => [
+                $rule->ingredient->ingredient_name_vi => $rule->role,
+            ])->all();
+        $this->assertSame('required_replaceable', $bunBoRoles['bắp bò']);
+        $this->assertSame('required_replaceable', $bunBoRoles['gân bò']);
+        $this->assertSame('required_fixed', $bunBoRoles['bún tươi']);
+        $this->assertSame('optional', $bunBoRoles['giá đỗ']);
+    }
+
+    public function test_gemini_ingredient_suggestions_use_only_catalog_ids(): void
     {
         config(['services.gemini.api_key' => 'test-key']);
-        $classificationResponse = [
-            'classifications' => [
-                ['ingredient_id' => 1, 'class' => 'core', 'function_group' => 'protein'],
-                ['ingredient_id' => 2, 'class' => 'core', 'function_group' => 'protein'],
-                ['ingredient_id' => 3, 'class' => 'flavor', 'function_group' => 'seasoning'],
-            ],
-        ];
         $recommendationResponse = [
             'replacements' => [['slot_key' => 'protein', 'ingredient_ids' => [2]]],
-            'removable_optional_ids' => [3],
-            'add_on_ids' => [],
-        ];
-        $partialClassificationResponse = [
-            'classifications' => array_slice($classificationResponse['classifications'], 0, 2),
+            'add_on_ids' => [3, 99],
         ];
         Http::fakeSequence('generativelanguage.googleapis.com/*')
             ->push([
-                'candidates' => [['content' => ['parts' => [['text' => json_encode($classificationResponse)]]]]],
-            ])
-            ->push([
                 'candidates' => [['content' => ['parts' => [['text' => json_encode($recommendationResponse)]]]]],
-            ])
-            ->push([
-                'candidates' => [['content' => ['parts' => [['text' => json_encode($partialClassificationResponse)]]]]],
             ]);
 
         $inventory = [
-            ['ingredient_id' => 1, 'name' => 'chicken', 'group' => 'protein'],
-            ['ingredient_id' => 2, 'name' => 'beef', 'group' => 'protein'],
-            ['ingredient_id' => 3, 'name' => 'chili', 'group' => 'seasoning'],
+            ['ingredient_id' => 1, 'name' => 'chicken'],
+            ['ingredient_id' => 2, 'name' => 'beef'],
+            ['ingredient_id' => 3, 'name' => 'chili'],
         ];
         $requiredSlots = [['slot_key' => 'protein', 'ingredient_id' => 1]];
-        $gemini = app(GeminiChatbotService::class);
-        $classifications = $gemini->classifyIngredientCatalog($inventory);
-        $result = $gemini->recommendRecipeIngredients($inventory, $classifications, $requiredSlots, [3]);
+        $result = app(GeminiChatbotService::class)->recommendDishIngredientOptions(
+            'Chicken soup',
+            $inventory,
+            $requiredSlots,
+            [3]
+        );
 
         $this->assertSame([2], $result['replacements']['protein']);
-        $this->assertSame([3], $result['removable_optional_ids']);
-        $this->assertSame('flavor', $classifications[3]['class']);
+        $this->assertSame([3], $result['add_on_ids']);
+        Http::assertSent(fn (Request $request) => str_contains($request->body(), 'optional condiments')
+            && str_contains($request->body(), 'Match the actual pantry product')
+            && str_contains($request->body(), 'do not invent or infer variants')
+            && str_contains($request->body(), 'Do not invent ingredients or IDs'));
+    }
 
-        try {
-            $gemini->classifyIngredientCatalog($inventory);
-            $this->fail('Gemini must not return a partial catalog classification.');
-        } catch (RuntimeException $exception) {
-            $this->assertSame('Gemini did not classify the complete ingredient catalog exactly once.', $exception->getMessage());
-        }
+    public function test_ingredient_seeder_deactivates_unapproved_satay_variants_without_deleting_them(): void
+    {
+        $approvedSatay = Ingredient::create([
+            'ingredient_key' => 'approved-satay',
+            'ingredient_name' => 'Satay chili',
+            'ingredient_name_vi' => 'Ớt sa tế',
+            'ingredient_group' => 'seasoning',
+            'aliases' => ['Ớt sa tế'],
+            'is_add_on' => true,
+            'is_active' => true,
+        ]);
+        $calamansiSatay = Ingredient::create([
+            'ingredient_key' => 'calamansi-satay',
+            'ingredient_name' => 'Calamansi chili satay',
+            'ingredient_name_vi' => 'Sa tế ớt tắc',
+            'ingredient_group' => 'topping',
+            'aliases' => ['Sa tế ớt tắc'],
+            'is_add_on' => true,
+            'is_active' => true,
+        ]);
+        $shrimpSatay = Ingredient::create([
+            'ingredient_key' => 'shrimp-satay',
+            'ingredient_name' => 'Shrimp satay paste',
+            'ingredient_name_vi' => 'Sa tế tôm',
+            'ingredient_group' => 'topping',
+            'aliases' => ['Sa tế tôm'],
+            'is_add_on' => true,
+            'is_active' => true,
+        ]);
+
+        app(\Database\Seeders\BilingualRecipeIngredientSeeder::class)->run();
+
+        $this->assertTrue($approvedSatay->fresh()->is_active);
+        $this->assertFalse($calamansiSatay->fresh()->is_active);
+        $this->assertFalse($shrimpSatay->fresh()->is_active);
+        $this->assertDatabaseHas('ingredients', ['ingredient_id' => $calamansiSatay->ingredient_id]);
+        $this->assertDatabaseHas('ingredients', ['ingredient_id' => $shrimpSatay->ingredient_id]);
     }
 
     public function test_gemini_returns_english_source_and_vietnamese_translation_together(): void
@@ -221,13 +414,17 @@ class RecipeIngredientCustomizationTest extends TestCase
         $type = DishType::create(['type_name' => 'Món chính']);
         $dish = Dish::create([
             'dish_name' => 'Gà thử nghiệm',
+            'dish_name_en' => 'Test chicken',
             'type_id' => $type->type_id,
             'image_url' => 'test.jpg',
             'price' => 30000,
             'is_bestseller' => false,
             'is_active' => true,
+            'ingredients' => 'chicken, cilantro',
+            'ingredients_en' => 'chicken, cilantro',
+            'recipe_instructions' => 'Nấu.',
+            'recipe_instructions_en' => 'Cook.',
         ]);
-        $dish->forceFill(['ingredients' => 'chicken, cilantro'])->save();
 
         $required = Ingredient::create([
             'ingredient_key' => 'chicken',
@@ -275,40 +472,19 @@ class RecipeIngredientCustomizationTest extends TestCase
     private function mockIngredientAnalysis(): void
     {
         $gemini = \Mockery::mock(GeminiChatbotService::class);
-        $gemini->shouldReceive('classifyIngredientCatalog')
-            ->andReturnUsing(function (array $inventory): array {
-                $classifications = [];
-                foreach ($inventory as $ingredient) {
-                    $classifications[$ingredient['ingredient_id']] = [
-                        'class' => in_array($ingredient['group'], ['seasoning', 'herb'], true) ? 'flavor' : 'core',
-                        'function_group' => $ingredient['group'],
-                    ];
-                }
-                return $classifications;
-            });
-        $gemini->shouldReceive('recommendRecipeIngredients')
-            ->andReturnUsing(function (array $inventory, array $classifications, array $requiredSlots, array $optionalIds): array {
-                $requiredIngredientIds = array_column($requiredSlots, 'ingredient_id');
-                $replacements = [];
-                foreach ($requiredSlots as $slot) {
-                    $function = $classifications[$slot['ingredient_id']]['function_group'];
-                    $replacements[$slot['slot_key']] = collect($inventory)
-                        ->filter(fn ($ingredient) => !in_array($ingredient['ingredient_id'], $requiredIngredientIds, true)
-                            && $classifications[$ingredient['ingredient_id']]['class'] === 'core'
-                            && $classifications[$ingredient['ingredient_id']]['function_group'] === $function)
-                        ->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all();
-                }
-                $presentIds = array_merge($requiredIngredientIds, $optionalIds);
-
+        $gemini->shouldReceive('recommendDishIngredientOptions')
+            ->andReturnUsing(function (string $dishName, array $inventory, array $replaceableSlots, array $optionalIds): array {
                 return [
-                    'replacements' => $replacements,
-                    'removable_optional_ids' => collect($optionalIds)
-                        ->filter(fn ($id) => $classifications[$id]['class'] === 'flavor')
-                        ->values()->all(),
+                    'replacements' => collect($replaceableSlots)
+                        ->mapWithKeys(fn ($slot) => [$slot['slot_key'] => collect($inventory)
+                            ->filter(fn ($item) => $item['name'] === 'beef')
+                            ->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all()])
+                        ->all(),
                     'add_on_ids' => collect($inventory)
-                        ->filter(fn ($ingredient) => $classifications[$ingredient['ingredient_id']]['class'] === 'flavor'
-                            && !in_array($ingredient['ingredient_id'], $presentIds, true))
-                        ->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all(),
+                        ->filter(fn ($item) => $item['name'] === 'chili')
+                        ->pluck('ingredient_id')
+                        ->map(fn ($id) => (int) $id)
+                        ->all(),
                 ];
             });
         app()->instance(GeminiChatbotService::class, $gemini);

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { dishAPI, dishCustomizationAPI, cartAPI } from '../../services/api';
 import { ErrorMessage, Loading, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
@@ -43,6 +44,8 @@ const recipeTranslations = {
 };
 
 const ingredientTranslations = {
+    'chili': 'ớt',
+    'green chili': 'ớt xanh',
     'boneless skinless chicken breast halves': 'ức gà bỏ xương, bỏ da',
     'ground pork': 'thịt heo xay',
     'fresh ginger': 'gừng tươi',
@@ -254,6 +257,13 @@ const ingredientTranslations = {
     'lo mein noodles': 'mì lo mein',
 };
 
+const englishIngredientFallbacks = new Map([
+    ['ớt', 'Chili'],
+    ['ớt đỏ', 'Red chili'],
+    ['ớt xanh', 'Green chili'],
+    ['tương ớt', 'Chili sauce'],
+]);
+
 const translateIngredients = (value) => {
     if (i18n.resolvedLanguage?.startsWith('en')) return value || '';
     return (value || '').split(',').map((item) => {
@@ -294,6 +304,7 @@ const splitInstructions = (instructions) => {
 const DishDetailPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { i18n: languageI18n } = useTranslation();
     const { isAuthenticated } = useAuthContext();
     const [dishes, setDishes] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -438,10 +449,16 @@ const DishDetailPage = () => {
     };
 
     const customRecipes = selectedDish?.custom_recipes || [];
-    const isEnglish = i18n.resolvedLanguage?.startsWith('en');
-    const ingredientOptionLabel = (ingredient) => (
-        isEnglish ? ingredient.name : ingredient.name_vi || translateIngredients(ingredient.name)
-    );
+    const isEnglish = languageI18n.resolvedLanguage?.startsWith('en');
+    const ingredientOptionLabel = (ingredient) => {
+        if (!isEnglish) return ingredient.name_vi || translateIngredients(ingredient.name);
+
+        const englishName = ingredient.name_en || ingredient.name;
+        const vietnameseName = ingredient.name_vi?.trim().toLocaleLowerCase();
+        if (englishName && englishName.trim().toLocaleLowerCase() !== vietnameseName) return englishName;
+
+        return englishIngredientFallbacks.get(vietnameseName) || englishName || ingredient.name_vi || '';
+    };
 
     const openRecipeModal = () => {
         if (!isAuthenticated) {
@@ -487,17 +504,53 @@ const DishDetailPage = () => {
         setRecipeModalView('ingredients');
         const options = await loadRecipeOptions();
         if (!options) return;
-        const removedIds = options.optional
-            .filter((ingredient) => (recipe.removed_ingredients || []).includes(ingredient.name))
-            .map((ingredient) => ingredient.ingredient_id);
-        const addOnIds = options.add_ons
-            .filter((ingredient) => (recipe.add_on_ingredients || []).includes(ingredient.name))
-            .map((ingredient) => ingredient.ingredient_id);
-        setShowAddOns(Boolean(recipe.add_on_ingredients?.length));
+        const sameIngredientName = (left, right) => String(left || '').trim().toLocaleLowerCase()
+            === String(right || '').trim().toLocaleLowerCase();
+        const matchesLegacyName = (ingredient, names) => names.some((name) => [
+            ingredient.name,
+            ingredient.name_vi,
+            ingredient.name_en,
+        ].some((label) => sameIngredientName(label, name)));
+        const storedSelection = recipe.selection;
+        const rawReplacements = storedSelection?.replacements ?? recipe.replacements ?? [];
+        const replacementsBySlot = new Map();
+
+        rawReplacements.forEach((replacement) => {
+            const fromId = Number(replacement.from_ingredient_id);
+            const toId = Number(replacement.to_ingredient_id);
+            const slot = options.required.find((item) => (
+                (replacement.slot_key ? item.slot_key === replacement.slot_key : item.ingredient.ingredient_id === fromId)
+                && item.ingredient.ingredient_id === fromId
+                && item.alternatives.some((alternative) => alternative.ingredient_id === toId)
+            ));
+            if (!slot) return;
+
+            replacementsBySlot.set(slot.slot_key, {
+                slot_key: slot.slot_key,
+                from_ingredient_id: fromId,
+                to_ingredient_id: toId,
+            });
+        });
+
+        const removedIds = storedSelection
+            ? options.optional
+                .filter((ingredient) => storedSelection.removed_ingredient_ids?.map(Number).includes(Number(ingredient.ingredient_id)))
+                .map((ingredient) => ingredient.ingredient_id)
+            : options.optional
+                .filter((ingredient) => matchesLegacyName(ingredient, recipe.removed_ingredients || []))
+                .map((ingredient) => ingredient.ingredient_id);
+        const addOnIds = storedSelection
+            ? options.add_ons
+                .filter((ingredient) => storedSelection.add_on_ingredient_ids?.map(Number).includes(Number(ingredient.ingredient_id)))
+                .map((ingredient) => ingredient.ingredient_id)
+            : options.add_ons
+                .filter((ingredient) => matchesLegacyName(ingredient, recipe.add_on_ingredients || []))
+                .map((ingredient) => ingredient.ingredient_id);
+        setShowAddOns(Boolean(addOnIds.length));
         setRecipeSelection({
-            replacements: recipe.replacements || [],
-            removed_ingredient_ids: removedIds,
-            add_on_ingredient_ids: addOnIds,
+            replacements: [...replacementsBySlot.values()],
+            removed_ingredient_ids: [...new Set(removedIds.map(Number))],
+            add_on_ingredient_ids: [...new Set(addOnIds.map(Number))],
         });
         setRecipeModalView('ingredients');
     };
@@ -550,10 +603,24 @@ const DishDetailPage = () => {
             return;
         }
 
+        const replacementsBySlot = new Map();
+        recipeSelection.replacements.forEach((replacement) => {
+            replacementsBySlot.set(replacement.slot_key, {
+                slot_key: replacement.slot_key,
+                from_ingredient_id: Number(replacement.from_ingredient_id),
+                to_ingredient_id: Number(replacement.to_ingredient_id),
+            });
+        });
+        const previewSelection = {
+            replacements: [...replacementsBySlot.values()],
+            removed_ingredient_ids: [...new Set(recipeSelection.removed_ingredient_ids.map(Number))],
+            add_on_ingredient_ids: [...new Set(recipeSelection.add_on_ingredient_ids.map(Number))],
+        };
+
         setGeneratingPreview(true);
         try {
             const response = await dishCustomizationAPI.preview(selectedDish.dish_id, {
-                selection: recipeSelection,
+                selection: previewSelection,
                 language: isEnglish ? 'en' : 'vi',
             });
             const revisedInstructions = response.data.revised_instructions;
@@ -579,7 +646,7 @@ const DishDetailPage = () => {
                 removed_ingredients: response.data.removed_ingredients,
                 replacements: response.data.replacements,
                 add_on_ingredients: response.data.add_ons,
-                selection: recipeSelection,
+                selection: previewSelection,
                 preview_token: response.data.preview_token,
             });
             setRecipeModalView('preview');
@@ -630,10 +697,10 @@ const DishDetailPage = () => {
     if (error) return <div className="max-w-5xl mx-auto px-4 py-8"><ErrorMessage message={error} /></div>;
     if (!selectedDish) return null;
 
-    const displayedIngredients = selectedDish.ingredients;
-    const displayedInstructions = i18n.resolvedLanguage?.startsWith('en')
-        ? selectedDish.recipe_instructions
-        : recipeTranslations[selectedDish.dish_name] || selectedDish.recipe_instructions;
+    const displayedIngredients = isEnglish
+        ? selectedDish.ingredients_en || selectedDish.ingredients
+        : selectedDish.ingredients;
+    const displayedInstructions = translateDishInstructions(selectedDish);
     const steps = splitInstructions(displayedInstructions);
 
     return (
@@ -979,5 +1046,11 @@ const DishDetailPage = () => {
     );
 };
 
-export { translateIngredients };
+const translateDishInstructions = (dish) => (
+    i18n.resolvedLanguage?.startsWith('en')
+        ? dish?.recipe_instructions_en || dish?.recipe_instructions || ''
+        : dish?.recipe_instructions || recipeTranslations[dish?.dish_name] || ''
+);
+
+export { translateIngredients, translateDishInstructions };
 export default DishDetailPage;

@@ -15,11 +15,11 @@ use RuntimeException;
 
 class DishCustomizationController extends Controller
 {
-    public function index()
+    public function index(DishCustomizationService $service)
     {
         return response()->json([
             'success' => true,
-            'custom_recipes' => Auth::user()->dishCustomizations()->get(),
+            'custom_recipes' => $service->presentCustomizations(Auth::user()->dishCustomizations()->get()),
         ]);
     }
 
@@ -30,7 +30,7 @@ class DishCustomizationController extends Controller
 
         return response()->json([
             'success' => true,
-            'custom_recipes' => $customization,
+            'custom_recipes' => $service->presentCustomizations($customization),
         ]);
     }
 
@@ -146,7 +146,10 @@ class DishCustomizationController extends Controller
             $preview['instructions_en']
         );
 
-        return response()->json(['success' => true, 'custom_recipe' => $customization]);
+        return response()->json([
+            'success' => true,
+            'custom_recipe' => $service->presentCustomizations(collect([$customization]))->first(),
+        ]);
     }
 
     public function destroy($dishId, $customizationId)

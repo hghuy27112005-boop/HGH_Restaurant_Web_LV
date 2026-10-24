@@ -3,10 +3,13 @@
 namespace App\Services;
 
 use App\Models\Dish;
+use App\Models\DishIngredientRule;
 use App\Models\DishCustomization;
 use App\Models\Ingredient;
+use App\Models\IngredientStock;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -18,7 +21,7 @@ class DishCustomizationService
 
         return Dish::where('dish_name', $name)
             ->orWhere('dish_name', 'like', '%' . $name . '%')
-            ->orWhere('original_name', 'like', '%' . $name . '%')
+            ->orWhere('dish_name_en', 'like', '%' . $name . '%')
             ->first();
     }
 
@@ -43,6 +46,7 @@ class DishCustomizationService
             'removed_ingredients' => $resolved['removed_ingredients'],
             'replacements' => $resolved['replacements'],
             'add_on_ingredients' => $resolved['add_ons'],
+            'selection' => $this->canonicalSelection($selection),
         ]);
         $customization->save();
 
@@ -53,6 +57,11 @@ class DishCustomizationService
     {
         $rules = $dish->ingredientRules()->get();
         if ($rules->isEmpty()) {
+            $this->createRequiredRulesFromDishIngredients($dish);
+            $rules = $dish->ingredientRules()->get();
+        }
+
+        if ($rules->isEmpty()) {
             throw ValidationException::withMessages([
                 'ingredients' => 'Công thức món ăn chưa được cấu hình nguyên liệu.',
             ]);
@@ -60,74 +69,140 @@ class DishCustomizationService
 
         $inventory = Ingredient::query()->where('is_active', true)
             ->orderBy('ingredient_id')
-            ->get(['ingredient_id', 'ingredient_name', 'ingredient_group', 'ingredient_name_vi', 'aliases'])
-            ->map(fn (Ingredient $ingredient) => [
-                'ingredient_id' => (int) $ingredient->ingredient_id,
-                'name' => $ingredient->ingredient_name,
-                'name_vi' => $ingredient->ingredient_name_vi,
-                'group' => $ingredient->ingredient_group,
-                'aliases' => $ingredient->aliases ?? [],
-            ])->values()->all();
-        $requiredSlots = $rules->where('role', 'required')->groupBy('slot_key')
+            ->get(['ingredient_id', 'ingredient_name', 'ingredient_group', 'ingredient_name_vi', 'aliases']);
+        $replaceableRules = $rules->whereIn('role', ['required_replaceable', 'required']);
+        $replaceableSlots = $replaceableRules
+            ->groupBy('slot_key')
             ->map(fn ($slotRules, $slotKey) => [
-                'slot_key' => $slotKey,
+                'slot_key' => (string) $slotKey,
                 'ingredient_id' => (int) $slotRules->first()->ingredient_id,
+                'name_vi' => $this->ingredientName(
+                    $slotRules->first()->ingredient->ingredient_name_vi,
+                    $slotRules->first()->ingredient->ingredient_name,
+                    'vi'
+                ),
+                'name_en' => $this->ingredientName(
+                    $slotRules->first()->ingredient->ingredient_name_vi,
+                    $slotRules->first()->ingredient->ingredient_name,
+                    'en'
+                ),
             ])->values()->all();
-        $optionalIds = $rules->where('role', 'optional')->pluck('ingredient_id')
-            ->map(fn ($id) => (int) $id)->values()->all();
-        $inventoryKey = hash('sha256', json_encode($inventory, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        $gemini = app(GeminiChatbotService::class);
-        $classifications = Cache::remember('recipe-ingredient-classes:' . $inventoryKey, now()->addDays(7), fn () =>
-            $gemini->classifyIngredientCatalog($inventory)
-        );
-        $analysisKey = 'recipe-ingredient-analysis:' . hash('sha256', json_encode([
-            'dish_id' => (int) $dish->dish_id,
-            'inventory_key' => $inventoryKey,
-            'classifications' => $classifications,
-            'required' => $requiredSlots,
-            'optional' => $optionalIds,
+        $optionalIds = $rules->where('role', 'optional')
+            ->pluck('ingredient_id')->map(fn ($id) => (int) $id)->values()->all();
+        $inventoryPayload = $inventory->map(fn (Ingredient $ingredient) => [
+            'ingredient_id' => (int) $ingredient->ingredient_id,
+            'name' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name),
+            'name_en' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name, 'en'),
+            'name_vi' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name, 'vi'),
+            'group' => $ingredient->ingredient_group,
+            'aliases' => $ingredient->aliases ?? [],
+        ])->values()->all();
+        $cacheKey = 'dish-ingredient-options:' . hash('sha256', json_encode([
+            (int) $dish->dish_id,
+            $replaceableSlots,
+            $optionalIds,
+            $inventoryPayload,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-        $analysis = Cache::remember($analysisKey, now()->addHours(12), fn () =>
-            $gemini->recommendRecipeIngredients($inventory, $classifications, $requiredSlots, $optionalIds)
+        $analysis = Cache::remember($cacheKey, now()->addHours(12), fn () =>
+            app(GeminiChatbotService::class)->recommendDishIngredientOptions(
+                (string) $dish->dish_name,
+                $inventoryPayload,
+                $replaceableSlots,
+                $optionalIds
+            )
         );
 
-        $removableOptionalIds = $analysis['removable_optional_ids'];
-        $requiredRules = $rules->where('role', 'required')->groupBy('slot_key')
+        $replaceable = $replaceableRules->groupBy('slot_key')
             ->map(function ($slotRules, $slotKey) use ($analysis) {
                 $default = $slotRules->first()->ingredient;
                 $candidateIds = $analysis['replacements'][$slotKey] ?? [];
-                $candidates = Ingredient::query()->where('is_active', true)
+                $alternatives = Ingredient::query()->where('is_active', true)
                     ->whereIn('ingredient_id', $candidateIds)
                     ->orderBy('ingredient_name')->get();
 
                 return [
-                    'slot_key' => $slotKey,
+                    'slot_key' => (string) $slotKey,
                     'replaceable' => true,
                     'ingredient' => $this->ingredientPayload($default),
-                    'alternatives' => $candidates->map(fn (Ingredient $ingredient) => $this->ingredientPayload($ingredient))->values(),
+                    'alternatives' => $alternatives->map(fn (Ingredient $ingredient) => $this->ingredientPayload($ingredient))->values(),
                 ];
             })->values();
-
-        $fixedOptionalRules = $rules->where('role', 'optional')
-            ->reject(fn ($rule) => in_array((int) $rule->ingredient_id, $removableOptionalIds, true));
-        $fixedOptionalIngredients = $fixedOptionalRules->map(fn ($rule) => [
-            'slot_key' => 'fixed_optional_' . $rule->ingredient_id,
+        $fixed = $rules->where('role', 'required_fixed')->map(fn (DishIngredientRule $rule) => [
+            'slot_key' => (string) $rule->slot_key,
             'replaceable' => false,
             'ingredient' => $this->ingredientPayload($rule->ingredient),
             'alternatives' => collect(),
-        ]);
-        $required = $requiredRules->concat($fixedOptionalIngredients)->values();
-        $optionalIngredients = $rules->where('role', 'optional')
-            ->filter(fn ($rule) => in_array((int) $rule->ingredient_id, $removableOptionalIds, true))
-            ->map(fn ($rule) => $this->ingredientPayload($rule->ingredient))->values();
-        $addOnIngredients = Ingredient::query()->whereIn('ingredient_id', $analysis['add_on_ids'])
-            ->where('is_active', true)->orderBy('ingredient_name')->get();
+        ])->values();
+        $optional = $rules->where('role', 'optional')
+            ->map(fn (DishIngredientRule $rule) => $this->ingredientPayload($rule->ingredient))
+            ->values();
+        $addOns = Ingredient::query()->where('is_active', true)
+            ->whereIn('ingredient_id', $analysis['add_on_ids'])
+            ->whereNotIn('ingredient_id', $rules->pluck('ingredient_id'))
+            ->orderBy('ingredient_name')->get()
+            ->map(fn (Ingredient $ingredient) => $this->ingredientPayload($ingredient))
+            ->values();
 
         return [
-            'required' => $required,
-            'optional' => $optionalIngredients,
-            'add_ons' => $addOnIngredients->map(fn (Ingredient $ingredient) => $this->ingredientPayload($ingredient))->values(),
+            'required' => $replaceable->concat($fixed)->values(),
+            'optional' => $optional,
+            'add_ons' => $addOns,
         ];
+    }
+
+    public function createRequiredRulesFromDishIngredients(Dish $dish): void
+    {
+        if ($dish->ingredientRules()->exists()) {
+            return;
+        }
+
+        $englishIngredients = $this->splitIngredientList($dish->ingredients_en ?: $dish->ingredients);
+        $vietnameseIngredients = $this->splitIngredientList($dish->ingredients);
+        if ($englishIngredients === []) {
+            return;
+        }
+
+        DB::transaction(function () use ($dish, $englishIngredients, $vietnameseIngredients): void {
+            if ($dish->ingredientRules()->exists()) {
+                return;
+            }
+
+            foreach ($englishIngredients as $index => $name) {
+                $ingredient = Ingredient::firstOrCreate(
+                    ['ingredient_key' => IngredientStock::keyFor($name)],
+                    [
+                        'ingredient_name' => $name,
+                        'ingredient_group' => 'other',
+                        'ingredient_name_vi' => $vietnameseIngredients[$index] ?? null,
+                        'is_add_on' => false,
+                        'is_active' => true,
+                    ]
+                );
+
+                if (!$ingredient->ingredient_name_vi && isset($vietnameseIngredients[$index])) {
+                    $ingredient->ingredient_name_vi = $vietnameseIngredients[$index];
+                    $ingredient->save();
+                }
+
+                DishIngredientRule::create([
+                    'dish_id' => $dish->dish_id,
+                    'ingredient_id' => $ingredient->ingredient_id,
+                    'role' => 'required_replaceable',
+                    'slot_key' => 'auto_' . $dish->dish_id . '_' . $index,
+                    'sort_order' => $index,
+                ]);
+            }
+        });
+    }
+
+    private function splitIngredientList(?string $ingredients): array
+    {
+        return collect(explode(',', (string) $ingredients))
+            ->map(fn (string $name) => trim($name))
+            ->filter()
+            ->unique(fn (string $name) => Str::lower($name))
+            ->values()
+            ->all();
     }
 
     public function assertSelectionChanged(array $resolved): void
@@ -175,9 +250,15 @@ class DishCustomizationService
 
             $selectedReplacements[$slot['slot_key']] = [
                 'from_ingredient_id' => $fromId,
-                'from' => $slot['ingredient']['name'],
+                'from' => $this->ingredientName(
+                    $slot['ingredient']['name_vi'] ?? null,
+                    $slot['ingredient']['name_en'] ?? $slot['ingredient']['name'] ?? null
+                ),
                 'to_ingredient_id' => $toId,
-                'to' => $to['name'],
+                'to' => $this->ingredientName(
+                    $to['name_vi'] ?? null,
+                    $to['name_en'] ?? $to['name'] ?? null
+                ),
             ];
         }
 
@@ -214,7 +295,7 @@ class DishCustomizationService
             }
         }
         foreach ($addons as $addon) {
-            $ingredients[] = $addon->ingredient_name;
+            $ingredients[] = $this->ingredientName($addon->ingredient_name_vi, $addon->ingredient_name);
         }
 
         $removedNames = collect($options['optional'])
@@ -225,7 +306,10 @@ class DishCustomizationService
             'ingredients' => array_values(array_unique($ingredients)),
             'removed_ingredients' => $removedNames,
             'replacements' => array_values($selectedReplacements),
-            'add_ons' => $addons->map(fn (Ingredient $ingredient) => $ingredient->ingredient_name)->values()->all(),
+            'add_ons' => $addons->map(fn (Ingredient $ingredient) => $this->ingredientName(
+                $ingredient->ingredient_name_vi,
+                $ingredient->ingredient_name
+            ))->values()->all(),
         ];
     }
 
@@ -233,9 +317,193 @@ class DishCustomizationService
     {
         return [
             'ingredient_id' => $ingredient->ingredient_id,
-            'name' => $ingredient->ingredient_name,
-            'name_vi' => $ingredient->ingredient_name_vi,
+            'name' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name),
+            'name_en' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name, 'en'),
+            'name_vi' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name, 'vi'),
             'group' => $ingredient->ingredient_group,
+        ];
+    }
+
+    private function ingredientName(?string $nameVi, ?string $nameEn, string $language = 'en'): string
+    {
+        $preferredName = $language === 'vi' ? $nameVi : $nameEn;
+        $fallbackName = $language === 'vi' ? $nameEn : $nameVi;
+
+        return trim((string) ($preferredName ?: $fallbackName ?: ''));
+    }
+
+    private function canonicalSelection(array $selection): array
+    {
+        $replacementsBySlot = [];
+        foreach ($selection['replacements'] ?? [] as $replacement) {
+            $slotKey = (string) ($replacement['slot_key'] ?? '');
+            if ($slotKey === '') {
+                continue;
+            }
+
+            $replacementsBySlot[$slotKey] = [
+                'slot_key' => $slotKey,
+                'from_ingredient_id' => (int) $replacement['from_ingredient_id'],
+                'to_ingredient_id' => (int) $replacement['to_ingredient_id'],
+            ];
+        }
+
+        return [
+            'replacements' => array_values($replacementsBySlot),
+            'removed_ingredient_ids' => collect($selection['removed_ingredient_ids'] ?? [])
+                ->map(fn ($id) => (int) $id)->unique()->values()->all(),
+            'add_on_ingredient_ids' => collect($selection['add_on_ingredient_ids'] ?? [])
+                ->map(fn ($id) => (int) $id)->unique()->values()->all(),
+        ];
+    }
+
+    public function selectionWithNames(array $selection): array
+    {
+        $ingredientIds = collect($selection['removed_ingredient_ids'] ?? [])
+            ->merge($selection['add_on_ingredient_ids'] ?? [])
+            ->merge(collect($selection['replacements'] ?? [])->flatMap(fn (array $replacement) => [
+                $replacement['from_ingredient_id'] ?? null,
+                $replacement['to_ingredient_id'] ?? null,
+            ]))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        $ingredients = Ingredient::query()->whereIn('ingredient_id', $ingredientIds)
+            ->get()->keyBy('ingredient_id');
+        $ingredientDetails = fn ($id) => ($ingredient = $ingredients->get((int) $id))
+            ? [
+                'ingredient_id' => (int) $ingredient->ingredient_id,
+                'name_vi' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name, 'vi'),
+                'name_en' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name, 'en'),
+            ]
+            : null;
+
+        $selection['replacements'] = collect($selection['replacements'] ?? [])
+            ->map(function (array $replacement) use ($ingredientDetails): array {
+                $replacement['from_ingredient'] = $ingredientDetails($replacement['from_ingredient_id'] ?? 0);
+                $replacement['to_ingredient'] = $ingredientDetails($replacement['to_ingredient_id'] ?? 0);
+                return $replacement;
+            })->values()->all();
+        $selection['removed_ingredients'] = collect($selection['removed_ingredient_ids'] ?? [])
+            ->map($ingredientDetails)->filter()->values()->all();
+        $selection['add_ons'] = collect($selection['add_on_ingredient_ids'] ?? [])
+            ->map($ingredientDetails)->filter()->values()->all();
+
+        return $selection;
+    }
+
+    public function presentCustomizations($customizations)
+    {
+        return $customizations->map(function (DishCustomization $customization): array {
+            $payload = $customization->toArray();
+            $selection = $customization->selection ?? [];
+            if (empty($selection)) {
+                $selection = $this->selectionFromLegacyCustomization($customization);
+            }
+
+            $payload['selection'] = $this->selectionWithNames($selection);
+            return $payload;
+        });
+    }
+
+    private function selectionFromLegacyCustomization(DishCustomization $customization): array
+    {
+        $legacyReplacements = collect($customization->replacements ?? [])
+            ->filter(fn ($replacement) => is_array($replacement))
+            ->values();
+        $fromIngredientIds = $legacyReplacements
+            ->pluck('from_ingredient_id')
+            ->filter(fn ($id) => filter_var($id, FILTER_VALIDATE_INT) !== false)
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        $slotsByIngredientId = DishIngredientRule::query()
+            ->where('dish_id', $customization->dish_id)
+            ->whereIn('ingredient_id', $fromIngredientIds)
+            ->whereNotNull('slot_key')
+            ->get(['ingredient_id', 'slot_key'])
+            ->keyBy(fn (DishIngredientRule $rule) => (int) $rule->ingredient_id);
+        $replacements = $legacyReplacements
+            ->map(function (array $replacement) use ($slotsByIngredientId): ?array {
+                $fromId = filter_var($replacement['from_ingredient_id'] ?? null, FILTER_VALIDATE_INT);
+                $toId = filter_var($replacement['to_ingredient_id'] ?? null, FILTER_VALIDATE_INT);
+                if ($fromId === false || $toId === false) {
+                    return null;
+                }
+
+                $slotKey = $slotsByIngredientId->get((int) $fromId)?->slot_key;
+                if (!$slotKey) {
+                    return null;
+                }
+
+                return [
+                    'slot_key' => (string) $slotKey,
+                    'from_ingredient_id' => (int) $fromId,
+                    'to_ingredient_id' => (int) $toId,
+                ];
+            })
+            ->filter()
+            ->unique('slot_key')
+            ->values()
+            ->all();
+
+        $legacyNames = collect($customization->removed_ingredients ?? [])
+            ->merge($customization->add_on_ingredients ?? [])
+            ->filter(fn ($name) => is_string($name) && trim($name) !== '')
+            ->values();
+        $normalizeName = fn (string $name): string => Str::lower(
+            (string) preg_replace('/\s+/u', ' ', trim($name))
+        );
+        $requestedNames = $legacyNames->map($normalizeName)->unique()->values();
+        $matchingIngredientIds = Ingredient::query()
+            ->get(['ingredient_id', 'ingredient_name', 'ingredient_name_vi', 'aliases'])
+            ->filter(function (Ingredient $ingredient) use ($requestedNames, $normalizeName): bool {
+                $labels = collect([
+                    $ingredient->ingredient_name,
+                    $ingredient->ingredient_name_vi,
+                ])
+                    ->merge($ingredient->aliases ?? [])
+                    ->filter(fn ($label) => is_string($label) && trim($label) !== '')
+                    ->map($normalizeName);
+
+                return $labels->intersect($requestedNames)->isNotEmpty();
+            })
+            ->pluck('ingredient_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        $removedNames = collect($customization->removed_ingredients ?? [])
+            ->filter(fn ($name) => is_string($name) && trim($name) !== '')
+            ->map($normalizeName)
+            ->unique();
+        $addOnNames = collect($customization->add_on_ingredients ?? [])
+            ->filter(fn ($name) => is_string($name) && trim($name) !== '')
+            ->map($normalizeName)
+            ->unique();
+        $matchingNamesByIngredientId = Ingredient::query()
+            ->whereIn('ingredient_id', $matchingIngredientIds)
+            ->get(['ingredient_id', 'ingredient_name', 'ingredient_name_vi', 'aliases'])
+            ->mapWithKeys(function (Ingredient $ingredient) use ($normalizeName): array {
+                $labels = collect([
+                    $ingredient->ingredient_name,
+                    $ingredient->ingredient_name_vi,
+                ])
+                    ->merge($ingredient->aliases ?? [])
+                    ->filter(fn ($label) => is_string($label) && trim($label) !== '')
+                    ->map($normalizeName);
+
+                return [(int) $ingredient->ingredient_id => $labels];
+            });
+
+        return [
+            'replacements' => $replacements,
+            'removed_ingredient_ids' => $matchingNamesByIngredientId
+                ->filter(fn ($labels) => $labels->intersect($removedNames)->isNotEmpty())
+                ->keys()->map(fn ($id) => (int) $id)->values()->all(),
+            'add_on_ingredient_ids' => $matchingNamesByIngredientId
+                ->filter(fn ($labels) => $labels->intersect($addOnNames)->isNotEmpty())
+                ->keys()->map(fn ($id) => (int) $id)->values()->all(),
         ];
     }
 

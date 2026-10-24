@@ -19,12 +19,14 @@ class DishCustomization extends Model
         'removed_ingredients',
         'replacements',
         'add_on_ingredients',
+        'selection',
     ];
 
     protected $casts = [
         'removed_ingredients' => 'array',
         'replacements' => 'array',
         'add_on_ingredients' => 'array',
+        'selection' => 'array',
     ];
 
     public function dish()
