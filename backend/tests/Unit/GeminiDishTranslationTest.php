@@ -3,7 +3,9 @@
 namespace Tests\Unit;
 
 use App\Services\GeminiChatbotService;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -198,6 +200,127 @@ class GeminiDishTranslationTest extends TestCase
             str_contains($request->body(), 'in English')
             && str_contains($request->body(), 'Cooking steps in English')
         );
+    }
+
+    public function test_recipe_request_retries_a_retryable_http_error_then_succeeds(): void
+    {
+        config([
+            'services.gemini.api_key' => 'test-key',
+            'services.gemini.retry_delays' => [0, 0],
+        ]);
+        Http::fakeSequence()
+            ->push(['error' => 'temporarily unavailable'], 503)
+            ->push([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'recipe_instructions' => 'Cook the chicken.',
+                            'used_ingredients' => ['chicken'],
+                        ]),
+                    ]]],
+                ]],
+            ]);
+
+        $recipe = app(GeminiChatbotService::class)->generateRecipe('Chicken', ['chicken'], 'en');
+
+        $this->assertSame('Cook the chicken.', $recipe);
+        Http::assertSentCount(2);
+    }
+
+    public function test_gemini_api_key_is_sent_in_header_not_url(): void
+    {
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            '*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'recipe_instructions' => 'Cook the chicken.',
+                            'used_ingredients' => ['chicken'],
+                        ]),
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        app(GeminiChatbotService::class)->generateRecipe('Chicken', ['chicken'], 'en');
+
+        Http::assertSent(fn (Request $request) =>
+            $request->hasHeader('x-goog-api-key', 'test-key')
+            && !str_contains($request->url(), 'key=')
+        );
+    }
+
+    public function test_recipe_request_throws_request_exception_after_three_retryable_http_failures(): void
+    {
+        config([
+            'services.gemini.api_key' => 'test-key',
+            'services.gemini.retry_delays' => [0, 0],
+        ]);
+        Http::fakeSequence()
+            ->push(['error' => 'temporarily unavailable'], 503)
+            ->push(['error' => 'temporarily unavailable'], 503)
+            ->push(['error' => 'temporarily unavailable'], 503);
+
+        try {
+            app(GeminiChatbotService::class)->generateRecipe('Chicken', ['chicken'], 'en');
+            $this->fail('Expected Gemini recipe request to throw a RequestException.');
+        } catch (RequestException $exception) {
+            $this->assertInstanceOf(RequestException::class, $exception);
+        }
+
+        Http::assertSentCount(3);
+    }
+
+    public function test_recipe_request_does_not_retry_non_retryable_http_errors(): void
+    {
+        config([
+            'services.gemini.api_key' => 'test-key',
+            'services.gemini.retry_delays' => [0, 0],
+        ]);
+        Http::fakeSequence()
+            ->push(['error' => 'bad request'], 400);
+
+        try {
+            app(GeminiChatbotService::class)->generateRecipe('Chicken', ['chicken'], 'en');
+            $this->fail('Expected Gemini recipe request to throw a RequestException.');
+        } catch (RequestException $exception) {
+            $this->assertInstanceOf(RequestException::class, $exception);
+        }
+
+        Http::assertSentCount(1);
+    }
+
+    public function test_recipe_request_retries_connection_exception_then_succeeds(): void
+    {
+        config([
+            'services.gemini.api_key' => 'test-key',
+            'services.gemini.retry_delays' => [0, 0],
+        ]);
+        $attempts = 0;
+        $recipeResponse = [
+            'candidates' => [[
+                'content' => ['parts' => [[
+                    'text' => json_encode([
+                        'recipe_instructions' => 'Cook the chicken.',
+                        'used_ingredients' => ['chicken'],
+                    ]),
+                ]]],
+            ]],
+        ];
+        Http::fake(function () use (&$attempts, $recipeResponse) {
+            $attempts++;
+            if ($attempts === 1) {
+                throw new ConnectionException('Connection timed out.');
+            }
+
+            return Http::response($recipeResponse);
+        });
+
+        $recipe = app(GeminiChatbotService::class)->generateRecipe('Chicken', ['chicken'], 'en');
+
+        $this->assertSame('Cook the chicken.', $recipe);
+        $this->assertSame(2, $attempts);
     }
 
     public function test_it_translates_english_metadata_and_vietnamese_recipe_at_creation_time(): void

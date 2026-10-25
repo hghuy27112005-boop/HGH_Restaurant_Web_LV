@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Exceptions\DishNameTranslationException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -167,7 +169,7 @@ PROMPT;
 
     private function callGemini(string $prompt, bool $expectJson): array
     {
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent?key={$this->apiKey}";
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent";
 
         try {
             $payload = [
@@ -178,7 +180,9 @@ PROMPT;
                 $payload['generationConfig'] = ['responseMimeType' => 'application/json'];
             }
 
-            $response = Http::timeout(15)->post($url, $payload);
+            $response = Http::withHeaders(['x-goog-api-key' => $this->apiKey])
+                ->timeout(15)
+                ->post($url, $payload);
 
             if (!$response->successful()) {
                 Log::error('Gemini API error: ' . $response->body());
@@ -550,8 +554,8 @@ Only when BOTH the name and photo pass and match, identify ingredients using the
 - Return between 1 and 40 ingredients.
 PROMPT;
 
-        $response = \Illuminate\Support\Facades\Http::timeout(60)->post(
-            "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent?key={$this->apiKey}",
+        $response = $this->postWithRetry(
+            "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent",
             [
                 'contents' => [[
                     'parts' => [
@@ -563,7 +567,9 @@ PROMPT;
                     ],
                 ]],
                 'generationConfig' => ['responseMimeType' => 'application/json'],
-            ]
+            ],
+            60,
+            __FUNCTION__
         );
 
         if (!$response->successful()) {
@@ -754,13 +760,71 @@ PROMPT;
         return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
+    private function postWithRetry(string $url, array $payload, int $timeout, string $operation): Response
+    {
+        $retryableStatuses = [429, 500, 502, 503, 504];
+        $retryDelays = config('services.gemini.retry_delays', [1, 2]);
+        $maxAttempts = 3;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $response = Http::withHeaders(['x-goog-api-key' => $this->apiKey])
+                    ->timeout($timeout)
+                    ->post($url, $payload);
+            } catch (ConnectionException $exception) {
+                if ($attempt < $maxAttempts) {
+                    Log::warning('Gemini request retrying after a connection failure.', [
+                        'operation' => $operation,
+                        'http_status' => null,
+                        'attempt' => $attempt,
+                    ]);
+                    sleep((int) ($retryDelays[$attempt - 1] ?? 0));
+                    continue;
+                }
+
+                Log::error('Gemini request failed after retries due to a connection failure.', [
+                    'operation' => $operation,
+                    'http_status' => null,
+                    'attempt' => $attempt,
+                    'exception' => ConnectionException::class,
+                ]);
+                throw $exception;
+            }
+
+            if ($response->successful()) {
+                return $response;
+            }
+
+            $status = $response->status();
+            if (in_array($status, $retryableStatuses, true) && $attempt < $maxAttempts) {
+                Log::warning('Gemini request retrying after an HTTP failure.', [
+                    'operation' => $operation,
+                    'http_status' => $status,
+                    'attempt' => $attempt,
+                ]);
+                sleep((int) ($retryDelays[$attempt - 1] ?? 0));
+                continue;
+            }
+
+            Log::error('Gemini request failed.', [
+                'operation' => $operation,
+                'http_status' => $status,
+                'attempt' => $attempt,
+            ]);
+
+            return $response;
+        }
+
+        throw new RuntimeException('Gemini request retry loop ended unexpectedly.');
+    }
+
     private function requestRecipeJson(string $prompt): array
     {
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent?key={$this->apiKey}";
-        $response = Http::timeout(45)->post($url, [
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent";
+        $response = $this->postWithRetry($url, [
             'contents' => [['parts' => [['text' => $prompt]]]],
             'generationConfig' => ['responseMimeType' => 'application/json'],
-        ])->throw();
+        ], 45, __FUNCTION__)->throw();
         $text = (string) $response->json('candidates.0.content.parts.0.text', '');
         $result = json_decode($text, true);
 
@@ -773,10 +837,10 @@ PROMPT;
 
     private function requestRecipeText(string $prompt): string
     {
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent?key={$this->apiKey}";
-        $response = Http::timeout(45)->post($url, [
+        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent";
+        $response = $this->postWithRetry($url, [
             'contents' => [['parts' => [['text' => $prompt]]]],
-        ])->throw();
+        ], 45, __FUNCTION__)->throw();
         $text = trim((string) $response->json('candidates.0.content.parts.0.text', ''));
 
         if ($text === '') {
