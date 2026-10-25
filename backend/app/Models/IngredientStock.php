@@ -44,18 +44,25 @@ class IngredientStock extends Model
 
     public static function getOrCreateForDate(string $name, string $date): self
     {
+        $name = trim($name);
         $key = self::keyFor($name);
+        $ingredientNameAttributes = preg_match(
+            '/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/iu',
+            $name
+        )
+            ? ['ingredient_name' => null, 'ingredient_name_vi' => $name]
+            : ['ingredient_name' => $name];
 
         $ingredient = Ingredient::firstOrCreate(
             ['ingredient_key' => $key],
-            ['ingredient_name' => trim($name)]
+            $ingredientNameAttributes
         );
 
         return self::firstOrCreate(
             ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date],
             [
                 'ingredient_key' => $key,
-                'ingredient_name' => trim($name),
+                'ingredient_name' => $name,
                 'quantity_start' => 50,
                 'quantity_left' => 50,
                 'refill_count' => 0,

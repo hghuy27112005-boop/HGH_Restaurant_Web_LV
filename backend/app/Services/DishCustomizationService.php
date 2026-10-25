@@ -156,22 +156,23 @@ class DishCustomizationService
             return;
         }
 
-        $englishIngredients = $this->splitIngredientList($dish->ingredients_en ?: $dish->ingredients);
+        $englishIngredients = $this->splitIngredientList($dish->ingredients_en);
         $vietnameseIngredients = $this->splitIngredientList($dish->ingredients);
-        if ($englishIngredients === []) {
+        $ingredientNames = $englishIngredients !== [] ? $englishIngredients : $vietnameseIngredients;
+        if ($ingredientNames === []) {
             return;
         }
 
-        DB::transaction(function () use ($dish, $englishIngredients, $vietnameseIngredients): void {
+        DB::transaction(function () use ($dish, $ingredientNames, $englishIngredients, $vietnameseIngredients): void {
             if ($dish->ingredientRules()->exists()) {
                 return;
             }
 
-            foreach ($englishIngredients as $index => $name) {
+            foreach ($ingredientNames as $index => $name) {
                 $ingredient = Ingredient::firstOrCreate(
                     ['ingredient_key' => IngredientStock::keyFor($name)],
                     [
-                        'ingredient_name' => $name,
+                        'ingredient_name' => $englishIngredients[$index] ?? null,
                         'ingredient_group' => 'other',
                         'ingredient_name_vi' => $vietnameseIngredients[$index] ?? null,
                         'is_add_on' => false,
@@ -310,6 +311,7 @@ class DishCustomizationService
                 $ingredient->ingredient_name_vi,
                 $ingredient->ingredient_name
             ))->values()->all(),
+            ...$this->structuredSelectionData($dish->dish_id, $selection),
         ];
     }
 
@@ -393,6 +395,75 @@ class DishCustomizationService
         return $selection;
     }
 
+    private function structuredSelectionData(int $dishId, array $selection): array
+    {
+        $selectionWithNames = $this->selectionWithNames($selection);
+        $removedIds = collect($selection['removed_ingredient_ids'] ?? [])->map(fn ($id) => (int) $id);
+        $replacementsBySlot = collect($selection['replacements'] ?? [])
+            ->keyBy('slot_key')
+            ->map(fn (array $replacement) => (int) $replacement['to_ingredient_id']);
+        $rules = DishIngredientRule::query()
+            ->where('dish_id', $dishId)
+            ->with('ingredient')
+            ->orderBy('sort_order')
+            ->get();
+        $finalIngredientIds = $rules->filter(function (DishIngredientRule $rule) use ($removedIds): bool {
+            return $rule->role !== 'optional' || !$removedIds->contains((int) $rule->ingredient_id);
+        })->map(function (DishIngredientRule $rule) use ($replacementsBySlot): int {
+            return (int) ($replacementsBySlot->get((string) $rule->slot_key) ?? $rule->ingredient_id);
+        });
+        $finalIngredientIds = $finalIngredientIds
+            ->merge($selection['add_on_ingredient_ids'] ?? [])
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values();
+        $ingredientsById = $this->ingredientDetailsByIds(
+            $finalIngredientIds
+                ->merge($selection['removed_ingredient_ids'] ?? [])
+                ->merge(collect($selection['replacements'] ?? [])->flatMap(fn (array $replacement) => [
+                    $replacement['from_ingredient_id'],
+                    $replacement['to_ingredient_id'],
+                ]))
+                ->unique()
+                ->values()
+        );
+
+        return [
+            'ingredients_structured' => $finalIngredientIds
+                ->map(fn ($id) => $ingredientsById->get((int) $id))
+                ->filter()
+                ->values()
+                ->all(),
+            'removed_ingredients_structured' => collect($selectionWithNames['removed_ingredients'])
+                ->values()
+                ->all(),
+            'add_ons_structured' => collect($selectionWithNames['add_ons'])
+                ->values()
+                ->all(),
+            'replacements_structured' => collect($selectionWithNames['replacements'])
+                ->map(fn (array $replacement): array => [
+                    'from' => $replacement['from_ingredient'],
+                    'to' => $replacement['to_ingredient'],
+                ])
+                ->filter(fn (array $replacement) => $replacement['from'] && $replacement['to'])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function ingredientDetailsByIds($ingredientIds)
+    {
+        return Ingredient::query()
+            ->whereIn('ingredient_id', $ingredientIds)
+            ->get()
+            ->keyBy('ingredient_id')
+            ->map(fn (Ingredient $ingredient): array => [
+                'ingredient_id' => (int) $ingredient->ingredient_id,
+                'name_vi' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name, 'vi'),
+                'name_en' => $this->ingredientName($ingredient->ingredient_name_vi, $ingredient->ingredient_name, 'en'),
+            ]);
+    }
+
     public function presentCustomizations($customizations)
     {
         return $customizations->map(function (DishCustomization $customization): array {
@@ -403,6 +474,10 @@ class DishCustomizationService
             }
 
             $payload['selection'] = $this->selectionWithNames($selection);
+            $payload = array_merge($payload, $this->structuredSelectionData(
+                (int) $customization->dish_id,
+                $selection
+            ));
             return $payload;
         });
     }

@@ -109,6 +109,10 @@ class RecipeIngredientCustomizationTest extends TestCase
     public function test_custom_recipe_saves_id_only_selection_and_returns_bilingual_ingredient_names(): void
     {
         [$dish, $required, $replacement, , $optional, $addOn] = $this->createRecipeIngredients();
+        $required->update(['ingredient_name_vi' => 'thịt gà']);
+        $replacement->update(['ingredient_name_vi' => 'thịt bò']);
+        $optional->update(['ingredient_name_vi' => 'rau mùi']);
+        $addOn->update(['ingredient_name_vi' => 'ớt']);
         $this->mockIngredientAnalysis();
         $this->actingAs(User::factory()->create());
         $selection = [
@@ -122,6 +126,33 @@ class RecipeIngredientCustomizationTest extends TestCase
         ];
 
         $service = app(DishCustomizationService::class);
+        $resolved = $service->resolveSelection($dish, $selection);
+        $this->assertSame([
+            [
+                'ingredient_id' => $replacement->ingredient_id,
+                'name_vi' => 'thịt bò',
+                'name_en' => 'beef',
+            ],
+            [
+                'ingredient_id' => $addOn->ingredient_id,
+                'name_vi' => 'ớt',
+                'name_en' => 'chili',
+            ],
+        ], $resolved['ingredients_structured']);
+        $this->assertSame([
+            'from' => [
+                'ingredient_id' => $required->ingredient_id,
+                'name_vi' => 'thịt gà',
+                'name_en' => 'chicken',
+            ],
+            'to' => [
+                'ingredient_id' => $replacement->ingredient_id,
+                'name_vi' => 'thịt bò',
+                'name_en' => 'beef',
+            ],
+        ], $resolved['replacements_structured'][0]);
+        $this->assertSame('rau mùi', $resolved['removed_ingredients_structured'][0]['name_vi']);
+
         $customization = $service->save($dish, 'Beef recipe', 'Cook the beef.', $selection);
 
         $this->assertSame($selection, $customization->selection);
@@ -132,17 +163,23 @@ class RecipeIngredientCustomizationTest extends TestCase
             'to_ingredient_id' => $replacement->ingredient_id,
             'from_ingredient' => [
                 'ingredient_id' => $required->ingredient_id,
-                'name_vi' => 'chicken',
+                'name_vi' => 'thịt gà',
                 'name_en' => 'chicken',
             ],
             'to_ingredient' => [
                 'ingredient_id' => $replacement->ingredient_id,
-                'name_vi' => 'beef',
+                'name_vi' => 'thịt bò',
                 'name_en' => 'beef',
             ],
         ], $displaySelection['replacements'][0]);
         $this->assertSame('cilantro', $displaySelection['removed_ingredients'][0]['name_en']);
         $this->assertSame('chili', $displaySelection['add_ons'][0]['name_en']);
+
+        $presented = $service->presentCustomizations(collect([$customization]))->first();
+        $this->assertSame('thịt bò', $presented['ingredients_structured'][0]['name_vi']);
+        $this->assertSame('beef', $presented['ingredients_structured'][0]['name_en']);
+        $this->assertSame('ớt', $presented['add_ons_structured'][0]['name_vi']);
+        $this->assertSame('thịt gà', $presented['replacements_structured'][0]['from']['name_vi']);
     }
 
     public function test_resolved_ingredients_fall_back_to_vietnamese_when_english_name_is_missing(): void
@@ -202,6 +239,36 @@ class RecipeIngredientCustomizationTest extends TestCase
         $this->assertTrue($options['required']->every(fn ($slot) => $slot['replaceable']));
         $this->assertCount(0, $options['optional']);
         $this->assertDatabaseCount('dish_ingredient_rules', 3);
+    }
+
+    public function test_auto_configuration_does_not_store_vietnamese_names_as_english_names(): void
+    {
+        $type = DishType::create(['type_name' => 'Món chỉ có tiếng Việt']);
+        $dish = Dish::create([
+            'dish_name' => 'Món chỉ có tiếng Việt',
+            'dish_name_en' => null,
+            'type_id' => $type->type_id,
+            'image_url' => 'vietnamese-only-dish.jpg',
+            'price' => 30000,
+            'is_bestseller' => false,
+            'is_active' => true,
+            'ingredients' => 'thịt gà, tỏi',
+            'ingredients_en' => null,
+            'recipe_instructions' => 'Nấu chín.',
+            'recipe_instructions_en' => null,
+        ]);
+
+        app(DishCustomizationService::class)->createRequiredRulesFromDishIngredients($dish);
+
+        $ingredients = $dish->ingredientRules()
+            ->with('ingredient')
+            ->orderBy('sort_order')
+            ->get()
+            ->pluck('ingredient');
+
+        $this->assertSame(['thịt gà', 'tỏi'], $ingredients->pluck('ingredient_name_vi')->all());
+        $this->assertSame([null, null], $ingredients->pluck('ingredient_name')->all());
+        $this->assertCount(2, $ingredients);
     }
 
     public function test_auto_configuration_does_not_overwrite_existing_dish_rules(): void

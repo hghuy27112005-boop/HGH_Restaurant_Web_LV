@@ -102,6 +102,10 @@ class DishCustomizationController extends Controller
             'removed_ingredients' => $resolved['removed_ingredients'],
             'replacements' => $resolved['replacements'],
             'add_ons' => $resolved['add_ons'],
+            'ingredients_structured' => $resolved['ingredients_structured'],
+            'removed_ingredients_structured' => $resolved['removed_ingredients_structured'],
+            'add_ons_structured' => $resolved['add_ons_structured'],
+            'replacements_structured' => $resolved['replacements_structured'],
         ]);
     }
 

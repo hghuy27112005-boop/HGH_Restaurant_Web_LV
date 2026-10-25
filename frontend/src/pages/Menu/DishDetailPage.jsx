@@ -283,6 +283,18 @@ const splitIngredients = (value) => (value || '').split(',').map((item) => item.
 
 const normalizeIngredientSet = (list = []) => [...new Set(list.map((item) => item.trim().toLowerCase()))].sort().join('|');
 
+const localizedIngredientName = (ingredient, isEnglish) => (
+    isEnglish
+        ? ingredient?.name_en || ingredient?.name_vi || ''
+        : ingredient?.name_vi || ingredient?.name_en || ''
+);
+
+const localizedIngredientList = (structured, fallback, isEnglish) => (
+    Array.isArray(structured) && structured.length > 0
+        ? structured.map((ingredient) => localizedIngredientName(ingredient, isEnglish)).filter(Boolean).join(', ')
+        : fallback
+);
+
 const splitInstructions = (instructions) => {
     const text = (instructions || '').replace(/\r/g, '').trim();
     if (!text) return [];
@@ -646,6 +658,10 @@ const DishDetailPage = () => {
                 removed_ingredients: response.data.removed_ingredients,
                 replacements: response.data.replacements,
                 add_on_ingredients: response.data.add_ons,
+                ingredients_structured: response.data.ingredients_structured,
+                removed_ingredients_structured: response.data.removed_ingredients_structured,
+                add_ons_structured: response.data.add_ons_structured,
+                replacements_structured: response.data.replacements_structured,
                 selection: previewSelection,
                 preview_token: response.data.preview_token,
             });
@@ -867,25 +883,29 @@ const DishDetailPage = () => {
                     <div className="flex flex-col gap-4">
                         <div className="border-b border-gray-200 pb-4">
                             <h4 className="font-semibold text-red-600">{translatePageText("Nguyên liệu đã bỏ")}</h4>
-                            <p className="mt-1 text-gray-700">{selectedRecipe.removed_ingredients?.length ? translateIngredients(selectedRecipe.removed_ingredients.join(', ')) : translatePageText("Không có")}</p>
+                            <p className="mt-1 text-gray-700">{localizedIngredientList(selectedRecipe.removed_ingredients_structured, selectedRecipe.removed_ingredients?.length ? translateIngredients(selectedRecipe.removed_ingredients.join(', ')) : '', isEnglish) || translatePageText("Không có")}</p>
                         </div>
                         <div className="border-b border-gray-200 pb-4">
                             <h4 className="font-semibold text-red-600">{translatePageText("Nguyên liệu còn lại")}</h4>
-                            <p className="mt-1 text-gray-700">{translateIngredients(selectedRecipe.ingredients)}</p>
+                            <p className="mt-1 text-gray-700">{localizedIngredientList(selectedRecipe.ingredients_structured, translateIngredients(selectedRecipe.ingredients), isEnglish)}</p>
                         </div>
                         <div className="border-b border-gray-200 pb-4">
                             <h4 className="font-semibold text-red-600">{translatePageText("Nguyên liệu thay thế")}</h4>
                             <p className="mt-1 text-gray-700">
-                                {selectedRecipe.replacements?.length
-                                    ? selectedRecipe.replacements.map((item) => `${translateIngredients(item.from)} → ${translateIngredients(item.to)}`).join(', ')
+                                {selectedRecipe.replacements_structured?.length
+                                    ? selectedRecipe.replacements_structured.map((item) => `${localizedIngredientName(item.from, isEnglish)} → ${localizedIngredientName(item.to, isEnglish)}`).join(', ')
+                                    : selectedRecipe.replacements?.length
+                                        ? selectedRecipe.replacements.map((item) => `${translateIngredients(item.from)} → ${translateIngredients(item.to)}`).join(', ')
                                     : translatePageText("Không có")}
                             </p>
                         </div>
                         <div className="border-b border-gray-200 pb-4">
                             <h4 className="font-semibold text-red-600">{translatePageText("Nguyên liệu thêm")}</h4>
                             <p className="mt-1 text-gray-700">
-                                {selectedRecipe.add_on_ingredients?.length
-                                    ? translateIngredients(selectedRecipe.add_on_ingredients.join(', '))
+                                {selectedRecipe.add_ons_structured?.length
+                                    ? localizedIngredientList(selectedRecipe.add_ons_structured, '', isEnglish)
+                                    : selectedRecipe.add_on_ingredients?.length
+                                        ? translateIngredients(selectedRecipe.add_on_ingredients.join(', '))
                                     : translatePageText("Không có")}
                             </p>
                         </div>
@@ -1001,10 +1021,12 @@ const DishDetailPage = () => {
 
                 {recipeModalView === 'preview' && draftRecipe && (
                     <div>
-                        <p className="mb-2 font-semibold text-gray-800">{translatePageText("Nguyên liệu cuối cùng")}: {isEnglish ? draftRecipe.ingredients : translateIngredients(draftRecipe.ingredients)}</p>
-                        {!!draftRecipe.replacements?.length && (
+                        <p className="mb-2 font-semibold text-gray-800">{translatePageText("Nguyên liệu cuối cùng")}: {localizedIngredientList(draftRecipe.ingredients_structured, isEnglish ? draftRecipe.ingredients : translateIngredients(draftRecipe.ingredients), isEnglish)}</p>
+                        {!!(draftRecipe.replacements_structured?.length || draftRecipe.replacements?.length) && (
                             <p className="mb-3 text-sm text-gray-600">
-                                {translatePageText("Nguyên liệu thay thế")}: {draftRecipe.replacements.map((item) => `${translateIngredients(item.from)} → ${translateIngredients(item.to)}`).join(', ')}
+                                {translatePageText("Nguyên liệu thay thế")}: {draftRecipe.replacements_structured?.length
+                                    ? draftRecipe.replacements_structured.map((item) => `${localizedIngredientName(item.from, isEnglish)} → ${localizedIngredientName(item.to, isEnglish)}`).join(', ')
+                                    : draftRecipe.replacements.map((item) => `${translateIngredients(item.from)} → ${translateIngredients(item.to)}`).join(', ')}
                             </p>
                         )}
                         <p className="mb-3 text-gray-700">{translatePageText("Công thức đã được tạo theo nguyên liệu đã chọn:")}</p>
