@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-24T20:58:15.921Z",
+  "updatedAt": "2026-10-25T13:43:25.660Z",
   "findings": [
     {
       "id": "407e203b7b733b0bc34c15e122bf26a8c2c38b0f23f0281f53b3c02d928ab219",
@@ -97,12 +97,6 @@
       "group": "4. Hardcoded Vietnamese",
       "file": "src/pages/Admin/AdminDashboardPage.jsx",
       "message": "[vi] prop label: \"Doanh thu đặt ship\""
-    },
-    {
-      "id": "ca8dd6371ce21cd40ecc4bdd88bc518f204e44fb8e4f9ca5991e2ff0b13f658a",
-      "group": "3. translatePageText",
-      "file": "src/pages/Admin/AdminMenuManagement.jsx",
-      "message": "Missing translation entry for \"Vui lòng nhận và xác nhận lại nguyên liệu để tạo công thức trước khi lưu.\""
     },
     {
       "id": "9c6632bc8faeca1a409dea07d9fd787fbe88c04c9f52fef365ea8c19bf91ec59",
@@ -289,18 +283,6 @@
       "group": "4. Hardcoded Vietnamese",
       "file": "src/pages/Delivery/EditDeliveryModal.jsx",
       "message": "[vi] prop confirmText: \"Lưu thay đổi\""
-    },
-    {
-      "id": "63c4dcfeada018c9c4b5b18ddfc0992633947e7503ca2b7c5151ca794ae13ace",
-      "group": "3. translatePageText",
-      "file": "src/pages/Menu/MenuPage.jsx",
-      "message": "Missing translation entry for \"Vui lòng nhập tên món muốn gợi ý.\""
-    },
-    {
-      "id": "4e952560259f5ed673ecb41d46cf29f64c5dc33c7435dfbc18bc22b729329c00",
-      "group": "3. translatePageText",
-      "file": "src/pages/Menu/MenuPage.jsx",
-      "message": "Missing translation entry for \"Không thể gợi ý món lúc này. Vui lòng thử lại.\""
     },
     {
       "id": "24ed4aa016b13348ad09b1dbc9df5c80b95d75c883d8f1b059d660513b574ea6",
