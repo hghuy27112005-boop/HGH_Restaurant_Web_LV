@@ -151,6 +151,88 @@ class GeminiDishTranslationTest extends TestCase
         Http::assertSent(fn (Request $request) => str_contains($request->body(), 'into a meaningful, natural Vietnamese dish name'));
     }
 
+    public function test_it_falls_back_to_individual_ingredient_translation_when_combined_count_differs(): void
+    {
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            '*' => Http::sequence()
+                ->push([
+                    'candidates' => [[
+                        'content' => ['parts' => [[
+                            'text' => json_encode([
+                                'source_name_valid' => true,
+                                'dish_name' => 'Lemongrass Chicken',
+                                'ingredients' => 'chicken, lemongrass',
+                                'recipe_instructions' => 'Cook the chicken.',
+                            ]),
+                        ]]],
+                    ]],
+                ])
+                ->push([
+                    'candidates' => [[
+                        'content' => ['parts' => [[
+                            'text' => json_encode([
+                                'translated_names' => ['chicken', 'lemongrass', 'fish sauce'],
+                            ]),
+                        ]]],
+                    ]],
+                ]),
+        ]);
+
+        $translation = app(GeminiChatbotService::class)->translateDishContent(
+            'Gà sả',
+            'gà, sả, nước mắm',
+            'Nấu đến khi chín.',
+            'vi'
+        );
+
+        $this->assertSame('chicken, lemongrass, fish sauce', $translation['ingredients']);
+        Http::assertSentCount(2);
+    }
+
+    public function test_it_throws_when_individual_ingredient_translation_count_differs(): void
+    {
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            '*' => Http::sequence()
+                ->push([
+                    'candidates' => [[
+                        'content' => ['parts' => [[
+                            'text' => json_encode([
+                                'source_name_valid' => true,
+                                'dish_name' => 'Lemongrass Chicken',
+                                'ingredients' => 'chicken, lemongrass',
+                                'recipe_instructions' => 'Cook the chicken.',
+                            ]),
+                        ]]],
+                    ]],
+                ])
+                ->push([
+                    'candidates' => [[
+                        'content' => ['parts' => [[
+                            'text' => json_encode([
+                                'translated_names' => ['chicken', 'lemongrass'],
+                            ]),
+                        ]]],
+                    ]],
+                ]),
+        ]);
+
+        try {
+            app(GeminiChatbotService::class)->translateDishContent(
+                'Gà sả',
+                'gà, sả, nước mắm',
+                'Nấu đến khi chín.',
+                'vi'
+            );
+            $this->fail('Expected an incomplete ingredient translation to throw.');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('Gemini returned an incomplete ingredient-name translation.', $exception->getMessage());
+        }
+
+        Http::assertSentCount(2);
+    }
+
     public function test_it_generates_a_vietnamese_recipe_without_preparing_an_english_version(): void
     {
         config(['services.gemini.api_key' => 'test-key']);
@@ -323,33 +405,21 @@ class GeminiDishTranslationTest extends TestCase
         $this->assertSame(2, $attempts);
     }
 
-    public function test_it_translates_english_metadata_and_vietnamese_recipe_at_creation_time(): void
+    public function test_it_translates_vietnamese_recipe_instructions_at_creation_time(): void
     {
         config(['services.gemini.api_key' => 'test-key']);
-        Http::fakeSequence()
-            ->push([
-                'candidates' => [[
-                    'content' => ['parts' => [[
-                        'text' => json_encode([
-                            'dish_name' => 'Gà sả',
-                            'ingredients' => 'gà, sả',
-                        ]),
-                    ]]],
-                ]],
-            ])
-            ->push([
+        Http::fake([
+            '*' => Http::response([
                 'candidates' => [[
                     'content' => ['parts' => [['text' => 'Cook the chicken with lemongrass.']]],
                 ]],
-            ]);
+            ]),
+        ]);
 
-        $service = app(GeminiChatbotService::class);
-        $metadata = $service->translateDishMetadata('Lemongrass Chicken', 'chicken, lemongrass', 'en');
-        $recipe = $service->translateRecipeInstructions('Nấu gà với sả.', 'vi', 'en');
+        $recipe = app(GeminiChatbotService::class)->translateRecipeInstructions('Nấu gà với sả.', 'vi', 'en');
 
-        $this->assertSame(['dish_name' => 'Gà sả', 'ingredients' => 'gà, sả'], $metadata);
         $this->assertSame('Cook the chicken with lemongrass.', $recipe);
-        Http::assertSentCount(2);
+        Http::assertSentCount(1);
     }
 
     public function test_ingredient_analysis_returns_names_in_the_selected_language(): void

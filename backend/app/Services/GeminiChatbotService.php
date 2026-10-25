@@ -253,10 +253,23 @@ PROMPT;
             );
         }
 
+        $ingredientNames = array_values(array_filter(
+            array_map('trim', explode(',', $ingredients)),
+            static fn (string $name): bool => $name !== ''
+        ));
         $translatedIngredients = $translation['ingredients'] ?? null;
-        if (!is_string($translatedIngredients) || trim($translatedIngredients) === '') {
-            $ingredientNames = preg_split('/\s*,\s*/u', trim($ingredients), -1, PREG_SPLIT_NO_EMPTY);
-            if (!$ingredientNames) {
+        $translatedIngredientNames = is_string($translatedIngredients)
+            ? array_values(array_filter(
+                array_map('trim', explode(',', $translatedIngredients)),
+                static fn (string $name): bool => $name !== ''
+            ))
+            : [];
+        if (
+            !is_string($translatedIngredients)
+            || trim($translatedIngredients) === ''
+            || count($translatedIngredientNames) !== count($ingredientNames)
+        ) {
+            if ($ingredientNames === []) {
                 throw new RuntimeException('The dish has no ingredients to translate.');
             }
             $translatedIngredients = implode(', ', $this->translateIngredientNames($ingredientNames, $sourceLanguage));
@@ -300,39 +313,6 @@ PROMPT;
         }
 
         return array_map(static fn (string $name): string => trim($name), array_values($translatedNames));
-    }
-
-    public function translateDishMetadata(string $dishName, string $ingredients, string $sourceLanguage): array
-    {
-        if (trim($this->apiKey) === '') {
-            throw new RuntimeException('Gemini API key is not configured.');
-        }
-
-        $source = $sourceLanguage === 'en' ? 'English' : 'Vietnamese';
-        $target = $sourceLanguage === 'en' ? 'Vietnamese' : 'English';
-        $content = $this->jsonForPrompt([
-            'dish_name' => $dishName,
-            'ingredients' => $ingredients,
-        ]);
-        $prompt = <<<PROMPT
-Translate the following restaurant dish metadata from {$source} to {$target}.
-Preserve the dish name and ingredient meanings, order, and distinctions.
-Return JSON only with the exact keys dish_name and ingredients.
-
-{$content}
-PROMPT;
-
-        $translation = $this->requestRecipeJson($prompt);
-        foreach (['dish_name', 'ingredients'] as $field) {
-            if (!isset($translation[$field]) || !is_string($translation[$field]) || trim($translation[$field]) === '') {
-                throw new RuntimeException("Gemini returned an incomplete dish translation for {$field}.");
-            }
-        }
-
-        return [
-            'dish_name' => trim($translation['dish_name']),
-            'ingredients' => trim($translation['ingredients']),
-        ];
     }
 
     public function translateRecipeInstructions(string $instructions, string $sourceLanguage, string $targetLanguage): string

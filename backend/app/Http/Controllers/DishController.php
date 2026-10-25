@@ -395,6 +395,7 @@ class DishController extends Controller
             report($exception);
             return response()->json([
                 'success' => false,
+                'code' => 'TRANSLATION_UNAVAILABLE',
                 'message' => 'Không thể tạo bản dịch song ngữ. Món ăn chưa được tạo; vui lòng thử lại.',
             ], 503);
         }
@@ -627,6 +628,7 @@ class DishController extends Controller
             } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
                 report($exception);
                 return response()->json([
+                    'code' => 'TRANSLATION_UNAVAILABLE',
                     'message' => 'Không thể đồng bộ bản dịch song ngữ. Món ăn chưa được cập nhật; vui lòng thử lại.',
                 ], 503);
             }
@@ -792,6 +794,7 @@ class DishController extends Controller
         } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
             report($exception);
             return response()->json([
+                'code' => 'TRANSLATION_UNAVAILABLE',
                 'message' => 'Không thể tạo bản tiếng Anh mới. Món ăn chưa được cập nhật; vui lòng thử lại.',
             ], 503);
         }
