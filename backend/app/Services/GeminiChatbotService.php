@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\DishNameTranslationException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -18,7 +19,7 @@ class GeminiChatbotService
 
     public function __construct()
     {
-        $this->apiKey = config('services.gemini.api_key');
+        $this->apiKey = (string) config('services.gemini.api_key', '');
     }
 
     public function generateReply(string $targetIntentSummary): string
@@ -205,6 +206,212 @@ PROMPT;
         return $recipes[$language === 'en' ? 'en' : 'vi'];
     }
 
+    public function translateDishContent(string $dishName, string $ingredients, string $instructions, string $sourceLanguage): array
+    {
+        if (trim($this->apiKey) === '') {
+            throw new RuntimeException('Gemini API key is not configured.');
+        }
+
+        $source = $sourceLanguage === 'en' ? 'English' : 'Vietnamese';
+        $target = $sourceLanguage === 'en' ? 'Vietnamese' : 'English';
+        $content = $this->jsonForPrompt([
+            'dish_name' => $dishName,
+            'ingredients' => $ingredients,
+            'recipe_instructions' => $instructions,
+        ]);
+        $prompt = <<<PROMPT
+Validate that dish_name is a meaningful, recognizable food-dish name written in {$source}.
+If it is invalid or written in another language, return source_name_valid=false and an empty dish_name.
+If valid, translate the dish name into a meaningful, natural {$target} dish name. If no faithful translation is possible, return an empty dish_name.
+Translate ingredients and recipe instructions into {$target}, preserving their meaning, order, every recipe step, and ingredient distinctions.
+Do not add, remove, or reinterpret ingredients or cooking instructions.
+Return JSON only with the exact keys source_name_valid, dish_name, ingredients, recipe_instructions.
+
+{$content}
+PROMPT;
+
+        $translation = $this->requestRecipeJson($prompt);
+        if (!is_bool($translation['source_name_valid'] ?? null)) {
+            throw new RuntimeException('Gemini did not validate the source dish name.');
+        }
+        if (!$translation['source_name_valid']) {
+            throw new DishNameTranslationException('Gemini rejected the source dish name.');
+        }
+        if (!isset($translation['dish_name']) || !is_string($translation['dish_name']) || trim($translation['dish_name']) === '') {
+            throw new DishNameTranslationException('Gemini could not translate the dish name.');
+        }
+        $translatedInstructions = $translation['recipe_instructions'] ?? null;
+        if (!is_string($translatedInstructions) || trim($translatedInstructions) === '') {
+            $translatedInstructions = $this->translateRecipeInstructions(
+                $instructions,
+                $sourceLanguage,
+                $sourceLanguage === 'en' ? 'vi' : 'en'
+            );
+        }
+
+        $translatedIngredients = $translation['ingredients'] ?? null;
+        if (!is_string($translatedIngredients) || trim($translatedIngredients) === '') {
+            $ingredientNames = preg_split('/\s*,\s*/u', trim($ingredients), -1, PREG_SPLIT_NO_EMPTY);
+            if (!$ingredientNames) {
+                throw new RuntimeException('The dish has no ingredients to translate.');
+            }
+            $translatedIngredients = implode(', ', $this->translateIngredientNames($ingredientNames, $sourceLanguage));
+        }
+
+        return [
+            'dish_name' => trim($translation['dish_name']),
+            'ingredients' => trim($translatedIngredients),
+            'recipe_instructions' => trim($translatedInstructions),
+        ];
+    }
+
+    public function translateIngredientNames(array $ingredientNames, string $sourceLanguage): array
+    {
+        if (trim($this->apiKey) === '') {
+            throw new RuntimeException('Gemini API key is not configured.');
+        }
+        if ($ingredientNames === []) {
+            return [];
+        }
+
+        $source = $sourceLanguage === 'en' ? 'English' : 'Vietnamese';
+        $target = $sourceLanguage === 'en' ? 'Vietnamese' : 'English';
+        $content = $this->jsonForPrompt(array_values($ingredientNames));
+        $prompt = <<<PROMPT
+Translate each restaurant ingredient name from {$source} to {$target}.
+Keep the same number and order of entries. Return one concise name per input item.
+Return JSON only with the exact key translated_names, containing a string array.
+
+{$content}
+PROMPT;
+
+        $translation = $this->requestRecipeJson($prompt);
+        $translatedNames = $translation['translated_names'] ?? null;
+        if (
+            !is_array($translatedNames)
+            || count($translatedNames) !== count($ingredientNames)
+            || collect($translatedNames)->contains(fn ($name): bool => !is_string($name) || trim($name) === '')
+        ) {
+            throw new RuntimeException('Gemini returned an incomplete ingredient-name translation.');
+        }
+
+        return array_map(static fn (string $name): string => trim($name), array_values($translatedNames));
+    }
+
+    public function translateDishMetadata(string $dishName, string $ingredients, string $sourceLanguage): array
+    {
+        if (trim($this->apiKey) === '') {
+            throw new RuntimeException('Gemini API key is not configured.');
+        }
+
+        $source = $sourceLanguage === 'en' ? 'English' : 'Vietnamese';
+        $target = $sourceLanguage === 'en' ? 'Vietnamese' : 'English';
+        $content = $this->jsonForPrompt([
+            'dish_name' => $dishName,
+            'ingredients' => $ingredients,
+        ]);
+        $prompt = <<<PROMPT
+Translate the following restaurant dish metadata from {$source} to {$target}.
+Preserve the dish name and ingredient meanings, order, and distinctions.
+Return JSON only with the exact keys dish_name and ingredients.
+
+{$content}
+PROMPT;
+
+        $translation = $this->requestRecipeJson($prompt);
+        foreach (['dish_name', 'ingredients'] as $field) {
+            if (!isset($translation[$field]) || !is_string($translation[$field]) || trim($translation[$field]) === '') {
+                throw new RuntimeException("Gemini returned an incomplete dish translation for {$field}.");
+            }
+        }
+
+        return [
+            'dish_name' => trim($translation['dish_name']),
+            'ingredients' => trim($translation['ingredients']),
+        ];
+    }
+
+    public function translateRecipeInstructions(string $instructions, string $sourceLanguage, string $targetLanguage): string
+    {
+        if (trim($this->apiKey) === '') {
+            throw new RuntimeException('Gemini API key is not configured.');
+        }
+
+        $source = $sourceLanguage === 'en' ? 'English' : 'Vietnamese';
+        $target = $targetLanguage === 'en' ? 'English' : 'Vietnamese';
+        $prompt = <<<PROMPT
+Translate the following cooking instructions from {$source} to natural, clear {$target}.
+Preserve every instruction, ingredient meaning, and step order. Do not add or remove content.
+
+{$instructions}
+
+Return only the {$target} translation.
+PROMPT;
+
+        return $this->requestRecipeText($prompt);
+    }
+
+    public function generateVietnameseRecipe(string $dishName, array $ingredients): string
+    {
+        return $this->generateRecipe($dishName, $ingredients, 'vi');
+    }
+
+    public function generateRecipe(string $dishName, array $ingredients, string $language): string
+    {
+        if (trim($this->apiKey) === '') {
+            throw new RuntimeException('Gemini API key is not configured.');
+        }
+
+        $ingredientList = collect($ingredients)->map(fn ($ingredient) => trim((string) $ingredient))
+            ->filter()->unique()->implode(', ');
+        if ($ingredientList === '') {
+            throw new RuntimeException('A recipe cannot be generated without ingredients.');
+        }
+
+        $prompt = $language === 'en'
+            ? <<<PROMPT
+You are a professional restaurant chef. Create a recipe for "{$dishName}" in English.
+
+Use exactly these ingredients:
+{$ingredientList}
+
+Rules:
+- Write complete, practical instructions appropriate for the dish.
+- Do not use or mention ingredients outside the list; use every listed ingredient.
+- Do not invent quantities.
+- Put each step on a separate line, without numbering or bullets.
+- Return JSON with exactly this structure:
+{"recipe_instructions":"Cooking steps in English, one per line","used_ingredients":["ingredient names copied exactly from the list"]}
+PROMPT
+            : <<<PROMPT
+Bạn là đầu bếp nhà hàng. Hãy tạo công thức nấu món "{$dishName}" bằng tiếng Việt.
+
+Chỉ sử dụng chính xác các nguyên liệu sau:
+{$ingredientList}
+
+Quy tắc:
+- Viết hướng dẫn đầy đủ, thực tế và phù hợp với phong cách món ăn.
+- Không dùng hoặc nhắc đến nguyên liệu ngoài danh sách; phải sử dụng tất cả nguyên liệu đã liệt kê.
+- Không tự bịa định lượng.
+- Mỗi bước trên một dòng, không đánh số hoặc dùng dấu đầu dòng.
+- Trả về JSON đúng cấu trúc:
+{"recipe_instructions":"Các bước nấu bằng tiếng Việt, mỗi bước trên một dòng","used_ingredients":["tên nguyên liệu được sao chép chính xác từ danh sách"]}
+PROMPT;
+
+        $result = $this->requestRecipeJson($prompt);
+        $expectedIngredients = collect($ingredients)->map(fn ($ingredient) => Str::lower(trim((string) $ingredient)))
+            ->filter()->unique()->sort()->values()->all();
+        $usedIngredients = collect($result['used_ingredients'] ?? [])
+            ->map(fn ($ingredient) => Str::lower(trim((string) $ingredient)))
+            ->filter()->unique()->sort()->values()->all();
+        $recipe = trim((string) ($result['recipe_instructions'] ?? ''));
+        if ($recipe === '' || $usedIngredients !== $expectedIngredients) {
+            throw new RuntimeException('Gemini recipe output did not preserve the selected ingredient list.');
+        }
+
+        return $recipe;
+    }
+
     public function generateRecipeTranslations(string $originalInstructions, array $ingredients): array
     {
         if (trim($this->apiKey) === '') {
@@ -266,175 +473,280 @@ PROMPT;
         ];
     }
 
-    public function classifyIngredientCatalog(array $inventory): array
+    public function analyzeDishIngredients(
+        string $dishName,
+        \Illuminate\Http\UploadedFile $image,
+        string $language = 'vi',
+        array $pantryIngredients = []
+    ): array
     {
         if (trim($this->apiKey) === '') {
             throw new RuntimeException('Gemini API key is not configured.');
         }
 
-        $inventoryJson = json_encode($inventory, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $languageHint = $language === 'en' ? 'English' : 'Vietnamese';
+        $pantryById = [];
+        $pantryForPrompt = [];
+        foreach ($pantryIngredients as $pantryIngredient) {
+            if (!is_array($pantryIngredient) || !isset($pantryIngredient['ingredient_id'])) {
+                throw new RuntimeException('The pantry ingredient catalog contains an invalid entry.');
+            }
+            $ingredientId = (int) $pantryIngredient['ingredient_id'];
+            if ($ingredientId < 1) {
+                throw new RuntimeException('The pantry ingredient catalog contains an invalid entry.');
+            }
+            $pantryById[$ingredientId] = $pantryIngredient;
+            $pantryForPrompt[] = [
+                'ingredient_id' => $ingredientId,
+                'name_vi' => $pantryIngredient['name_vi'] ?? $pantryIngredient['name'] ?? null,
+                'name_en' => $pantryIngredient['name_en'] ?? $pantryIngredient['other_language_name'] ?? null,
+                'aliases' => array_values(array_filter(
+                    $pantryIngredient['aliases'] ?? [],
+                    fn ($alias): bool => is_string($alias) && trim($alias) !== ''
+                )),
+            ];
+        }
+        $pantryJson = $this->jsonForPrompt($pantryForPrompt);
         $prompt = <<<PROMPT
-You are classifying the restaurant's global ingredient catalog. Classify ingredients by their general culinary role, independently of any one dish.
-Every ingredient must receive exactly one mutually exclusive class: "core" or "flavor".
+You are a strict restaurant dish-input validator and ingredient recognizer.
+Validate BOTH the provided dish name and photo before identifying ingredients.
 
-Complete active ingredient catalog:
-{$inventoryJson}
+Dish name: {$dishName}
+Required input language: {$languageHint}. The dish name must be written in this language. Detect the actual language from the name itself and reject it if it does not match the required language.
 
-Rules:
-- Return every catalog ID exactly once. Do not omit, duplicate, or invent IDs.
-- "core" means an ingredient that structurally forms food: protein, noodles, starches, wrappers, coatings, broths, sauces, dairy, legumes, or substantial vegetables.
-- "flavor" means seasonings, herbs, garnishes, condiments, and small flavor-adjusting ingredients.
-- Use one stable class per ingredient across every dish. Never put an ingredient in both classes.
-- Assign a precise lowercase snake_case function_group based on culinary use, not broad name similarity. Examples: chicken breast is protein; shrimp paste is seasoning; spaghetti is pasta; spaghetti sauce is sauce; ordinary frying oil is frying_fat; sesame oil used for aroma is finishing_oil. Do not combine finishing oils with frying fats.
-- Return JSON only in this shape:
-{"classifications":[{"ingredient_id":1,"class":"core","function_group":"protein"}]}
+First decide whether the name is meaningful, written in the required language, and identifies a real, recognizable dish or edible food preparation. Reject empty/gibberish names, names in the other language, non-food objects, vague labels that do not identify food, and names whose intended meaning is not an edible dish.
+Then decide whether the photo actually depicts an edible prepared dish or clearly edible food suitable to be served/eaten. Reject non-food objects, people or live animals, living plants/flowers/trees, scenery/nature/air, and food that appears spoiled, rotten, contaminated, toxic or otherwise unsafe to eat. Do not treat a living organism or an ordinary plant as a dish just because some species or parts may be edible.
+Finally, compare the photo with the named dish. They must refer to nearly the same food. Allow normal visual variation and signature ingredients that are hidden or not visible (for example, crab in crab soup), but reject a materially different food or a photo that does not support the dish name.
+Be conservative: if the image or name is ambiguous, unsafe, not food, or the match is materially uncertain, reject the input.
+
+Return JSON only in this exact shape:
+{"source_language":"vi","name_valid":true,"is_valid":true,"ingredients":[{"name":"ingredient name in the required language","ingredient_id":1,"role":"required_replaceable"}]}
+For any rejected input return:
+{"source_language":"vi","name_valid":false,"is_valid":false,"ingredients":[]}
+The examples use "vi" only for illustration. Return the detected source_language, and set name_valid=false when the name is not a meaningful dish name in the required language. Only return is_valid=true when the name, photo, and their match all pass.
+
+Pantry catalog (complete current ingredient inventory; reuse it rather than inventing duplicate names):
+{$pantryJson}
+
+Only when BOTH the name and photo pass and match, identify ingredients using these rules:
+- Compare every needed ingredient against the supplied pantry catalog, including its canonical names, alternate-language names, and aliases. This catalog is the source of truth for ingredients already in stock.
+- When an existing pantry item is the same ingredient, select that entry, copy its exact ingredient_id and the corresponding canonical name ("name_vi" for Vietnamese or "name_en" for English) into "name", and preserve its existing identity. Do not create a new spelling, preparation-specific variation, translation, or near-duplicate for an ingredient already represented in the catalog.
+- Treat each pantry item as an existing usable ingredient or prepared component in its own right. If the dish uses an existing prepared item, select that catalog item as-is; do not add its raw constituents or sauces to recreate it. For example, if "Xá xíu" exists in the pantry and the dish uses xá xíu, return that existing item, not "thịt heo" plus "xốt xá xíu" as a duplicate reconstruction.
+- Only when no pantry entry is the same ingredient, return a new ingredient using "ingredient_id": null and a concise canonical name in {$languageHint}. Do not force a different ingredient to match just because its name looks similar.
+- Keep using the dish structure and component breakdown rules below even when matching pantry items. Reuse the closest correct existing ingredient for each distinct component; do not collapse multiple ingredients into an unsuitable catalog item.
+- Each ingredient must be one distinct pantry item, not a preparation description, portion, or quantity.
+- Think through how the dish is assembled before listing ingredients. Identify which components belong together and what each component is made from; do not treat the ingredient list as unrelated items.
+- Break down important components and sub-recipes into their practical constituent ingredients only when they are expected to be prepared from scratch as part of this dish and no appropriate ready-to-use pantry item exists. For example, when phở broth is made from scratch and the pantry has no suitable prepared broth item, identify its real constituents (such as bones, onion, ginger, and spices) rather than listing only generic "broth". If the pantry already contains the prepared component used by the dish, use that existing item instead of decomposing or recreating it.
+- Never list a finished composite food together with the ingredients that make up that same food. For dumplings such as wontons or sủi cảo, list the wrappers and filling ingredients (such as minced pork and shrimp), not "wonton/sủi cảo" plus pork and shrimp. The recipe must describe assembling the filling in the wrapper, not wrapping the filling in an already-finished dumpling.
+- Do not use the dish's name as a shortcut ingredient when the dish is made from the other listed components. Respect the pantry boundary: decompose a component only if it is actually prepared within this recipe; keep existing prepared pantry items as single ingredients when used as-is (for example, xá xíu, soy sauce, or store-bought dumpling wrappers). Never list both an existing prepared pantry item and raw ingredients intended to make that same item.
+- Include the ingredients needed for each important component, while keeping the list practical and within the 40-ingredient limit. Do not replace component relationships with cooking steps or quantities.
+- Use only the roles "required_replaceable", "required_fixed", and "optional".
+- "required_fixed" means the ingredient represents the essential identity or structure of the dish. It must be present and cannot be replaced without making it a different dish. For phở, the phở noodles and broth are defining components; broth may itself be prepared from several ingredients.
+- "required_replaceable" means the ingredient is needed for this version of the dish but does not define the dish's identity; another ingredient with the same culinary role can replace it. For example, a phở protein may be beef balls, brisket, tendon, or rare beef.
+- "optional" means the ingredient is not needed to cook the dish and can be omitted without changing its identity or basic preparation. Use this only for genuinely non-essential ingredients that happen to appear in the ingredient list, not merely because they are garnish, herbs, or seasoning.
+- Do not classify an ingredient as optional if it is required to make the dish recognizable or structurally complete. Do not mark every herb, spice, or topping optional by default.
+- For a named signature soup, include its signature protein even if it is not visible; include a defining thickener when needed for the pictured texture.
+- Return only canonical ingredient names in {$languageHint}. Do not translate ingredients into another language or include cooking steps.
+- Return between 1 and 40 ingredients.
+PROMPT;
+
+        $response = \Illuminate\Support\Facades\Http::timeout(60)->post(
+            "https://generativelanguage.googleapis.com/v1beta/models/{$this->model}:generateContent?key={$this->apiKey}",
+            [
+                'contents' => [[
+                    'parts' => [
+                        ['text' => $prompt],
+                        ['inlineData' => [
+                            'mimeType' => $image->getMimeType(),
+                            'data' => base64_encode($image->get()),
+                        ]],
+                    ],
+                ]],
+                'generationConfig' => ['responseMimeType' => 'application/json'],
+            ]
+        );
+
+        if (!$response->successful()) {
+            throw new RuntimeException('Gemini ingredient analysis failed with HTTP ' . $response->status() . '.');
+        }
+
+        $payload = json_decode((string) $response->json('candidates.0.content.parts.0.text', ''), true);
+        if (
+            !is_array($payload)
+            || !is_bool($payload['is_valid'] ?? null)
+            || !is_bool($payload['name_valid'] ?? null)
+        ) {
+            throw new RuntimeException('Gemini returned an invalid dish input validation result.');
+        }
+        $sourceLanguage = $payload['source_language'] ?? null;
+        if (!in_array($sourceLanguage, ['vi', 'en'], true)) {
+            throw new RuntimeException('Gemini returned an invalid dish-name language.');
+        }
+        if (!$payload['name_valid'] || $sourceLanguage !== $language) {
+            return ['valid' => false, 'reason' => 'dish_name_invalid', 'ingredients' => []];
+        }
+        if (!$payload['is_valid']) {
+            return ['valid' => false, 'reason' => 'dish_input_rejected', 'ingredients' => []];
+        }
+
+        $ingredients = $payload['ingredients'] ?? null;
+        if (!is_array($ingredients) || $ingredients === [] || count($ingredients) > 40) {
+            throw new RuntimeException('Gemini returned an invalid dish ingredient list.');
+        }
+
+        $ingredientNameField = $sourceLanguage === 'en' ? 'name_en' : 'name_vi';
+        foreach ($ingredients as &$ingredient) {
+            if (
+                !is_array($ingredient)
+                || !is_string($ingredient['name'] ?? $ingredient[$ingredientNameField] ?? null)
+                || trim((string) ($ingredient['name'] ?? $ingredient[$ingredientNameField] ?? '')) === ''
+                || !in_array($ingredient['role'] ?? null, ['required_replaceable', 'required_fixed', 'optional'], true)
+            ) {
+                throw new RuntimeException('Gemini returned an invalid ingredient name or role.');
+            }
+            if (isset($ingredient['ingredient_id'])) {
+                $ingredientId = filter_var($ingredient['ingredient_id'], FILTER_VALIDATE_INT);
+                if ($ingredientId === false || !isset($pantryById[$ingredientId])) {
+                    throw new RuntimeException('Gemini returned an unknown pantry ingredient ID.');
+                }
+                $canonicalName = $sourceLanguage === 'en'
+                    ? ($pantryById[$ingredientId]['name_en'] ?? $pantryById[$ingredientId]['other_language_name'] ?? null)
+                    : ($pantryById[$ingredientId]['name_vi'] ?? $pantryById[$ingredientId]['name'] ?? null);
+                $ingredient['name'] = trim((string) ($canonicalName ?: ($ingredient['name'] ?? $ingredient[$ingredientNameField])));
+                $ingredient['ingredient_id'] = $ingredientId;
+            } else {
+                $ingredient['name'] = trim((string) ($ingredient['name'] ?? $ingredient[$ingredientNameField]));
+                $ingredient['ingredient_id'] = null;
+            }
+        }
+        unset($ingredient);
+
+        return [
+            'valid' => true,
+            'language' => $sourceLanguage,
+            'ingredients' => array_values(array_map(function (array $ingredient) use ($ingredientNameField): array {
+                return [
+                    $ingredientNameField => trim($ingredient['name']),
+                    ...((array_key_exists('ingredient_id', $ingredient) && $ingredient['ingredient_id'] !== null)
+                        ? ['ingredient_id' => $ingredient['ingredient_id']]
+                        : []),
+                    'role' => $ingredient['role'],
+                ];
+            }, $ingredients)),
+        ];
+    }
+
+    public function recommendDishesByName(string $requestedName, array $dishes): array
+    {
+        if (trim($this->apiKey) === '') {
+            throw new RuntimeException('Gemini API key is not configured.');
+        }
+        if ($dishes === []) {
+            return [];
+        }
+
+        $menuJson = $this->jsonForPrompt($dishes);
+        $prompt = <<<PROMPT
+Recommend menu dishes based only on the customer's requested dish name or food description.
+Do not use ratings, popularity, sales, or personal preferences. Select only matching dishes from the available menu list.
+Customer request: {$requestedName}
+Available dishes:
+{$menuJson}
+
+Return JSON only in this shape, ranked from best match to next best:
+{"dish_ids":[1,2,3]}
+Return at most six distinct IDs. Return an empty array when no menu item is a meaningful match. Never invent IDs.
 PROMPT;
 
         $result = $this->requestRecipeJson($prompt);
-        if (!is_array($result['classifications'] ?? null)) {
-            throw new RuntimeException('Gemini returned an incomplete ingredient classification.');
+        if (!is_array($result['dish_ids'] ?? null)) {
+            throw new RuntimeException('Gemini returned an invalid dish recommendation list.');
         }
 
-        $catalogIds = collect($inventory)->pluck('ingredient_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
-        $classifications = collect($result['classifications']);
-        $classifiedIds = $classifications->pluck('ingredient_id')->map(fn ($id) => (int) $id);
-        if (
-            $classifiedIds->count() !== count($catalogIds)
-            || $classifiedIds->unique()->count() !== count($catalogIds)
-            || $classifiedIds->sort()->values()->all() !== $catalogIds
-        ) {
-            throw new RuntimeException('Gemini did not classify the complete ingredient catalog exactly once.');
-        }
-
-        $classificationById = [];
-        foreach ($classifications as $classification) {
-            if (!is_array($classification)) {
-                throw new RuntimeException('Gemini returned an invalid ingredient classification.');
-            }
-            $class = $classification['class'] ?? null;
-            $function = $classification['function_group'] ?? null;
-            if (!in_array($class, ['core', 'flavor'], true) || !is_string($function) || !preg_match('/^[a-z][a-z0-9_]{0,59}$/', $function)) {
-                throw new RuntimeException('Gemini returned an invalid ingredient classification.');
-            }
-            $classificationById[(int) $classification['ingredient_id']] = [
-                'class' => $class,
-                'function_group' => $function,
-            ];
-        }
-
-        return $classificationById;
+        $allowedIds = collect($dishes)->pluck('dish_id')->map(fn ($id) => (int) $id)->all();
+        return collect($result['dish_ids'])
+            ->filter(fn ($id) => is_int($id) || (is_string($id) && ctype_digit($id)))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => in_array($id, $allowedIds, true))
+            ->unique()
+            ->take(6)
+            ->values()
+            ->all();
     }
 
-    public function recommendRecipeIngredients(
+    public function recommendDishIngredientOptions(
+        string $dishName,
         array $inventory,
-        array $classifications,
-        array $requiredSlots,
+        array $replaceableSlots,
         array $optionalIngredientIds
     ): array {
         if (trim($this->apiKey) === '') {
             throw new RuntimeException('Gemini API key is not configured.');
         }
 
-        $catalogIds = collect($inventory)->pluck('ingredient_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
-        $classifiedIds = array_map('intval', array_keys($classifications));
-        sort($classifiedIds);
-        if ($classifiedIds !== $catalogIds) {
-            throw new RuntimeException('Ingredient classification does not match the active catalog.');
-        }
-
-        $requiredBySlot = collect($requiredSlots)->keyBy('slot_key');
-        foreach ($requiredBySlot as $slot) {
-            if (($classifications[(int) $slot['ingredient_id']]['class'] ?? null) !== 'core') {
-                throw new RuntimeException('Gemini classified a required ingredient as flavoring.');
-            }
-        }
-
-        $requiredJson = $this->jsonForPrompt($requiredSlots);
-        $optionalJson = $this->jsonForPrompt(array_values($optionalIngredientIds));
         $inventoryJson = $this->jsonForPrompt($inventory);
-        $classificationJson = $this->jsonForPrompt($classifications);
+        $slotsJson = $this->jsonForPrompt($replaceableSlots);
+        $optionalJson = $this->jsonForPrompt(array_values($optionalIngredientIds));
         $prompt = <<<PROMPT
-You are recommending safe customization options for one restaurant dish. The global class and function_group below are fixed and must not be changed.
+Suggest ingredient alternatives and suitable serving accompaniments for the customer's recipe.
+Dish name: {$dishName}
+The dish's ingredient roles were already decided and stored by the restaurant administrator. Do not reconsider or change those roles.
+Only suggest substitutions for the replaceable required slots below. Only suggest add-ons that already exist in the supplied pantry inventory.
 
-Dish required slots:
-{$requiredJson}
-Dish optional ingredient IDs:
+Replaceable required slots:
+{$slotsJson}
+Ingredients that the administrator marked optional (customers may remove these):
 {$optionalJson}
-Complete active ingredient catalog:
+Available pantry inventory:
 {$inventoryJson}
-Global classification and function for every catalog ID:
-{$classificationJson}
 
 Rules:
-- For each required slot, suggest only other catalog IDs classified "core" with exactly the same function_group as that slot's current ingredient. They must be practically interchangeable in this dish, not merely similar by name.
-- Do not suggest ingredients already filling another required slot.
-- Suggest an optional ingredient for removal only if it is classified "flavor" and is listed among this dish's optional IDs.
-- Suggest add-ons only from "flavor" ingredients not already in the dish's required or optional IDs. Choose seasonings, herbs, garnishes, and condiments that suit this dish.
-- Do not confuse structural ingredients with flavorings. For example, never suggest shrimp paste as a chicken replacement, noodles as a sauce replacement, or sesame/finishing oil as frying oil.
-- Return empty arrays when there are no safe suggestions. Never invent IDs.
-- Return JSON only in this shape:
-{"replacements":[{"slot_key":"protein","ingredient_ids":[2,3]}],"removable_optional_ids":[4],"add_on_ids":[5]}
+- Suggest alternatives with the same culinary function, not merely similar names.
+- Never suggest an ingredient already in the same slot or already required by this dish.
+- Add-ons are optional condiments, seasonings, sauces, fresh accompaniments, or side toppings that are commonly served with this kind of dish and can be taken from the pantry list.
+- Match the actual pantry product, not just a broad flavor category. For example, suggest "Ớt sa tế" only when that exact catalog item exists and is suitable; do not invent or infer variants such as "Sa tế ớt tắc" or "Sa tế tôm" from a generic request for satay.
+- Prefer familiar, dish-appropriate serving accompaniments over ingredients that would change the dish into a different recipe. Do not suggest arbitrary pantry ingredients just because they are available.
+- Add-ons are distinct from replacements: they supplement the prepared dish and never replace a required ingredient. Do not invent ingredients or IDs outside the supplied inventory.
+- Return only IDs and slot keys present in the input. Do not change required/fixed/optional roles.
+- Return JSON only:
+{"replacements":[{"slot_key":"slot","ingredient_ids":[1,2]}],"add_on_ids":[3,4]}
 PROMPT;
 
         $result = $this->requestRecipeJson($prompt);
-        if (
-            !is_array($result['replacements'] ?? null)
-            || !is_array($result['removable_optional_ids'] ?? null)
-            || !is_array($result['add_on_ids'] ?? null)
-        ) {
-            throw new RuntimeException('Gemini returned an incomplete recipe ingredient recommendation.');
+        if (!is_array($result['replacements'] ?? null) || !is_array($result['add_on_ids'] ?? null)) {
+            throw new RuntimeException('Gemini returned invalid ingredient customization suggestions.');
         }
 
+        $allowedIngredientIds = collect($inventory)->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all();
+        $allowedSlots = collect($replaceableSlots)->pluck('slot_key')->all();
         $replacements = [];
-        foreach ($result['replacements'] as $proposal) {
-            if (!is_array($proposal) || !is_string($proposal['slot_key'] ?? null)) {
-                throw new RuntimeException('Gemini returned an invalid replacement proposal.');
+        foreach ($result['replacements'] as $replacement) {
+            if (
+                !is_array($replacement)
+                || !in_array($replacement['slot_key'] ?? null, $allowedSlots, true)
+                || !is_array($replacement['ingredient_ids'] ?? null)
+            ) {
+                throw new RuntimeException('Gemini returned an invalid ingredient replacement slot.');
             }
-            $slotKey = $proposal['slot_key'];
-            $slot = $requiredBySlot->get($slotKey);
-            if (!$slot || !is_array($proposal['ingredient_ids'] ?? null) || array_key_exists($slotKey, $replacements)) {
-                throw new RuntimeException('Gemini returned an invalid replacement proposal.');
-            }
-
-            $sourceFunction = $classifications[(int) $slot['ingredient_id']]['function_group'];
-            $requiredIngredientIds = $requiredBySlot->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all();
-            foreach ($proposal['ingredient_ids'] as $candidateId) {
-                if (!in_array((int) $candidateId, $catalogIds, true)) {
-                    throw new RuntimeException('Gemini suggested an ingredient outside the active catalog.');
-                }
-            }
-            $replacements[$slotKey] = collect($proposal['ingredient_ids'])
-                ->map(fn ($id) => (int) $id)->unique()
-                ->filter(fn ($id) => $id !== (int) $slot['ingredient_id']
-                    && !in_array($id, $requiredIngredientIds, true)
-                    && ($classifications[$id]['class'] ?? null) === 'core'
-                    && ($classifications[$id]['function_group'] ?? null) === $sourceFunction)
-                ->values()->all();
+            $slotKey = $replacement['slot_key'];
+            $replacements[$slotKey] = collect($replacement['ingredient_ids'])
+                ->filter(fn ($id) => is_int($id) || (is_string($id) && ctype_digit($id)))
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn (int $id) => in_array($id, $allowedIngredientIds, true))
+                ->unique()
+                ->values()
+                ->all();
         }
 
-        $optionalIds = array_map('intval', $optionalIngredientIds);
-        $presentIds = collect($requiredSlots)->pluck('ingredient_id')->map(fn ($id) => (int) $id)
-            ->merge($optionalIds)->unique()->all();
-        foreach (array_merge($result['removable_optional_ids'], $result['add_on_ids']) as $suggestedId) {
-            if (!in_array((int) $suggestedId, $catalogIds, true)) {
-                throw new RuntimeException('Gemini suggested an ingredient outside the active catalog.');
-            }
-        }
+        $addOnIds = collect($result['add_on_ids'])
+            ->filter(fn ($id) => is_int($id) || (is_string($id) && ctype_digit($id)))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => in_array($id, $allowedIngredientIds, true))
+            ->unique()
+            ->values()
+            ->all();
 
-        return [
-            'removable_optional_ids' => collect($result['removable_optional_ids'])
-                ->map(fn ($id) => (int) $id)->unique()
-                ->filter(fn ($id) => in_array($id, $optionalIds, true)
-                    && ($classifications[$id]['class'] ?? null) === 'flavor')
-                ->values()->all(),
-            'add_on_ids' => collect($result['add_on_ids'])
-                ->map(fn ($id) => (int) $id)->unique()
-                ->filter(fn ($id) => isset($classifications[$id])
-                    && !in_array($id, $presentIds, true)
-                    && $classifications[$id]['class'] === 'flavor')
-                ->values()->all(),
-            'replacements' => $replacements,
-        ];
+        return ['replacements' => $replacements, 'add_on_ids' => $addOnIds];
     }
 
     private function jsonForPrompt(array $value): string
