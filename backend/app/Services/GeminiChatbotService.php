@@ -385,10 +385,11 @@ PROMPT;
         $result = $this->requestRecipeJson($prompt);
         $expectedIngredients = collect($ingredients)->map(fn ($ingredient) => Str::lower(trim((string) $ingredient)))
             ->filter()->unique()->sort()->values()->all();
-        $usedIngredients = collect($result['used_ingredients'] ?? [])
+        $usedIngredients = collect(is_array($result['used_ingredients'] ?? null) ? $result['used_ingredients'] : [])
+            ->filter(static fn ($ingredient): bool => is_string($ingredient))
             ->map(fn ($ingredient) => Str::lower(trim((string) $ingredient)))
             ->filter()->unique()->sort()->values()->all();
-        $recipe = trim((string) ($result['recipe_instructions'] ?? ''));
+        $recipe = $this->normalizeGeminiText($result['recipe_instructions'] ?? null);
         if ($recipe === '' || $usedIngredients !== $expectedIngredients) {
             throw new RuntimeException('Gemini recipe output did not preserve the selected ingredient list.');
         }
@@ -433,10 +434,11 @@ PROMPT;
         $result = $this->requestRecipeJson($prompt);
         $expectedIngredients = collect($ingredients)->map(fn ($ingredient) => Str::lower(trim((string) $ingredient)))
             ->filter()->unique()->sort()->values()->all();
-        $usedIngredients = collect($result['used_ingredients'] ?? [])
+        $usedIngredients = collect(is_array($result['used_ingredients'] ?? null) ? $result['used_ingredients'] : [])
+            ->filter(static fn ($ingredient): bool => is_string($ingredient))
             ->map(fn ($ingredient) => Str::lower(trim((string) $ingredient)))
             ->filter()->unique()->sort()->values()->all();
-        $englishRecipe = trim((string) ($result['recipe_instructions'] ?? ''));
+        $englishRecipe = $this->normalizeGeminiText($result['recipe_instructions'] ?? null);
         if ($englishRecipe === '' || $usedIngredients !== $expectedIngredients) {
             throw new RuntimeException('Gemini recipe output did not preserve the selected ingredient list.');
         }
@@ -455,6 +457,24 @@ PROMPT;
             'en' => $englishRecipe,
             'vi' => $vietnameseRecipe,
         ];
+    }
+
+    private function normalizeGeminiText(mixed $value): string
+    {
+        if (is_string($value)) {
+            return trim($value);
+        }
+
+        if (!is_array($value)) {
+            return '';
+        }
+
+        $steps = array_values(array_filter(
+            array_map(static fn ($step): string => is_string($step) ? trim($step) : '', $value),
+            static fn (string $step): bool => $step !== ''
+        ));
+
+        return implode("\n", $steps);
     }
 
     public function analyzeDishIngredients(

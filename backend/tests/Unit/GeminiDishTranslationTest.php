@@ -284,6 +284,113 @@ class GeminiDishTranslationTest extends TestCase
         );
     }
 
+    public function test_it_normalizes_recipe_instruction_arrays_into_newline_separated_steps(): void
+    {
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            '*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'recipe_instructions' => [
+                                'Season the chicken.',
+                                'Cook the chicken.',
+                                'Serve immediately.',
+                            ],
+                            'used_ingredients' => ['chicken'],
+                        ]),
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        $recipe = app(GeminiChatbotService::class)->generateRecipe('Chicken', ['chicken'], 'en');
+
+        $this->assertSame("Season the chicken.\nCook the chicken.\nServe immediately.", $recipe);
+    }
+
+    public function test_it_uses_normalized_english_recipe_when_generating_translations(): void
+    {
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fakeSequence()
+            ->push([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'recipe_instructions' => [
+                                'Season the chicken.',
+                                'Cook the chicken.',
+                                'Serve immediately.',
+                            ],
+                            'used_ingredients' => ['chicken'],
+                        ]),
+                    ]]],
+                ]],
+            ])
+            ->push([
+                'candidates' => [[
+                    'content' => ['parts' => [['text' => 'Nêm gà. Nấu gà. Dọn ra dùng ngay.']]],
+                ]],
+            ]);
+
+        $recipes = app(GeminiChatbotService::class)->generateRecipeTranslations(
+            'Original recipe.',
+            ['chicken']
+        );
+
+        $this->assertSame("Season the chicken.\nCook the chicken.\nServe immediately.", $recipes['en']);
+        $this->assertSame('Nêm gà. Nấu gà. Dọn ra dùng ngay.', $recipes['vi']);
+        Http::assertSent(function (Request $request): bool {
+            $payload = json_decode($request->body(), true);
+            $prompt = $payload['contents'][0]['parts'][0]['text'] ?? '';
+
+            return str_contains($prompt, "Season the chicken.\nCook the chicken.\nServe immediately.");
+        });
+    }
+
+    public function test_it_throws_when_recipe_instruction_array_is_empty(): void
+    {
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            '*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'recipe_instructions' => [],
+                            'used_ingredients' => ['chicken'],
+                        ]),
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Gemini recipe output did not preserve the selected ingredient list.');
+
+        app(GeminiChatbotService::class)->generateRecipe('Chicken', ['chicken'], 'en');
+    }
+
+    public function test_it_ignores_non_string_used_ingredient_values(): void
+    {
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            '*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'recipe_instructions' => 'Cook the chicken.',
+                            'used_ingredients' => ['chicken', ['unexpected']],
+                        ]),
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        $recipe = app(GeminiChatbotService::class)->generateRecipe('Chicken', ['chicken'], 'en');
+
+        $this->assertSame('Cook the chicken.', $recipe);
+    }
+
     public function test_recipe_request_retries_a_retryable_http_error_then_succeeds(): void
     {
         config([
