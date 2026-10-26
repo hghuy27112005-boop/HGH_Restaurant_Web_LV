@@ -27,10 +27,6 @@ return new class extends Migration {
             $table->timestamp('created_at')->useCurrent();
             $table->timestamp('updated_at')->useCurrent();
 
-            // --- Thêm cho tính năng AI gợi ý món ---
-            $table->timestamp('recommendation_reset_at')->nullable();
-            $table->boolean('skipped_recommendation_modal')->default(false);
-
             // --- Khóa tài khoản: null = không khóa; có giá trị = bị khóa tới thời điểm đó ---
             $table->timestamp('locked_until')->nullable();
 

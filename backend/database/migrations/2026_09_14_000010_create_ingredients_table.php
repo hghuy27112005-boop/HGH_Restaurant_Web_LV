@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('ingredients', function (Blueprint $table) {
             $table->id('ingredient_id');
             $table->string('ingredient_key', 255)->unique();
-            $table->string('ingredient_name', 255);
+            $table->string('ingredient_name', 255)->nullable();
             $table->string('ingredient_group', 80)->default('other')->index();
             $table->string('ingredient_name_vi', 255)->nullable();
             $table->json('aliases')->nullable();
