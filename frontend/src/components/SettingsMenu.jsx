@@ -31,6 +31,8 @@ const SettingsMenu = ({
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [languageChanging, setLanguageChanging] = useState(false);
+    const languageChangeInProgressRef = useRef(false);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -98,7 +100,13 @@ const SettingsMenu = ({
     };
 
     const toggleLanguage = async () => {
+        if (languageChangeInProgressRef.current) return;
+
         const nextLanguage = i18n.language === 'en' ? 'vi' : 'en';
+        if (nextLanguage === i18n.language) return;
+
+        languageChangeInProgressRef.current = true;
+        setLanguageChanging(true);
         setError('');
         try {
             await i18n.changeLanguage(nextLanguage);
@@ -115,6 +123,11 @@ const SettingsMenu = ({
         } catch (changeError) {
             console.error('Không thể cập nhật ngôn ngữ:', changeError);
             setError(t('settings.languageSaveError'));
+        } finally {
+            // The cooldown reduces burst load; it does not fix the underlying cause.
+            await new Promise((resolve) => window.setTimeout(resolve, 600));
+            languageChangeInProgressRef.current = false;
+            setLanguageChanging(false);
         }
     };
 
@@ -178,8 +191,9 @@ const SettingsMenu = ({
                             role="switch"
                             aria-checked={i18n.language === 'en'}
                             aria-label={`${t('settings.vietnamese')} / ${t('settings.english')}`}
+                            disabled={languageChanging}
                             onClick={toggleLanguage}
-                            className={`relative mx-auto inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 ${i18n.language === 'en' ? 'bg-red-600' : 'bg-gray-300'}`}
+                            className={`relative mx-auto inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${i18n.language === 'en' ? 'bg-red-600' : 'bg-gray-300'}`}
                         >
                             <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${i18n.language === 'en' ? 'translate-x-5' : 'translate-x-0.5'}`} />
                         </button>
