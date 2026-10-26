@@ -67,9 +67,13 @@ class BookingTable extends Model
     /** preparing -> completed khi tới giờ đến (đổi start_time thành end_time nếu muốn tới giờ về). Gọi nhiều lần vẫn an toàn. */
     public static function autoCompleteStarted(): void
     {
-        static::where('booking_status', 'preparing')
+        $completed = static::where('booking_status', 'preparing')
             ->where('B_payment_status', 'paid')
             ->whereRaw('(booking_date + start_time) <= ?', [now()->format('Y-m-d H:i:s')])
             ->update(['booking_status' => 'completed']);
+
+        if ($completed > 0) {
+            app(\App\Services\DishRankingService::class)->recompute();
+        }
     }
 }

@@ -309,13 +309,17 @@ class Delivery extends Model
      */
     public static function autoCompleteExpired(): void
     {
-        static::where('delivery_status', 'shipping')
+        $completed = static::where('delivery_status', 'shipping')
             ->whereNotNull('estimated_completion_at')
             ->where('estimated_completion_at', '<=', now())
             ->update([
                 'delivery_status' => 'completed',
                 'delivered_at' => now(),
             ]);
+
+        if ($completed > 0) {
+            app(\App\Services\DishRankingService::class)->recompute();
+        }
     }
 
     /**
