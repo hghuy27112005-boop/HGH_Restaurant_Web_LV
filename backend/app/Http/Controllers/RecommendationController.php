@@ -49,6 +49,7 @@ class RecommendationController extends Controller
             report($exception);
             return response()->json([
                 'message' => 'Chưa thể gợi ý món ăn lúc này. Vui lòng thử lại.',
+                'code' => 'RECOMMENDATION_UNAVAILABLE',
             ], 503);
         }
 

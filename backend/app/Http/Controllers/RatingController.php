@@ -6,7 +6,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Rating;
 use App\Models\OrderItem;
-use App\Models\FavoriteDish;
 use App\Models\Order;
 use App\Models\RecommendationExclusion;
 use App\Services\GeminiChatbotService;
@@ -47,6 +46,7 @@ class RatingController extends Controller
                     'order_item_id' => $item->order_item_id,
                     'dish_id' => $item->dish_id,
                     'dish_name' => $item->dish?->dish_name,
+                    'dish_name_en' => $item->dish?->dish_name_en,
                     'dish_image' => $item->dish?->image_url,
                     'quantity' => $item->quantity,
                     'existing_rating' => $item->review ? [
@@ -126,26 +126,20 @@ class RatingController extends Controller
                 'user_id' => Auth::id(),
                 'dish_id' => $orderItem->dish_id,
             ]);
-            // Lần chấm gần nhất thắng: món vừa bị chê thì không còn là món yêu thích.
-            FavoriteDish::where('user_id', Auth::id())
-                ->where('dish_id', $orderItem->dish_id)
-                ->delete();
         } else {
-            // Lần chấm gần nhất thắng: món vừa được khen thì gỡ khỏi danh sách loại trừ.
             RecommendationExclusion::where('user_id', Auth::id())
                 ->where('dish_id', $orderItem->dish_id)
                 ->delete();
-            // "Khen" (>=4 sao) -> tự động đẩy món lên đầu danh sách đề xuất.
-            $this->promoteToFavorite(Auth::id(), $orderItem->dish_id, $rating);
         }
 
-        // Tính lại độ tương đồng ngầm SAU khi đã trả kết quả cho khách, để nút "Gửi đánh giá" không bị chậm.
+        // Recompute the bestseller ranking after the rating response is sent.
         dispatch(function () {
             try {
-                \Illuminate\Support\Facades\Cache::lock('dish-similarity-recompute', 60)
-                    ->block(20, fn () => app(\App\Services\DishSimilarityService::class)->recompute());
+                app(\App\Services\DishRankingService::class)->recompute();
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Không tính lại được dish_similarities: ' . $e->getMessage());
+                \Illuminate\Support\Facades\Log::error('Could not recompute dish bestseller ranking.', [
+                    'exception' => $e,
+                ]);
             }
         })->afterResponse();
 
@@ -170,40 +164,4 @@ class RatingController extends Controller
             : 'Cảm ơn quý khách đã góp ý. Nhà hàng sẽ tiếp thu để cải thiện món ăn tốt hơn.';
     }
 
-    /**
-     * Upsert 1 món vào favorite_dishes của user với rating_snapshot mới nhất,
-     * rồi cắt bớt nếu vượt quá 8 món (giữ lại 8 món "mạnh nhất" theo đúng quy
-     * tắc sắp xếp: điểm sao cao hơn luôn thắng, chỉ khi bằng sao mới xét thời
-     * gian cập nhật gần đây hơn).
-     *
-     * Có kiểm tra "mốc đặt lại" (recommendation_reset_at): nếu đánh giá này
-     * xảy ra TRƯỚC lần "chọn lại món đề xuất" gần nhất của user thì bỏ qua,
-     * không cho đánh giá cũ "sống lại" đè lên danh sách vừa chọn lại.
-     */
-    private function promoteToFavorite(int $userId, int $dishId, int $rating): void
-    {
-        $user = \App\Models\User::find($userId);
-        $now = now();
-
-        if ($user->recommendation_reset_at && $now->lt($user->recommendation_reset_at)) {
-            return;
-        }
-
-        FavoriteDish::updateOrCreate(
-            ['user_id' => $userId, 'dish_id' => $dishId],
-            ['rating_snapshot' => $rating, 'updated_at' => $now]
-        );
-
-        // Cắt bớt nếu vượt quá 8, xóa (các) dòng yếu nhất theo đúng thứ hạng
-        $all = FavoriteDish::where('user_id', $userId)
-            ->orderByRaw('rating_snapshot IS NULL, rating_snapshot DESC')
-            ->orderBy('updated_at', 'desc')
-            ->orderByRaw('pick_order IS NULL, pick_order ASC')
-            ->get();
-
-        if ($all->count() > 8) {
-            $idsToRemove = $all->slice(8)->pluck('favorite_id');
-            FavoriteDish::whereIn('favorite_id', $idsToRemove)->delete();
-        }
-    }
 }
