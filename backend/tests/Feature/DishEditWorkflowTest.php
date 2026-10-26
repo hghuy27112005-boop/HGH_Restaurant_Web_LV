@@ -530,7 +530,7 @@ class DishEditWorkflowTest extends TestCase
         ]);
     }
 
-    public function test_creating_from_english_locale_translates_only_after_save(): void
+    public function test_creating_from_english_locale_succeeds_when_translated_vietnamese_name_is_unique(): void
     {
         [, , $type] = $this->createDishes();
         $ingredient = $this->createIngredient('Beef', 'Thịt bò');
@@ -612,6 +612,58 @@ class DishEditWorkflowTest extends TestCase
                 rmdir(dirname($imagePath));
             }
         }
+    }
+
+    public function test_add_dish_rejects_duplicate_translated_vietnamese_name_before_saving_image(): void
+    {
+        [$existingDish, , $type] = $this->createDishes();
+        $existingDish->dish_name = 'Phở bò';
+        $existingDish->save();
+        $ingredient = $this->createIngredient('Beef', 'Thịt bò');
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'source_name_valid' => true,
+                            'dish_name' => ' phở   BÒ ',
+                            'ingredients' => 'Beef',
+                            'recipe_instructions' => 'Simmer the beef.',
+                        ]),
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        $candidateDishId = 1;
+        while (
+            Dish::query()->where('dish_id', $candidateDishId)->exists()
+            || is_file(public_path('dishes/' . $candidateDishId . '.jpg'))
+        ) {
+            $candidateDishId++;
+        }
+        $imagePath = public_path('dishes/' . $candidateDishId . '.jpg');
+
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->post('/api/admin/dishes', [
+                'dish_name' => 'Beef Pho',
+                'type_id' => $type->type_id,
+                'price' => 45000,
+                'language' => 'en',
+                'ingredients' => [[
+                    'ingredient_id' => $ingredient->ingredient_id,
+                    'role' => 'required_replaceable',
+                ]],
+                'recipe_instructions' => 'Simmer the beef.',
+                'image' => UploadedFile::fake()->create('beef-pho.jpg', 20, 'image/jpeg'),
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('code', 'DISH_NAME_DUPLICATE');
+
+        $this->assertDatabaseCount('dishes', 2);
+        $this->assertFileDoesNotExist($imagePath);
+        Http::assertSentCount(1);
     }
 
     public function test_an_untranslatable_dish_name_is_rejected_without_creating_the_dish(): void

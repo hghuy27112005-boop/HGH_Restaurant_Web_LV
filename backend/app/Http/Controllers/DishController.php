@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\DishNameTranslationException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use App\Models\Dish;
 use App\Models\DishIngredientRule;
@@ -400,6 +401,21 @@ class DishController extends Controller
             ], 503);
         }
 
+        $normalizedVietnameseDishName = Str::lower(Str::squish($vietnamese['dish_name']));
+        $hasDuplicateDishName = Dish::query()
+            ->whereNotNull('dish_name')
+            ->pluck('dish_name')
+            ->contains(fn ($dishName): bool =>
+                Str::lower(Str::squish((string) $dishName)) === $normalizedVietnameseDishName
+            );
+        if ($hasDuplicateDishName) {
+            return response()->json([
+                'success' => false,
+                'code' => 'DISH_NAME_DUPLICATE',
+                'message' => 'Tên món tiếng Việt đã tồn tại. Vui lòng chọn tên khác.',
+            ], 422);
+        }
+
         $directory = public_path('dishes');
         if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
             return response()->json(['message' => 'Không thể tạo thư mục lưu hình món ăn.'], 500);
@@ -463,6 +479,19 @@ class DishController extends Controller
                 'message' => 'Thêm món ăn thành công!',
                 'data' => $dish,
             ]);
+        } catch (UniqueConstraintViolationException $exception) {
+            if ($imageWasMoved && $imageName) {
+                $uploadedPath = $directory . DIRECTORY_SEPARATOR . $imageName;
+                if (is_file($uploadedPath)) {
+                    unlink($uploadedPath);
+                }
+            }
+            Log::warning('Dish creation rejected due to a unique constraint.', ['exception' => $exception]);
+            return response()->json([
+                'success' => false,
+                'code' => 'DISH_NAME_DUPLICATE',
+                'message' => 'Tên món tiếng Việt đã tồn tại. Vui lòng chọn tên khác.',
+            ], 422);
         } catch (\Throwable $exception) {
             $uploadedPath = $imageName ? $directory . DIRECTORY_SEPARATOR . $imageName : null;
             if ($imageWasMoved && $uploadedPath && is_file($uploadedPath)) {
