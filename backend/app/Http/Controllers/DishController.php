@@ -401,19 +401,8 @@ class DishController extends Controller
             ], 503);
         }
 
-        $normalizedVietnameseDishName = Str::lower(Str::squish($vietnamese['dish_name']));
-        $hasDuplicateDishName = Dish::query()
-            ->whereNotNull('dish_name')
-            ->pluck('dish_name')
-            ->contains(fn ($dishName): bool =>
-                Str::lower(Str::squish((string) $dishName)) === $normalizedVietnameseDishName
-            );
-        if ($hasDuplicateDishName) {
-            return response()->json([
-                'success' => false,
-                'code' => 'DISH_NAME_DUPLICATE',
-                'message' => 'Tên món tiếng Việt đã tồn tại. Vui lòng chọn tên khác.',
-            ], 422);
+        if ($this->hasDuplicateDishName($vietnamese['dish_name'])) {
+            return $this->dishNameDuplicateResponse();
         }
 
         $directory = public_path('dishes');
@@ -487,11 +476,7 @@ class DishController extends Controller
                 }
             }
             Log::warning('Dish creation rejected due to a unique constraint.', ['exception' => $exception]);
-            return response()->json([
-                'success' => false,
-                'code' => 'DISH_NAME_DUPLICATE',
-                'message' => 'Tên món tiếng Việt đã tồn tại. Vui lòng chọn tên khác.',
-            ], 422);
+            return $this->dishNameDuplicateResponse();
         } catch (\Throwable $exception) {
             $uploadedPath = $imageName ? $directory . DIRECTORY_SEPARATOR . $imageName : null;
             if ($imageWasMoved && $uploadedPath && is_file($uploadedPath)) {
@@ -520,6 +505,29 @@ class DishController extends Controller
         }
 
         return $nextId;
+    }
+
+    private function hasDuplicateDishName(string $name, ?int $exceptDishId = null): bool
+    {
+        $normalizedName = Str::lower(Str::squish($name));
+        $query = Dish::query()->whereNotNull('dish_name');
+
+        if ($exceptDishId !== null) {
+            $query->where('dish_id', '<>', $exceptDishId);
+        }
+
+        return $query->pluck('dish_name')->contains(fn ($dishName): bool =>
+            Str::lower(Str::squish((string) $dishName)) === $normalizedName
+        );
+    }
+
+    private function dishNameDuplicateResponse()
+    {
+        return response()->json([
+            'success' => false,
+            'code' => 'DISH_NAME_DUPLICATE',
+            'message' => 'Tên món tiếng Việt đã tồn tại. Vui lòng chọn tên khác.',
+        ], 422);
     }
 
     private function synchronizeDishIdSequence(): void
@@ -674,6 +682,9 @@ class DishController extends Controller
                 'recipe_instructions' => $language === 'vi' ? $instructions : ($translated['recipe_instructions'] ?? $dish->recipe_instructions),
                 'recipe_instructions_en' => $language === 'en' ? $instructions : ($translated['recipe_instructions'] ?? $dish->recipe_instructions_en),
             ];
+            if ($this->hasDuplicateDishName((string) $data['dish_name'], (int) $dish->dish_id)) {
+                return $this->dishNameDuplicateResponse();
+            }
 
             $stagedImage = $this->stageDishImage($request, (int) $dish->dish_id);
             $oldImageName = basename((string) $dish->getRawOriginal('image_url'));
@@ -712,6 +723,18 @@ class DishController extends Controller
                 'success' => true,
                 'message' => 'Cập nhật món ăn thành công!'
             ]);
+        } catch (UniqueConstraintViolationException $exception) {
+            if (isset($stagedImage) && $stagedImage && is_file($stagedImage)) {
+                unlink($stagedImage);
+            }
+            if (!empty($imageWasReplaced) && is_file($imagePath)) {
+                unlink($imagePath);
+                if ($imageBackup && is_file($imageBackup)) {
+                    rename($imageBackup, $imagePath);
+                }
+            }
+            Log::warning('Dish update rejected due to a unique constraint.', ['exception' => $exception]);
+            return $this->dishNameDuplicateResponse();
         } catch (\Exception $e) {
             if (isset($stagedImage) && $stagedImage && is_file($stagedImage)) {
                 unlink($stagedImage);
@@ -828,6 +851,10 @@ class DishController extends Controller
             ], 503);
         }
 
+        if ($this->hasDuplicateDishName($dishNameVi, (int) $dish->dish_id)) {
+            return $this->dishNameDuplicateResponse();
+        }
+
         $stagedImage = null;
         $imageBackup = null;
         $imageWasReplaced = false;
@@ -903,6 +930,18 @@ class DishController extends Controller
                 'message' => 'Cập nhật món ăn thành công!',
                 'data' => $dish->fresh(),
             ]);
+        } catch (UniqueConstraintViolationException $exception) {
+            if ($stagedImage && is_file($stagedImage)) {
+                unlink($stagedImage);
+            }
+            if ($imageWasReplaced && is_file($imagePath)) {
+                unlink($imagePath);
+            }
+            if ($imageBackup && is_file($imageBackup)) {
+                rename($imageBackup, $imagePath);
+            }
+            Log::warning('Dish update rejected due to a unique constraint.', ['exception' => $exception]);
+            return $this->dishNameDuplicateResponse();
         } catch (\Throwable $exception) {
             if ($stagedImage && is_file($stagedImage)) {
                 unlink($stagedImage);

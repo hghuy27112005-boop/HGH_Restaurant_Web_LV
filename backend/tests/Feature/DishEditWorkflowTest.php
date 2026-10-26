@@ -345,6 +345,134 @@ class DishEditWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_update_rejects_translated_vietnamese_name_used_by_another_dish_without_changing_image(): void
+    {
+        [$duplicateDish, , $type] = $this->createDishes();
+        $duplicateDish->dish_name = 'Phở bò';
+        $duplicateDish->save();
+        $dish = $this->createDishWithMissingVietnameseName($type);
+        $imagePath = public_path('dishes/' . $dish->dish_id . '.jpg');
+        $directoryExisted = is_dir(dirname($imagePath));
+        if (!$directoryExisted) {
+            mkdir(dirname($imagePath), 0755, true);
+        }
+        file_put_contents($imagePath, 'original dish image');
+
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'source_name_valid' => true,
+                            'dish_name' => ' phở   BÒ ',
+                            'ingredients' => 'Beef',
+                            'recipe_instructions' => 'Cook the beef.',
+                        ]),
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        try {
+            $this->actingAs(User::factory()->create(['role' => 'admin']))
+                ->post('/api/admin/dishes/' . $dish->dish_id, [
+                    'dish_name' => $dish->dish_name_en,
+                    'type_id' => $type->type_id,
+                    'price' => 40000,
+                    'language' => 'en',
+                    'ingredients' => 'Beef',
+                    'recipe_instructions' => 'Cook the beef.',
+                    'image' => UploadedFile::fake()->create('replacement.jpg', 20, 'image/jpeg'),
+                ])
+                ->assertUnprocessable()
+                ->assertJsonPath('code', 'DISH_NAME_DUPLICATE');
+
+            $this->assertDatabaseHas('dishes', [
+                'dish_id' => $dish->dish_id,
+                'dish_name' => null,
+                'image_url' => $dish->getRawOriginal('image_url'),
+            ]);
+            $this->assertSame('original dish image', file_get_contents($imagePath));
+        } finally {
+            if (is_file($imagePath)) {
+                unlink($imagePath);
+            }
+            if (!$directoryExisted && is_dir(dirname($imagePath))) {
+                rmdir(dirname($imagePath));
+            }
+        }
+    }
+
+    public function test_confirmed_ingredient_update_rejects_translated_vietnamese_name_used_by_another_dish(): void
+    {
+        [$duplicateDish, , $type] = $this->createDishes();
+        $duplicateDish->dish_name = 'Phở bò';
+        $duplicateDish->save();
+        $dish = $this->createDishWithMissingVietnameseName($type);
+        $ingredient = $this->createIngredient('Beef', 'Thịt bò');
+        DishIngredientRule::create([
+            'dish_id' => $dish->dish_id,
+            'ingredient_id' => $ingredient->ingredient_id,
+            'role' => 'required_fixed',
+            'slot_key' => 'protein',
+        ]);
+        $imagePath = public_path('dishes/' . $dish->dish_id . '.jpg');
+        $directoryExisted = is_dir(dirname($imagePath));
+        if (!$directoryExisted) {
+            mkdir(dirname($imagePath), 0755, true);
+        }
+        file_put_contents($imagePath, 'original dish image');
+
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'source_name_valid' => true,
+                            'dish_name' => 'Phở bò',
+                            'ingredients' => 'Beef',
+                            'recipe_instructions' => 'Cook the beef.',
+                        ]),
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        try {
+            $this->actingAs(User::factory()->create(['role' => 'admin']))
+                ->post('/api/admin/dishes/' . $dish->dish_id, [
+                    'dish_name' => $dish->dish_name_en,
+                    'type_id' => $type->type_id,
+                    'price' => 40000,
+                    'language' => 'en',
+                    'ingredients' => [[
+                        'ingredient_id' => $ingredient->ingredient_id,
+                        'role' => 'required_fixed',
+                    ]],
+                    'recipe_instructions' => 'Cook the beef.',
+                    'image' => UploadedFile::fake()->create('replacement.jpg', 20, 'image/jpeg'),
+                ])
+                ->assertUnprocessable()
+                ->assertJsonPath('code', 'DISH_NAME_DUPLICATE');
+
+            $this->assertDatabaseHas('dishes', [
+                'dish_id' => $dish->dish_id,
+                'dish_name' => null,
+                'image_url' => $dish->getRawOriginal('image_url'),
+            ]);
+            $this->assertSame('original dish image', file_get_contents($imagePath));
+        } finally {
+            if (is_file($imagePath)) {
+                unlink($imagePath);
+            }
+            if (!$directoryExisted && is_dir(dirname($imagePath))) {
+                rmdir(dirname($imagePath));
+            }
+        }
+    }
+
     public function test_edit_analysis_uses_the_original_dish_name_and_saved_image(): void
     {
         [$dish] = $this->createDishes();
@@ -738,6 +866,31 @@ class DishEditWorkflowTest extends TestCase
         ]);
 
         return [$dish, $otherDish, $type];
+    }
+
+    private function createDishWithMissingVietnameseName(DishType $type): Dish
+    {
+        do {
+            $dishId = random_int(1_000_000, 2_000_000);
+        } while (
+            Dish::query()->where('dish_id', $dishId)->exists()
+            || is_file(public_path('dishes/' . $dishId . '.jpg'))
+        );
+
+        return Dish::create([
+            'dish_id' => $dishId,
+            'dish_name' => null,
+            'dish_name_en' => 'Update target ' . $dishId,
+            'type_id' => $type->type_id,
+            'price' => 30000,
+            'image_url' => $dishId . '.jpg',
+            'is_bestseller' => false,
+            'is_active' => true,
+            'ingredients' => 'Thịt bò',
+            'ingredients_en' => 'Beef',
+            'recipe_instructions' => 'Nấu thịt bò.',
+            'recipe_instructions_en' => 'Cook the beef.',
+        ]);
     }
 
     private function createIngredient(string $name, string $nameVi, bool $active = true): Ingredient
