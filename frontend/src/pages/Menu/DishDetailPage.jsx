@@ -316,7 +316,7 @@ const splitInstructions = (instructions) => {
 const DishDetailPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { i18n: languageI18n } = useTranslation();
+    const { t, i18n: languageI18n } = useTranslation();
     const { isAuthenticated } = useAuthContext();
     const [dishes, setDishes] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -756,7 +756,11 @@ const DishDetailPage = () => {
                     </section>
                     <section className="mt-8 border-t pt-6">
                         <h3 className="text-xl font-bold text-red-600 mb-3">{translatePageText("Đánh giá")}</h3>
-                        <p className="text-gray-700">{selectedDish.original_rating ?? 0}{translatePageText("/5 sao từ") + " "}{Number(selectedDish.original_review_count ?? 0).toLocaleString('vi-VN')}{" " + translatePageText("lượt đánh giá")}</p>
+                        {selectedDish.review_count > 0 ? (
+                            <p className="text-gray-700">{Number(selectedDish.review_average).toFixed(1)}{translatePageText("/5 sao từ") + " "}{Number(selectedDish.review_count).toLocaleString('vi-VN')}{" " + translatePageText("lượt đánh giá")}</p>
+                        ) : (
+                            <p className="text-gray-500">{t('dishDetail.noReviews')}</p>
+                        )}
                     </section>
                     <div className="mt-8 border-t pt-6">
                         <h3 className="text-xl font-bold text-red-600 mb-4">{translatePageText("Chọn món khác")}</h3>

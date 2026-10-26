@@ -59,6 +59,9 @@ const vi = {
         markReadError: 'Không thể cập nhật trạng thái thông báo.',
         markAllReadError: 'Không thể đánh dấu đã đọc.',
     },
+    dishDetail: {
+        noReviews: 'Chưa có đánh giá',
+    },
 };
 
 export default vi;

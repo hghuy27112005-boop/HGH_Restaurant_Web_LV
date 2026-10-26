@@ -59,6 +59,9 @@ const en = {
         markReadError: 'Could not update notification status.',
         markAllReadError: 'Could not mark notifications as read.',
     },
+    dishDetail: {
+        noReviews: 'No reviews yet',
+    },
 };
 
 export default en;

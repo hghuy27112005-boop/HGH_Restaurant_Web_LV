@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Collection;
 
 class DishController extends Controller
 {
@@ -27,6 +28,9 @@ class DishController extends Controller
         $result = $dishes;
 
         if ($request->expectsJson()) {
+            $reviewStats = $this->reviewStatsForDishIds($dishes->pluck('dish_id')->all());
+            $dishes->each(fn (Dish $dish) => $this->applyReviewStats($dish, $reviewStats));
+
             return response()->json($result->values());
         }
 
@@ -53,6 +57,8 @@ class DishController extends Controller
         }
 
         if ($request->expectsJson()) {
+            $reviewStats = $this->reviewStatsForDishIds([(int) $dish->dish_id]);
+            $this->applyReviewStats($dish, $reviewStats);
             $payload = $dish->toArray();
             // Không còn trả quantity_left (xem ghi chú ở index()).
             if (Auth::check()) {
@@ -72,6 +78,31 @@ class DishController extends Controller
             'mon' => $dish,
             'allDishes' => $allDishes,
         ]);
+    }
+
+    private function reviewStatsForDishIds(array $dishIds): Collection
+    {
+        if ($dishIds === []) {
+            return collect();
+        }
+
+        return DB::table('reviews')
+            ->whereIn('dish_id', $dishIds)
+            ->select('dish_id')
+            ->selectRaw('AVG(rating) AS review_average, COUNT(*) AS review_count')
+            ->groupBy('dish_id')
+            ->get()
+            ->keyBy('dish_id');
+    }
+
+    private function applyReviewStats(Dish $dish, Collection $reviewStats): void
+    {
+        $stats = $reviewStats->get($dish->dish_id);
+        $dish->setAttribute(
+            'review_average',
+            $stats === null ? null : round((float) $stats->review_average, 1)
+        );
+        $dish->setAttribute('review_count', $stats === null ? 0 : (int) $stats->review_count);
     }
 
     public function analyzeIngredients(Request $request, GeminiChatbotService $gemini)
