@@ -12,12 +12,18 @@ class Dish extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'dish_id',
         'dish_name',
+        'dish_name_en',
         'price',
         'image_url',
         'type_id',
         'is_bestseller',
         'is_active',
+        'ingredients',
+        'ingredients_en',
+        'recipe_instructions',
+        'recipe_instructions_en',
     ];
 
     protected $casts = [
@@ -119,17 +125,6 @@ class Dish extends Model
     public function applyDiscount($discountPercent)
     {
         return $this->price * (1 - $discountPercent / 100);
-    }
-
-    /**
-     * Get similar dishes by type
-     */
-    public function getSimilarDishes($limit = 6)
-    {
-        return Dish::where('type_id', $this->type_id)
-            ->where('dish_id', '!=', $this->dish_id)
-            ->limit($limit)
-            ->get();
     }
 
     /**

@@ -27,6 +27,7 @@ Route::post('/forgot-password/reset', [\App\Http\Controllers\AuthController::cla
 Route::get('/dishes', [\App\Http\Controllers\DishController::class, 'index']);
 Route::get('/dishes/{id}', [\App\Http\Controllers\DishController::class, 'show']);
 Route::get('/dish-types', [\App\Http\Controllers\DishTypeController::class, 'index']);
+Route::post('/recommendations', [\App\Http\Controllers\RecommendationController::class, 'index']);
 
 // Public API - Preview shipping distance/duration/fee based on address (used before creating delivery order)
 Route::post('/deliveries/preview-shipping', [\App\Http\Controllers\DeliveryController::class, 'previewShipping']);
@@ -102,12 +103,6 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
     Route::get('/ratings/ratable-items', [\App\Http\Controllers\RatingController::class, 'ratableItems']);
     Route::post('/ratings', [\App\Http\Controllers\RatingController::class, 'store']);
 
-    // Recommendations (AI gợi ý món)
-    Route::get('/recommendations/status', [\App\Http\Controllers\RecommendationController::class, 'status']);
-    Route::get('/recommendations', [\App\Http\Controllers\RecommendationController::class, 'index']);
-    Route::post('/recommendations/favorites', [\App\Http\Controllers\RecommendationController::class, 'storeFavorites']);
-    Route::post('/recommendations/skip', [\App\Http\Controllers\RecommendationController::class, 'skip']);
-
 });
 
 // Admin Routes
@@ -149,6 +144,9 @@ Route::middleware(['auth:sanctum', 'locked', 'admin'])->group(function () {
 
     // Dishes Management
     Route::get('admin/dishes', [\App\Http\Controllers\DishController::class, 'adminIndex']);
+    Route::post('admin/dishes/analyze-ingredients', [\App\Http\Controllers\DishController::class, 'analyzeIngredients']);
+    Route::post('admin/dishes/confirm-ingredients', [\App\Http\Controllers\DishController::class, 'confirmIngredients']);
+    Route::post('admin/dishes/preview-recipe', [\App\Http\Controllers\DishController::class, 'previewDishRecipe']);
     Route::post('admin/dishes', [\App\Http\Controllers\DishController::class, 'addDish']);
     Route::post('admin/dishes/{id}', [\App\Http\Controllers\DishController::class, 'updateDish']);
     Route::post('admin/dishes/{id}/toggle-status', [\App\Http\Controllers\DishController::class, 'toggleStatus']);

@@ -27,8 +27,6 @@ class User extends Authenticatable
         'membership',
          'provider',
         'provider_id',
-        'recommendation_reset_at',
-        'skipped_recommendation_modal',
         'locked_until',
         'preferred_language',
     ];
