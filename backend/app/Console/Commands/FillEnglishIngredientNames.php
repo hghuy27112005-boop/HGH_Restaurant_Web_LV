@@ -28,13 +28,16 @@ class FillEnglishIngredientNames extends Command
 
         $ingredients = Ingredient::query()
             ->where('is_active', true)
-            ->whereNotNull('ingredient_name')
             ->whereNotNull('ingredient_name_vi')
             ->orderBy('ingredient_id')
             ->get(['ingredient_id', 'ingredient_name', 'ingredient_name_vi'])
-            ->filter(fn (Ingredient $ingredient): bool => $this->normalizeName($ingredient->ingredient_name) !== ''
-                && $this->normalizeName($ingredient->ingredient_name)
-                    === $this->normalizeName($ingredient->ingredient_name_vi))
+            ->filter(function (Ingredient $ingredient): bool {
+                $englishName = $this->normalizeName($ingredient->ingredient_name);
+                $vietnameseName = $this->normalizeName($ingredient->ingredient_name_vi);
+
+                return $vietnameseName !== ''
+                    && ($englishName === '' || $englishName === $vietnameseName);
+            })
             ->take($limit)
             ->values();
 
@@ -78,11 +81,23 @@ class FillEnglishIngredientNames extends Command
                             $current = DB::table('ingredients')
                                 ->where('ingredient_id', $ingredient->ingredient_id)
                                 ->where('is_active', true)
-                                ->where('ingredient_name', $ingredient->ingredient_name)
                                 ->where('ingredient_name_vi', $ingredient->ingredient_name_vi)
+                                ->when(
+                                    $ingredient->ingredient_name === null,
+                                    fn ($query) => $query->whereNull('ingredient_name'),
+                                    fn ($query) => $query->where('ingredient_name', $ingredient->ingredient_name)
+                                )
                                 ->lockForUpdate()
                                 ->first();
-                            if (!$current) {
+                            if (
+                                !$current
+                                || $this->normalizeName($current->ingredient_name_vi) === ''
+                                || (
+                                    $this->normalizeName($current->ingredient_name) !== ''
+                                    && $this->normalizeName($current->ingredient_name)
+                                        !== $this->normalizeName($current->ingredient_name_vi)
+                                )
+                            ) {
                                 continue;
                             }
                             DB::table('ingredients')
