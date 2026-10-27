@@ -195,12 +195,6 @@ class DishController extends Controller
         ]);
 
         $confirmed = DB::transaction(function () use ($data, $language, $nameField): array {
-            $dish = isset($data['dish_id'])
-                ? Dish::query()->lockForUpdate()->findOrFail($data['dish_id'])
-                : null;
-            $oldIngredientIds = $dish
-                ? $dish->ingredientRules()->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all()
-                : [];
             $catalog = Ingredient::query()->get();
             $resolved = [];
             foreach ($data['ingredients'] as $item) {
@@ -259,42 +253,6 @@ class DishController extends Controller
                     'name' => $sourceName,
                     'role' => $item['role'],
                 ];
-            }
-
-            if ($dish) {
-                $newIngredientIds = array_map('intval', array_keys($resolved));
-                $removedIngredientIds = array_values(array_diff($oldIngredientIds, $newIngredientIds));
-
-                foreach ($resolved as $index => $ingredient) {
-                    DishIngredientRule::updateOrCreate(
-                        [
-                            'dish_id' => $dish->dish_id,
-                            'ingredient_id' => $ingredient['ingredient_id'],
-                        ],
-                        [
-                            'role' => $ingredient['role'],
-                            'slot_key' => 'ingredient_' . $ingredient['ingredient_id'],
-                            'sort_order' => $index,
-                        ]
-                    );
-                }
-
-                if ($removedIngredientIds !== []) {
-                    DishIngredientRule::query()
-                        ->where('dish_id', $dish->dish_id)
-                        ->whereIn('ingredient_id', $removedIngredientIds)
-                        ->delete();
-
-                    foreach ($removedIngredientIds as $ingredientId) {
-                        $usedByAnotherDish = DishIngredientRule::query()
-                            ->where('ingredient_id', $ingredientId)
-                            ->exists();
-                        if (!$usedByAnotherDish) {
-                            Ingredient::query()->where('ingredient_id', $ingredientId)
-                                ->update(['is_active' => false]);
-                        }
-                    }
-                }
             }
 
             return array_values($resolved);
@@ -481,12 +439,13 @@ class DishController extends Controller
                     }
                 }
 
-                foreach ($ingredients as $index => $ingredient) {
+                foreach ($validated['ingredients'] as $index => $item) {
+                    $ingredientId = (int) $item['ingredient_id'];
                     DishIngredientRule::create([
                         'dish_id' => $dish->dish_id,
-                        'ingredient_id' => $ingredient->ingredient_id,
-                        'role' => $selected[(int) $ingredient->ingredient_id]['role'],
-                        'slot_key' => 'ingredient_' . $ingredient->ingredient_id,
+                        'ingredient_id' => $ingredientId,
+                        'role' => $item['role'],
+                        'slot_key' => 'ingredient_' . $ingredientId,
                         'sort_order' => $index,
                     ]);
                 }
@@ -819,19 +778,6 @@ class DishController extends Controller
             return response()->json(['message' => 'Danh sách nguyên liệu chưa được xác nhận.'], 422);
         }
 
-        $savedRoles = $dish->ingredientRules()->get()
-            ->mapWithKeys(fn (DishIngredientRule $rule) => [
-                (int) $rule->ingredient_id => $rule->role,
-            ])->all();
-        $submittedRoles = $selected->mapWithKeys(fn (array $item, int $id) => [
-            $id => $item['role'],
-        ])->all();
-        ksort($savedRoles);
-        ksort($submittedRoles);
-        if ($savedRoles !== $submittedRoles) {
-            return response()->json(['message' => 'Hãy xác nhận lại nguyên liệu trước khi lưu món.'], 422);
-        }
-
         $sourceIngredientNames = $ingredients->map(fn (Ingredient $ingredient) => trim((string) (
             $selected->get((int) $ingredient->ingredient_id)['name']
                 ?? $this->canonicalIngredientName($ingredient, $language)
@@ -925,6 +871,17 @@ class DishController extends Controller
                 $language,
                 $request
             ): void {
+                $lockedDish = Dish::query()->lockForUpdate()->findOrFail($dish->dish_id);
+                $oldIngredientIds = $lockedDish->ingredientRules()
+                    ->pluck('ingredient_id')
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+                $newIngredientIds = array_map(
+                    fn (array $item): int => (int) $item['ingredient_id'],
+                    $validated['ingredients']
+                );
+                $removedIngredientIds = array_values(array_diff($oldIngredientIds, $newIngredientIds));
+
                 $targetColumn = $language === 'vi' ? 'ingredient_name' : 'ingredient_name_vi';
                 foreach ($missingIngredientTranslations as $ingredientId => $translatedName) {
                     $ingredient = $ingredients->firstWhere('ingredient_id', (int) $ingredientId);
@@ -933,7 +890,39 @@ class DishController extends Controller
                     }
                 }
 
-                $dish->update([
+                foreach ($validated['ingredients'] as $index => $item) {
+                    DishIngredientRule::updateOrCreate(
+                        [
+                            'dish_id' => $lockedDish->dish_id,
+                            'ingredient_id' => (int) $item['ingredient_id'],
+                        ],
+                        [
+                            'role' => $item['role'],
+                            'slot_key' => 'ingredient_' . (int) $item['ingredient_id'],
+                            'sort_order' => $index,
+                        ]
+                    );
+                }
+
+                if ($removedIngredientIds !== []) {
+                    DishIngredientRule::query()
+                        ->where('dish_id', $lockedDish->dish_id)
+                        ->whereIn('ingredient_id', $removedIngredientIds)
+                        ->delete();
+
+                    foreach ($removedIngredientIds as $ingredientId) {
+                        $usedByAnotherDish = DishIngredientRule::query()
+                            ->where('ingredient_id', $ingredientId)
+                            ->exists();
+                        if (!$usedByAnotherDish) {
+                            Ingredient::query()
+                                ->where('ingredient_id', $ingredientId)
+                                ->update(['is_active' => false]);
+                        }
+                    }
+                }
+
+                $lockedDish->update([
                     'dish_name' => $dishNameVi,
                     'dish_name_en' => $dishNameEn,
                     'type_id' => $validated['type_id'],

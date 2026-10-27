@@ -18,7 +18,7 @@ class DishEditWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_confirming_edited_ingredients_reuses_inventory_and_deactivates_only_unshared_removed_items(): void
+    public function test_confirmation_does_not_change_dish_rules_and_update_synchronizes_removed_ingredients(): void
     {
         [$dish, $otherDish, $type] = $this->createDishes();
         $phoNoodles = $this->createIngredient('Pho noodles', 'Bánh phở');
@@ -71,15 +71,24 @@ class DishEditWorkflowTest extends TestCase
             ->assertOk()
             ->assertJsonCount(3, 'ingredients');
 
+        $this->assertDatabaseCount('dish_ingredient_rules', 4);
         $this->assertDatabaseHas('dish_ingredient_rules', [
             'dish_id' => $dish->dish_id,
             'ingredient_id' => $phoNoodles->ingredient_id,
             'role' => 'required_fixed',
+            'slot_key' => 'noodles',
         ]);
         $this->assertDatabaseHas('dish_ingredient_rules', [
             'dish_id' => $dish->dish_id,
             'ingredient_id' => $sharedOnion->ingredient_id,
-            'role' => 'optional',
+            'role' => 'required_replaceable',
+            'slot_key' => 'onion',
+        ]);
+        $this->assertDatabaseHas('dish_ingredient_rules', [
+            'dish_id' => $dish->dish_id,
+            'ingredient_id' => $removedGarlic->ingredient_id,
+            'role' => 'required_replaceable',
+            'slot_key' => 'garlic',
         ]);
         $this->assertDatabaseHas('dish_ingredient_rules', [
             'dish_id' => $otherDish->dish_id,
@@ -87,7 +96,7 @@ class DishEditWorkflowTest extends TestCase
         ]);
         $this->assertDatabaseHas('ingredients', [
             'ingredient_id' => $removedGarlic->ingredient_id,
-            'is_active' => false,
+            'is_active' => true,
         ]);
         $this->assertDatabaseHas('ingredient_stocks', [
             'ingredient_id' => $removedGarlic->ingredient_id,
@@ -97,9 +106,63 @@ class DishEditWorkflowTest extends TestCase
             'ingredient_id' => $beef->ingredient_id,
             'is_active' => true,
         ]);
+
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [[
+                    'content' => ['parts' => [[
+                        'text' => json_encode([
+                            'source_name_valid' => true,
+                            'dish_name' => 'Món hiện tại',
+                            'ingredients' => 'Thịt bò, Bánh phở, Hành tây',
+                            'recipe_instructions' => 'Nấu món mới.',
+                        ]),
+                    ]]],
+                ]],
+            ]),
+        ]);
+
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->postJson('/api/admin/dishes/' . $dish->dish_id, [
+                'dish_name' => 'Món hiện tại',
+                'type_id' => $type->type_id,
+                'price' => 35000,
+                'language' => 'vi',
+                'ingredients' => [
+                    ['ingredient_id' => $beef->ingredient_id, 'role' => 'required_replaceable'],
+                    ['ingredient_id' => $phoNoodles->ingredient_id, 'role' => 'required_fixed'],
+                    ['ingredient_id' => $sharedOnion->ingredient_id, 'role' => 'optional'],
+                ],
+                'recipe_instructions' => 'Nấu món mới.',
+            ])
+            ->assertOk();
+
+        foreach ([
+            [$beef, 'required_replaceable', 0],
+            [$phoNoodles, 'required_fixed', 1],
+            [$sharedOnion, 'optional', 2],
+        ] as [$ingredient, $role, $sortOrder]) {
+            $this->assertDatabaseHas('dish_ingredient_rules', [
+                'dish_id' => $dish->dish_id,
+                'ingredient_id' => $ingredient->ingredient_id,
+                'role' => $role,
+                'slot_key' => 'ingredient_' . $ingredient->ingredient_id,
+                'sort_order' => $sortOrder,
+            ]);
+        }
+
         $this->assertDatabaseMissing('dish_ingredient_rules', [
             'dish_id' => $dish->dish_id,
             'ingredient_id' => $removedGarlic->ingredient_id,
+        ]);
+        $this->assertDatabaseHas('ingredients', [
+            'ingredient_id' => $removedGarlic->ingredient_id,
+            'is_active' => false,
+        ]);
+        $this->assertDatabaseHas('ingredients', [
+            'ingredient_id' => $sharedOnion->ingredient_id,
+            'is_active' => true,
         ]);
     }
 
@@ -662,6 +725,7 @@ class DishEditWorkflowTest extends TestCase
     {
         [, , $type] = $this->createDishes();
         $ingredient = $this->createIngredient('Beef', 'Thịt bò');
+        $onion = $this->createIngredient('Onion', 'Hành tây');
         foreach (range(1, 30) as $dishId) {
             Dish::create([
                 'dish_id' => $dishId,
@@ -687,7 +751,7 @@ class DishEditWorkflowTest extends TestCase
                         'text' => json_encode([
                             'source_name_valid' => true,
                             'dish_name' => 'Phở bò',
-                            'ingredients' => 'Thịt bò',
+                            'ingredients' => 'Thịt bò, Hành tây',
                             'recipe_instructions' => 'Hầm thịt bò.',
                         ]),
                     ]]],
@@ -712,10 +776,10 @@ class DishEditWorkflowTest extends TestCase
                     'type_id' => $type->type_id,
                     'price' => 45000,
                     'language' => 'en',
-                    'ingredients' => [[
-                        'ingredient_id' => $ingredient->ingredient_id,
-                        'role' => 'required_replaceable',
-                    ]],
+                    'ingredients' => [
+                        ['ingredient_id' => $onion->ingredient_id, 'role' => 'optional'],
+                        ['ingredient_id' => $ingredient->ingredient_id, 'role' => 'required_replaceable'],
+                    ],
                     'recipe_instructions' => 'Simmer the beef.',
                     'image' => UploadedFile::fake()->create('beef-pho.jpg', 20, 'image/jpeg'),
                 ])
@@ -726,10 +790,24 @@ class DishEditWorkflowTest extends TestCase
                 'dish_name' => 'Phở bò',
                 'dish_name_en' => 'Beef Pho',
                 'image_url' => $expectedDishId . '.jpg',
-                'ingredients' => 'Thịt bò',
-                'ingredients_en' => 'Beef',
+                'ingredients' => 'Thịt bò, Hành tây',
+                'ingredients_en' => 'Beef, Onion',
                 'recipe_instructions' => 'Hầm thịt bò.',
                 'recipe_instructions_en' => 'Simmer the beef.',
+            ]);
+            $this->assertDatabaseHas('dish_ingredient_rules', [
+                'dish_id' => $expectedDishId,
+                'ingredient_id' => $onion->ingredient_id,
+                'role' => 'optional',
+                'slot_key' => 'ingredient_' . $onion->ingredient_id,
+                'sort_order' => 0,
+            ]);
+            $this->assertDatabaseHas('dish_ingredient_rules', [
+                'dish_id' => $expectedDishId,
+                'ingredient_id' => $ingredient->ingredient_id,
+                'role' => 'required_replaceable',
+                'slot_key' => 'ingredient_' . $ingredient->ingredient_id,
+                'sort_order' => 1,
             ]);
             Http::assertSentCount(1);
         } finally {

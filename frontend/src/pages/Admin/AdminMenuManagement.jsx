@@ -4,8 +4,10 @@ import { TableLoading, Badge, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
 import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
+import i18n from '../../i18n';
+import { translateDishInstructions, translateIngredients } from '../Menu/DishDetailPage';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace('/api', '') : 'http://localhost:8000';
+import { API_BASE_URL } from '../../apiConfig';
 
 // Xây dựng URL hình ảnh đúng theo backend/public/dishes
 // - Nếu image_url là URL đầy đủ (http/https) -> giữ nguyên
@@ -29,6 +31,36 @@ const STATUS_FILTERS = [
 
 const NO_SPIN = '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
 
+const convertImageToJpeg = async (file) => {
+    if (file.type === 'image/jpeg') {
+        const baseName = file.name.replace(/\.[^.]+$/, '');
+        return new File([file], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: file.lastModified });
+    }
+
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+        bitmap.close();
+        throw new Error('Could not prepare image conversion.');
+    }
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+
+    const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((result) => {
+            if (result) resolve(result);
+            else reject(new Error('Could not convert image to JPEG.'));
+        }, 'image/jpeg', 0.92);
+    });
+    const baseName = file.name.replace(/\.[^.]+$/, '');
+    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: file.lastModified });
+};
+
 const AdminMenuManagement = () => {
     const [dishes, setDishes] = useState([]);
     const [dishTypes, setDishTypes] = useState([]);
@@ -51,6 +83,7 @@ const AdminMenuManagement = () => {
     // Modal state
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editMode, setEditMode] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
     const [selectedDishId, setSelectedDishId] = useState(null);
     const [busy, setBusy] = useState(false);
 
@@ -63,11 +96,21 @@ const AdminMenuManagement = () => {
         dish_name: '',
         type_id: '',
         price: 30000,
-        is_bestseller: false,
+        ingredients: '',
+        recipe_instructions: '',
     });
+    const [draftIngredients, setDraftIngredients] = useState([]);
+    const [confirmedIngredients, setConfirmedIngredients] = useState([]);
+    const [recipePreview, setRecipePreview] = useState(null);
+    const [workflowBusy, setWorkflowBusy] = useState(false);
+    const [workflowAction, setWorkflowAction] = useState('');
     const [selectedImage, setSelectedImage] = useState(null);
     const [previewImage, setPreviewImage] = useState(null);
+    const [imageValidationError, setImageValidationError] = useState('');
+    const [editRequiresReconfirmation, setEditRequiresReconfirmation] = useState(false);
+    const [workflowLanguage, setWorkflowLanguage] = useState(null);
     const fileInputRef = useRef(null);
+    const currentLanguage = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi';
 
     // Phân biệt "bấm ra ngoài để đóng" với "kéo chọn text trong modal rồi lỡ thả chuột ra ngoài"
     const mouseDownOnBackdrop = useRef(false);
@@ -149,67 +192,136 @@ const AdminMenuManagement = () => {
     const getTypeName = (typeId) =>
         translatePageText(dishTypes.find((t) => t.type_id === typeId)?.type_name || 'Khác');
 
+    const getRecipeSteps = (instructions) => String(instructions || '')
+        .split(/\r?\n/)
+        .map((step) => step.trim().replace(/^\d+[.)]\s*/, ''))
+        .filter(Boolean);
+
     // Thống kê trên toàn bộ món (không đổi theo bộ lọc)
     const totalDishes = dishes.length;
     const activeDishes = dishes.filter((d) => d.is_active).length;
     const hiddenDishes = totalDishes - activeDishes;
     const bestsellerDishes = dishes.filter((d) => d.is_bestseller).length;
 
-    // ===== Thêm / sửa =====
+    // ===== Thêm / xem / sửa =====
     const handleOpenModal = (dish = null) => {
         if (dish) {
+            const english = i18n.resolvedLanguage?.startsWith('en');
             setEditMode(true);
+            setIsEditing(false);
             setSelectedDishId(dish.dish_id);
             setFormData({
-                dish_name: dish.dish_name,
+                dish_name: english ? dish.dish_name_en || dish.dish_name : dish.dish_name,
                 type_id: dish.type_id,
                 price: dish.price,
-                is_bestseller: !!dish.is_bestseller,
+                ingredients: (english ? dish.ingredients_en : dish.ingredients) || '',
+                recipe_instructions: (english ? dish.recipe_instructions_en : dish.recipe_instructions) || '',
             });
             setPreviewImage(getImageUrl(dish.image_url));
+            setDraftIngredients([]);
+            setConfirmedIngredients([]);
+            setRecipePreview(null);
+            setEditRequiresReconfirmation(false);
+            setWorkflowLanguage(null);
         } else {
             setEditMode(false);
+            setIsEditing(true);
             setSelectedDishId(null);
+            setDraftIngredients([]);
+            setConfirmedIngredients([]);
+            setRecipePreview(null);
+            setEditRequiresReconfirmation(false);
+            setWorkflowLanguage(null);
             setFormData({
                 dish_name: '',
                 type_id: dishTypes.length > 0 ? dishTypes[0].type_id : '',
                 price: 30000,
-                is_bestseller: false,
+                ingredients: '',
+                recipe_instructions: '',
             });
             setPreviewImage(null);
         }
         setSelectedImage(null);
+        setImageValidationError('');
         if (fileInputRef.current) fileInputRef.current.value = "";
         setIsModalOpen(true);
     };
 
     const handleCloseModal = () => {
+        if (busy || workflowBusy) return;
         setIsModalOpen(false);
     };
 
-    const handleFileChange = (e) => {
+    const handleCancelEditing = () => {
+        const dish = dishes.find((item) => item.dish_id === selectedDishId);
+        if (dish) {
+            const english = i18n.resolvedLanguage?.startsWith('en');
+            setFormData({
+                dish_name: english ? dish.dish_name_en || dish.dish_name : dish.dish_name,
+                type_id: dish.type_id,
+                price: dish.price,
+                ingredients: (english ? dish.ingredients_en : dish.ingredients) || '',
+                recipe_instructions: (english ? dish.recipe_instructions_en : dish.recipe_instructions) || '',
+            });
+            setPreviewImage(getImageUrl(dish.image_url));
+        }
+        setSelectedImage(null);
+        setImageValidationError('');
+        setDraftIngredients([]);
+        setConfirmedIngredients([]);
+        setRecipePreview(null);
+        setEditRequiresReconfirmation(false);
+        setWorkflowLanguage(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        setIsEditing(false);
+    };
+
+    const handleFileChange = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        setImageValidationError('');
         if (!file.type.startsWith("image/")) {
-            setAlertMessage(translatePageText("Vui lòng chọn một file ảnh hợp lệ!"));
+            setImageValidationError(translatePageText("Vui lòng chọn một file ảnh hợp lệ!"));
             e.target.value = "";
             return;
         }
 
-        setSelectedImage(file);
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            setPreviewImage(ev.target.result);
-        };
-        reader.readAsDataURL(file);
+        setSelectedImage(null);
+        setDraftIngredients([]);
+        setConfirmedIngredients([]);
+        setRecipePreview(null);
+        setWorkflowLanguage(null);
+        if (editMode) setEditRequiresReconfirmation(true);
+        try {
+            const jpegFile = await convertImageToJpeg(file);
+            setSelectedImage(jpegFile);
+            const reader = new FileReader();
+            reader.onload = (ev) => setPreviewImage(ev.target.result);
+            reader.readAsDataURL(jpegFile);
+        } catch (error) {
+            console.error('Image conversion failed:', error);
+            setPreviewImage(null);
+            e.target.value = '';
+            setImageValidationError(translatePageText("Không thể chuyển hình ảnh sang định dạng JPG. Vui lòng chọn ảnh khác."));
+        }
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
+        if (editMode && !isEditing) return;
+
         if (!editMode && !selectedImage) {
             setAlertMessage(translatePageText("Vui lòng tải lên một hình ảnh!"));
+            return;
+        }
+        if (!editMode && (!confirmedIngredients.length || !recipePreview)) {
+            setAlertMessage(translatePageText("Vui lòng nhận, xác nhận nguyên liệu và tạo công thức trước khi lưu món."));
+            return;
+        }
+        if (editMode && editRequiresReconfirmation) {
+            setAlertMessage(translatePageText("Vui lòng nhận và xác nhận lại nguyên liệu để tạo công thức trước khi lưu."));
             return;
         }
 
@@ -218,12 +330,29 @@ const AdminMenuManagement = () => {
             const data = new FormData();
             data.append('dish_name', formData.dish_name);
             data.append('type_id', formData.type_id);
+            data.append('language', workflowLanguage || currentLanguage);
 
             if (editMode) {
                 data.append('price', formData.price);
-                if (formData.is_bestseller) {
-                    data.append('is_bestseller', 1);
+                if (confirmedIngredients.length && recipePreview) {
+                    confirmedIngredients.forEach((ingredient, index) => {
+                        data.append(`ingredients[${index}][ingredient_id]`, ingredient.ingredient_id);
+                        data.append(`ingredients[${index}][name]`, ingredient.name || ingredient[workflowLanguage === 'en' ? 'name_en' : 'name_vi']);
+                        data.append(`ingredients[${index}][role]`, ingredient.role);
+                    });
+                    data.append('recipe_instructions', recipePreview.recipe_instructions);
+                } else {
+                    data.append('ingredients', formData.ingredients);
+                    data.append('recipe_instructions', formData.recipe_instructions);
                 }
+            } else {
+                data.append('price', formData.price);
+                confirmedIngredients.forEach((ingredient, index) => {
+                    data.append(`ingredients[${index}][ingredient_id]`, ingredient.ingredient_id);
+                    data.append(`ingredients[${index}][name]`, ingredient.name || ingredient[workflowLanguage === 'en' ? 'name_en' : 'name_vi']);
+                    data.append(`ingredients[${index}][role]`, ingredient.role);
+                });
+                data.append('recipe_instructions', recipePreview.recipe_instructions);
             }
 
             if (selectedImage) {
@@ -233,18 +362,119 @@ const AdminMenuManagement = () => {
             if (editMode) {
                 await adminAPI.dishes.update(selectedDishId, data);
                 setAlertMessage(translatePageText("Cập nhật món ăn thành công!"));
+                setIsEditing(false);
+                setSelectedImage(null);
+                setDraftIngredients([]);
+                setConfirmedIngredients([]);
+                setRecipePreview(null);
+                setEditRequiresReconfirmation(false);
+                setWorkflowLanguage(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                fetchData();
             } else {
                 await adminAPI.dishes.create(data);
                 setAlertMessage(translatePageText("Thêm món ăn thành công!"));
+                setIsModalOpen(false);
+                setDraftIngredients([]);
+                setConfirmedIngredients([]);
+                setRecipePreview(null);
+                setWorkflowLanguage(null);
+                fetchData();
             }
-            setIsModalOpen(false);
-            fetchData();
         } catch (err) {
             console.error('Save dish error:', err.response?.data || err.message);
-            setAlertMessage(translatePageText("Không thể lưu món ăn. Vui lòng thử lại."));
+            setAlertMessage(err.response?.data?.code === 'dish_name_invalid'
+                ? translatePageText("Tên món không hợp lệ hoặc không đúng ngôn ngữ đang chọn. Vui lòng nhập tên món bằng ngôn ngữ hiện tại.")
+                : err.response?.data?.message || translatePageText("Không thể lưu món ăn. Vui lòng thử lại."));
         } finally {
             setBusy(false);
         }
+    };
+
+    const handleAnalyzeIngredients = async () => {
+        setImageValidationError('');
+        if (!formData.dish_name.trim() || (!selectedImage && !editMode)) {
+            setImageValidationError(translatePageText("Vui lòng nhập tên món và tải hình ảnh trước."));
+            return;
+        }
+        if (editMode) setEditRequiresReconfirmation(true);
+        setWorkflowBusy(true);
+        setWorkflowAction('analyze');
+        setWorkflowLanguage(null);
+        setDraftIngredients([]);
+        setConfirmedIngredients([]);
+        setRecipePreview(null);
+        try {
+            const payload = new FormData();
+            payload.append('dish_name', formData.dish_name.trim());
+            payload.append('language', currentLanguage);
+            if (editMode) payload.append('dish_id', selectedDishId);
+            if (selectedImage) payload.append('image', selectedImage);
+            const response = await adminAPI.dishes.analyzeIngredients(payload);
+            setWorkflowLanguage(currentLanguage);
+            setDraftIngredients(response.data.ingredients || []);
+            setConfirmedIngredients([]);
+            setRecipePreview(null);
+        } catch (err) {
+            if (err.response?.data?.code === 'dish_name_invalid') {
+                setImageValidationError(translatePageText("Tên món không hợp lệ hoặc không đúng ngôn ngữ đang chọn. Vui lòng nhập tên món bằng ngôn ngữ hiện tại."));
+            } else if (err.response?.data?.code === 'dish_input_rejected') {
+                setImageValidationError(translatePageText("Hình ảnh không phù hợp. Vui lòng chọn hình khác"));
+            } else {
+                setImageValidationError(err.response?.data?.message || translatePageText("Không thể nhận diện nguyên liệu. Vui lòng thử lại."));
+            }
+        } finally {
+            setWorkflowBusy(false);
+            setWorkflowAction('');
+        }
+    };
+
+    const handleConfirmIngredients = async () => {
+        if (!draftIngredients.length) return;
+        setWorkflowBusy(true);
+        setWorkflowAction('confirm');
+        try {
+            let confirmed = confirmedIngredients;
+            if (confirmed.length === 0) {
+                const response = await adminAPI.dishes.confirmIngredients(
+                    draftIngredients,
+                    editMode ? selectedDishId : null,
+                    workflowLanguage || currentLanguage
+                );
+                confirmed = response.data.ingredients || [];
+                setDraftIngredients(confirmed);
+                setConfirmedIngredients(confirmed);
+            }
+            const recipeResponse = await adminAPI.dishes.previewRecipe({
+                dish_name: formData.dish_name.trim(),
+                ingredient_ids: confirmed.map((ingredient) => ingredient.ingredient_id),
+                ingredient_names: confirmed.map((ingredient) => ({
+                    ingredient_id: ingredient.ingredient_id,
+                    name: ingredient.name || ingredient[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi'],
+                })),
+                language: workflowLanguage || currentLanguage,
+            });
+            setRecipePreview({
+                recipe_instructions: recipeResponse.data.recipe_instructions,
+            });
+            if (editMode) setEditRequiresReconfirmation(false);
+        } catch (err) {
+            setAlertMessage(err.response?.data?.message || translatePageText("Không thể xác nhận nguyên liệu hoặc tạo công thức. Vui lòng thử lại."));
+        } finally {
+            setWorkflowBusy(false);
+            setWorkflowAction('');
+        }
+    };
+
+    const updateDraftIngredient = (index, field, value) => {
+        setDraftIngredients((current) => current.map((ingredient, itemIndex) =>
+            itemIndex === index
+                ? { ...ingredient, [field]: value, ...(field === 'name_vi' || field === 'name_en' ? { ingredient_id: null } : {}) }
+                : ingredient
+        ));
+        setConfirmedIngredients([]);
+        setRecipePreview(null);
+        if (editMode) setEditRequiresReconfirmation(true);
     };
 
     const handleToggleStatus = (dish) => {
@@ -421,45 +651,55 @@ const AdminMenuManagement = () => {
                     </div>
                 ) : viewMode === 'table' ? (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
+                        <table className="w-full min-w-[1000px] table-fixed text-sm text-left">
+                            <colgroup>
+                                <col style={{ width: '4%' }} />
+                                <col style={{ width: '7%' }} />
+                                <col style={{ width: '27%' }} />
+                                <col style={{ width: '21%' }} />
+                                <col style={{ width: '12%' }} />
+                                <col style={{ width: '5%' }} />
+                                <col style={{ width: '9%' }} />
+                                <col style={{ width: '15%' }} />
+                            </colgroup>
                             <thead className="bg-red-600 text-white uppercase text-xs">
                                 <tr>
-                                    <th className="px-4 py-2.5 w-16">STT</th>
-                                    <th className="px-4 py-2.5">{translatePageText("Hình ảnh")}</th>
-                                    <th className="px-4 py-2.5">{translatePageText("Tên món")}</th>
-                                    <th className="px-4 py-2.5">{translatePageText("Loại")}</th>
+                                    <th className="px-2 py-2.5">STT</th>
+                                    <th className="px-2 py-2.5">{translatePageText("Hình ảnh")}</th>
+                                    <th className="px-3 py-2.5">{translatePageText("Tên món")}</th>
+                                    <th className="px-3 py-2.5">{translatePageText("Loại")}</th>
                                     <th className="px-4 py-2.5">{translatePageText("Giá tiền")}</th>
-                                    <th className="px-4 py-2.5 text-center">Bestseller</th>
-                                    <th className="px-4 py-2.5 text-center">{translatePageText("Trạng thái")}</th>
-                                    <th className="px-4 py-2.5 text-center">{translatePageText("Thao tác")}</th>
+                                    <th className="px-1 py-2.5 text-center">Bestseller</th>
+                                    <th className="px-2 py-2.5 text-center">{translatePageText("Trạng thái")}</th>
+                                    <th className="px-2 py-2.5 text-center">{translatePageText("Thao tác")}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {visibleDishes.map((dish, index) => (
                                     <tr key={dish.dish_id} className={`border-b last:border-b-0 hover:bg-gray-50 ${!dish.is_active ? 'opacity-50' : ''}`}>
-                                        <td className="px-4 py-2 text-gray-500">{getStt(dish, index)}</td>
-                                        <td className="px-4 py-2">
+                                        <td className="px-2 py-2 text-gray-500">{getStt(dish, index)}</td>
+                                        <td className="px-2 py-2">
                                             <img
                                                 src={getImageUrl(dish.image_url)}
                                                 alt={translateDishName(dish)}
                                                 className="w-12 h-12 object-cover rounded shadow-sm"
                                             />
                                         </td>
-                                        <td className="px-4 py-2 font-semibold">{translateDishName(dish)}</td>
-                                        <td className="px-4 py-2">
+                                        <td className="px-3 py-2 font-semibold truncate" title={translateDishName(dish)}>{translateDishName(dish)}</td>
+                                        <td className="px-3 py-2">
                                             <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
                                         </td>
                                         <td className="px-4 py-2 font-bold text-red-600">
                                             {Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ") + " "}</td>
-                                        <td className="px-4 py-2 text-center">
+                                        <td className="px-1 py-2 text-center">
                                             {dish.is_bestseller ? <span className="text-yellow-500 text-lg">⭐</span> : ''}
                                         </td>
-                                        <td className="px-4 py-2 text-center">{statusBadge(dish)}</td>
-                                        <td className="px-4 py-2 text-center space-x-3">
+                                        <td className="px-2 py-2 text-center">{statusBadge(dish)}</td>
+                                        <td className="px-2 py-2 text-center whitespace-nowrap space-x-2">
                                             <button
                                                 onClick={() => handleOpenModal(dish)}
                                                 className="text-blue-600 hover:text-blue-800 font-medium"
-                                            >{translatePageText("Sửa") + " "}</button>
+                                            >{translatePageText("Chi tiết") + " "}</button>
                                             <button
                                                 onClick={() => handleToggleStatus(dish)}
                                                 className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
@@ -508,7 +748,7 @@ const AdminMenuManagement = () => {
                                     </div>
                                     <p className="mt-2 font-bold text-red-600">{Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ")}</p>
                                     <div className="mt-auto pt-3 flex justify-between text-sm">
-                                        <button onClick={() => handleOpenModal(dish)} className="text-blue-600 hover:text-blue-800 font-medium">{translatePageText("Sửa")}</button>
+                                        <button onClick={() => handleOpenModal(dish)} className="text-blue-600 hover:text-blue-800 font-medium">{translatePageText("Chi tiết")}</button>
                                         <button
                                             onClick={() => handleToggleStatus(dish)}
                                             className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
@@ -524,7 +764,7 @@ const AdminMenuManagement = () => {
                 )}
             </div>
 
-            {/* Modal thêm/sửa món */}
+            {/* Modal thêm món / chi tiết món */}
             {isModalOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -532,93 +772,235 @@ const AdminMenuManagement = () => {
                     onMouseDown={handleBackdropMouseDown}
                     onMouseUp={handleBackdropMouseUp}
                 >
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
                         <div className="bg-red-600 px-6 py-4 flex justify-between items-center">
                             <h3 className="text-xl font-bold text-white">
-                                {editMode ? translatePageText("Sửa món ăn") : translatePageText("Thêm món ăn mới")}
+                                {editMode ? translatePageText("Chi tiết món ăn") : translatePageText("Thêm món ăn mới")}
                             </h3>
-                            <button onClick={handleCloseModal} className="text-white hover:text-gray-200">
+                            <button onClick={handleCloseModal} disabled={busy || workflowBusy} className="text-white hover:text-gray-200 disabled:opacity-50">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Tên món ăn (*)")}</label>
-                                <input
-                                    type="text" required
-                                    value={formData.dish_name}
-                                    onChange={e => setFormData({ ...formData, dish_name: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                                    placeholder={translatePageText("Nhập tên món")}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Loại món ăn (*)")}</label>
-                                <select
-                                    required
-                                    value={formData.type_id}
-                                    onChange={e => setFormData({ ...formData, type_id: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-                                >
-                                    <option value="" disabled>{translatePageText("-- Chọn loại món --")}</option>
-                                    {dishTypes.map(type => (
-                                        <option key={type.type_id} value={type.type_id}>{translatePageText(type.type_name)}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {editMode && (
-                                <>
-                                    <div>
-                                        <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Giá tiền (*)")}</label>
-                                        <input
-                                            type="number" required min="0" step="1000"
-                                            value={formData.price}
-                                            onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                            className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${NO_SPIN}`}
-                                        />
-                                    </div>
-                                    <div className="flex items-center">
-                                        <input
-                                            type="checkbox" id="bestseller"
-                                            checked={formData.is_bestseller}
-                                            onChange={e => setFormData({ ...formData, is_bestseller: e.target.checked })}
-                                            className="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                                        />
-                                        <label htmlFor="bestseller" className="ml-2 text-sm font-semibold text-gray-700">{translatePageText("Là món bán chạy (Bestseller)") + " "}</label>
-                                    </div>
-                                </>
-                            )}
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">{translatePageText("Hình ảnh") + " "}{!editMode && "(*)"}</label>
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                                    {previewImage && (
-                                        <img src={previewImage} alt="Preview" className="mx-auto h-32 object-contain mb-3" />
-                                    )}
+                        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                        {translatePageText(editMode ? "Tên món (không thể thay đổi)" : "Tên món")}
+                                        {!editMode && " (*)"}
+                                    </label>
                                     <input
-                                        type="file" ref={fileInputRef} accept="image/*"
-                                        onChange={handleFileChange}
-                                        className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
+                                        type="text" required readOnly={editMode} disabled={busy}
+                                        value={formData.dish_name}
+                                        onChange={e => {
+                                            setFormData({ ...formData, dish_name: e.target.value });
+                                            setDraftIngredients([]);
+                                            setConfirmedIngredients([]);
+                                            setRecipePreview(null);
+                                            setWorkflowLanguage(null);
+                                            setImageValidationError('');
+                                        }}
+                                        className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${editMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                        placeholder={translatePageText(currentLanguage === 'en'
+                                            ? "Nhập tên món bằng tiếng Anh"
+                                            : "Nhập tên món bằng tiếng Việt")}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Loại món")}{!editMode && " (*)"}</label>
+                                    <select
+                                        required disabled={busy || (editMode && !isEditing)}
+                                        value={formData.type_id}
+                                        onChange={e => setFormData({ ...formData, type_id: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                                    >
+                                        <option value="" disabled>{translatePageText("-- Chọn loại món --")}</option>
+                                        {dishTypes.map(type => (
+                                            <option key={type.type_id} value={type.type_id}>{translatePageText(type.type_name)}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Giá thành")}</label>
+                                    <input
+                                        type="number" required min="0" step="1000" readOnly={editMode && !isEditing} disabled={busy}
+                                        value={formData.price}
+                                        onChange={e => setFormData({ ...formData, price: e.target.value })}
+                                        className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${NO_SPIN}`}
                                     />
                                 </div>
                             </div>
 
-                            <div className="pt-4 flex justify-end space-x-3">
-                                <button
-                                    type="button"
-                                    onClick={handleCloseModal}
-                                    className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 font-semibold"
-                                >{translatePageText("Hủy") + " "}</button>
-                                <button
-                                    type="submit"
-                                    disabled={busy}
-                                    className="px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 font-semibold disabled:opacity-50"
-                                >
-                                    {busy ? translatePageText("Đang lưu...") : translatePageText("Lưu")}
-                                </button>
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">{translatePageText("Hình ảnh")}{!editMode && " (*)"}</label>
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                                    {previewImage && (
+                                        <img src={previewImage} alt={translatePageText("Hình ảnh")} className="mx-auto h-32 object-contain mb-3" />
+                                    )}
+                                    <input
+                                        type="file" ref={fileInputRef} accept="image/*"
+                                        required={!editMode} disabled={busy || (editMode && !isEditing)}
+                                        onChange={handleFileChange}
+                                        className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
+                                    />
+                                </div>
+                                {imageValidationError && (
+                                    <p role="alert" className="mt-2 text-sm font-medium text-red-600">
+                                        {imageValidationError}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Nguyên liệu")}</label>
+                                {editMode && !isEditing ? (
+                                    <textarea
+                                        rows={3} readOnly={editMode || !isEditing} disabled={busy}
+                                        value={!isEditing
+                                            ? (i18n.resolvedLanguage?.startsWith('en')
+                                                ? dishes.find((dish) => dish.dish_id === selectedDishId)?.ingredients_en || formData.ingredients
+                                                : translateIngredients(formData.ingredients))
+                                            : formData.ingredients}
+                                        onChange={e => setFormData({ ...formData, ingredients: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 resize-y"
+                                    />
+                                ) : (
+                                    <div className="space-y-3">
+                                        <div className="flex flex-col gap-2 sm:flex-row">
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                aria-label={translatePageText(editMode
+                                                    ? "Nhấn nhận nguyên liệu để cập nhật danh sách theo tên và hình món"
+                                                    : "Vui lòng điền tên và tải ảnh lên để lấy nguyên liệu")}
+                                                placeholder={translatePageText(editMode
+                                                    ? "Nhấn nhận nguyên liệu để cập nhật danh sách theo tên và hình món"
+                                                    : "Vui lòng điền tên và tải ảnh lên để lấy nguyên liệu")}
+                                                className="min-w-0 flex-1 rounded border border-gray-300 px-3 py-2 text-gray-500"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleAnalyzeIngredients}
+                                                disabled={workflowBusy || busy || (!editMode && !selectedImage) || !formData.dish_name.trim()}
+                                                className="shrink-0 rounded bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                                            >
+                                                {workflowAction === 'analyze' ? translatePageText("Đang nhận nguyên liệu...") : translatePageText("Nhận nguyên liệu")}
+                                            </button>
+                                        </div>
+                                        {draftIngredients.map((ingredient, index) => (
+                                            <div key={index} className="grid grid-cols-1 gap-2 rounded border border-gray-200 p-3 sm:grid-cols-[1fr_220px]">
+                                                <input
+                                                    aria-label={translatePageText((workflowLanguage || currentLanguage) === 'en' ? "Tên nguyên liệu tiếng Anh" : "Tên nguyên liệu tiếng Việt")}
+                                                    value={ingredient[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi']}
+                                                    onChange={(event) => updateDraftIngredient(index, (workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi', event.target.value)}
+                                                    className="min-w-0 rounded border border-gray-300 px-3 py-2"
+                                                />
+                                                <select
+                                                    aria-label={translatePageText("Phân loại nguyên liệu")}
+                                                    value={ingredient.role}
+                                                    onChange={(event) => updateDraftIngredient(index, 'role', event.target.value)}
+                                                    className="rounded border border-gray-300 px-3 py-2 sm:col-span-1"
+                                                >
+                                                    <option value="required_replaceable">{translatePageText("Bắt buộc, có thể thay thế")}</option>
+                                                    <option value="required_fixed">{translatePageText("Bắt buộc, không thể thay thế")}</option>
+                                                    <option value="optional">{translatePageText("Có thể bỏ")}</option>
+                                                </select>
+                                            </div>
+                                        ))}
+                                        {draftIngredients.length > 0 && (
+                                            <div className="flex flex-wrap items-center gap-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleConfirmIngredients}
+                                                    disabled={workflowBusy || busy}
+                                                    className="rounded bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                                >
+                                                    {workflowAction === 'confirm'
+                                                        ? translatePageText("Đang xác nhận nguyên liệu và tạo công thức...")
+                                                        : translatePageText("Xác nhận nguyên liệu")}
+                                                </button>
+                                                {confirmedIngredients.length > 0 && (
+                                                    <span className="text-sm text-emerald-700">{translatePageText("Đã đối chiếu và lưu nguyên liệu vào kho.")}</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Công thức nấu")}</label>
+                                {!editMode || isEditing ? (
+                                    <div className="space-y-3">
+                                        {recipePreview ? (
+                                            <textarea
+                                                rows={5}
+                                                value={recipePreview.recipe_instructions}
+                                                onChange={(event) => setRecipePreview((current) => ({ ...current, recipe_instructions: event.target.value }))}
+                                                className="w-full resize-y rounded border border-gray-300 px-3 py-2"
+                                            />
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                aria-label={translatePageText("Xác nhận nguyên liệu để tạo công thức")}
+                                                placeholder={translatePageText(editMode
+                                                    ? "Xác nhận nguyên liệu để tạo công thức mới"
+                                                    : "Xác nhận nguyên liệu để tạo công thức")}
+                                                className="w-full rounded border border-gray-300 px-3 py-2 text-gray-500"
+                                            />
+                                        )}
+                                    </div>
+                                ) : getRecipeSteps(translateDishInstructions(dishes.find((dish) => dish.dish_id === selectedDishId))).length > 0 ? (
+                                    <ol className="list-decimal list-inside space-y-1 text-gray-700">
+                                        {getRecipeSteps(translateDishInstructions(dishes.find((dish) => dish.dish_id === selectedDishId))).map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}
+                                    </ol>
+                                ) : (
+                                    <p className="text-gray-500">{translatePageText("Chưa có công thức nấu")}</p>
+                                )}
+                            </div>
+
+                            <div className="pt-4 border-t border-gray-200 flex justify-between gap-3">
+                                {editMode ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={isEditing ? handleCancelEditing : () => setIsEditing(true)}
+                                            disabled={busy}
+                                            className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 font-semibold disabled:opacity-50"
+                                        >{translatePageText(isEditing ? "Quay lại" : "Chỉnh sửa")}</button>
+                                        {isEditing ? (
+                                            <button
+                                                type="submit"
+                                                disabled={busy || workflowBusy || editRequiresReconfirmation}
+                                                className="px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 font-semibold disabled:opacity-50"
+                                            >{busy ? translatePageText("Đang lưu...") : translatePageText("Lưu thay đổi")}</button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={handleCloseModal}
+                                                className="px-4 py-2 bg-gray-600 rounded text-white hover:bg-gray-700 font-semibold"
+                                            >{translatePageText("Đóng")}</button>
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={handleCloseModal}
+                                            className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 font-semibold"
+                                        >{translatePageText("Hủy")}</button>
+                                        <button
+                                            type="submit"
+                                            disabled={busy || workflowBusy || (!confirmedIngredients.length || !recipePreview)}
+                                            className="px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 font-semibold disabled:opacity-50"
+                                        >{busy
+                                            ? translatePageText("Đang tạo phiên bản còn lại của món ăn")
+                                            : translatePageText("Tạo món")}</button>
+                                    </>
+                                )}
                             </div>
                         </form>
                     </div>
