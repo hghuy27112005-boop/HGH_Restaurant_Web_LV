@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { dishAPI, recommendationAPI, dishCustomizationAPI, cartAPI } from '../../services/api';
-import { Loading, ErrorMessage, EmptyState, Button, Modal } from '../../components/Shared';
+import { Loading, ErrorMessage, EmptyState, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from './DishDetailPage';
@@ -14,6 +15,7 @@ import i18n from '../../i18n';
 const MAX_ORDER_QTY = 50;
 
 const MenuPage = () => {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const location = useLocation();
     const { isAuthenticated } = useAuthContext();
@@ -42,15 +44,11 @@ const MenuPage = () => {
     const [selectedRecipeOptions, setSelectedRecipeOptions] = useState([]);
     const [selectedCustomization, setSelectedCustomization] = useState(null);
 
-    // Recommendation states
+    // Name-based AI recommendation states
     const [recommendedDishes, setRecommendedDishes] = useState([]);
-    const [recommendStatus, setRecommendStatus] = useState(null); // { has_favorites, skipped_modal }
+    const [recommendationName, setRecommendationName] = useState('');
     const [recommendLoading, setRecommendLoading] = useState(false);
-    const [isRecommendModalOpen, setIsRecommendModalOpen] = useState(false);
-    const [modalSelections, setModalSelections] = useState([]); // mảng dish_id theo đúng thứ tự bấm
-    const [favoriteDishIds, setFavoriteDishIds] = useState([]);
-    const [showFavoritesSection, setShowFavoritesSection] = useState(false); // collapse mặc định
-    const [showRecommendedSection, setShowRecommendedSection] = useState(true); // expand mặc định
+    const [recommendationError, setRecommendationError] = useState('');
 
     useEffect(() => {
         fetchDishes();
@@ -71,78 +69,23 @@ const MenuPage = () => {
         filterDishes();
     }, [submittedSearch, selectedType, dishes]);
 
-    useEffect(() => {
-        if (selectedType === 'recommended') {
-            loadRecommendations();
+    const handleRecommendationSubmit = async (event) => {
+        event.preventDefault();
+        const name = recommendationName.trim();
+        if (!name) {
+            setRecommendationError('menuRecommend.errorNameRequired');
+            return;
         }
-    }, [selectedType]);
-
-    const loadRecommendations = async () => {
+        setRecommendLoading(true);
+        setRecommendationError('');
         try {
-            setRecommendLoading(true);
-            const statusRes = await recommendationAPI.getStatus();
-            const status = statusRes.data;
-            setRecommendStatus(status);
-            setFavoriteDishIds(status.favorite_dish_ids || []);
-
-            if (!status.has_favorites) {
-                setRecommendedDishes([]);
-                if (!status.skipped_modal) {
-                    openRecommendModal();
-                }
-                return;
-            }
-
-            const listRes = await recommendationAPI.getRecommendations();
-            const items = listRes.data?.data || listRes.data || [];
-            setRecommendedDishes(items);
-        } catch (err) {
-            console.error('Lỗi tải danh sách đề xuất:', err);
+            const response = await recommendationAPI.getRecommendations(name);
+            setRecommendedDishes(response.data?.data || []);
+        } catch (recommendError) {
+            setRecommendationError('menuRecommend.errorUnavailable');
+            setRecommendedDishes([]);
         } finally {
             setRecommendLoading(false);
-        }
-    };
-
-    const favoriteDishes = favoriteDishIds
-        .map(id => dishes.find(d => d.dish_id === id))
-        .filter(Boolean);
-
-    const openRecommendModal = () => {
-        setModalSelections([]);
-        setIsRecommendModalOpen(true);
-    };
-
-    const toggleModalSelection = (dishId) => {
-        setModalSelections(prev => {
-            if (prev.includes(dishId)) {
-                return prev.filter(id => id !== dishId);
-            }
-            if (prev.length >= 8) {
-                setErrorMessage(translatePageText("Chỉ được chọn tối đa 8 món"));
-                return prev;
-            }
-            return [...prev, dishId];
-        });
-    };
-
-    const handleSkipRecommendModal = async () => {
-        setIsRecommendModalOpen(false);
-        try {
-            await recommendationAPI.skipModal();
-            setRecommendStatus(prev => ({ ...(prev || {}), skipped_modal: true }));
-        } catch (err) {
-            console.error('Lỗi đánh dấu bỏ qua modal:', err);
-        }
-    };
-
-    const handleConfirmRecommendModal = async () => {
-        try {
-            await recommendationAPI.submitFavorites(modalSelections);
-            setIsRecommendModalOpen(false);
-            loadRecommendations();
-        } catch (err) {
-            setErrorMessage(translatePageText("Lỗi khi lưu món yêu thích, vui lòng thử lại"));
-            console.error(err);
         }
     };
 
@@ -307,6 +250,7 @@ const MenuPage = () => {
                 price: selectedDish.price,
                 quantity: qty,
                 image_url: selectedDish.image_url,
+                dish_name_en: selectedDish.dish_name_en ?? null,
                 customization_id: selectedCustomization?.dish_customization_id ?? null,
                 customization_name: selectedCustomization?.recipe_name ?? null,
                 ingredients: selectedCustomization?.ingredients ?? null,
@@ -422,7 +366,7 @@ const MenuPage = () => {
                             >
                                 <option value="">{translatePageText("Tất cả loại")}</option>
                                 <option value="bestseller">{translatePageText("⭐ Bestseller")}</option>
-                                <option value="recommended">{translatePageText("🎯 Đề xuất cho bạn")}</option>
+                                <option value="recommended">{t('menuRecommend.optionLabel')}</option>
                                 {types.map(type => (
                                     <option key={type.type_id} value={type.type_id}>
                                         {translatePageText(type.type_name)}
@@ -435,108 +379,46 @@ const MenuPage = () => {
 
                 {/* Dishes Grid */}
                 {selectedType === 'recommended' ? (
-                    recommendLoading ? (
-                        <Loading />
-                    ) : recommendedDishes.length === 0 && favoriteDishes.length === 0 ? (
-                        <EmptyState
-                            icon="🎯"
-                            title={translatePageText("Chưa có món đề xuất")}
-                            description={translatePageText("Chọn vài món bạn thích để AI gợi ý món phù hợp")}
-                            action={
-                                <Button onClick={openRecommendModal}>{translatePageText("Chọn món yêu thích")}</Button>
-                            }
-                        />
-                    ) : (
-                        <>
-                            {/* Mục: Các món ăn yêu thích */}
-                            <div className="mb-6">
-                                <button
-                                    onClick={() => setShowFavoritesSection(prev => !prev)}
-                                    className="w-full flex items-center justify-start gap-3 text-left py-2 mb-4"
-                                >
-                                    <h2 className="text-xl font-bold text-red-600">{translatePageText("Các món ăn yêu thích")}</h2>
-                                    <span className="text-red-600 text-lg">{showFavoritesSection ? '▲' : '▼'}</span>
-                                </button>
-                                {showFavoritesSection && (
-                                    favoriteDishes.length === 0 ? (
-                                        <p className="text-gray-500 text-sm">{translatePageText("Chưa có món yêu thích nào.")}</p>
-                                    ) : (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {favoriteDishes.map(dish => (
-                                                <div key={dish.dish_id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
-                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={translateDishName(dish)} className="w-full h-44 sm:h-48 object-cover cursor-pointer" />
-                                                    <div className="p-4 flex flex-col flex-grow">
-                                                        <h3 className="font-semibold text-lg text-gray-800 mb-1">{translateDishName(dish)}</h3>
-                                                        <p className="text-red-600 font-bold text-xl mb-3">
-                                                            {Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
-                                                        <div className="mb-3 flex items-center justify-end">
-                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">{translatePageText("Xem chi tiết món") + " "}</button>
-                                                        </div>
-                                                        <div className="mt-auto grid grid-cols-2 gap-2">
-                                                            <button
-                                                                onClick={() => handleAddToCart(dish, 'mang-ve')}
-                                                                className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                                            >{translatePageText("Đặt Ship") + " "}</button>
-                                                            <button
-                                                                onClick={() => handleAddToCart(dish, 'dat-ban')}
-                                                                className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                                            >{translatePageText("Đặt Bàn") + " "}</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
+                    <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+                        <form onSubmit={handleRecommendationSubmit} className="flex flex-col gap-3 sm:flex-row">
+                            <input
+                                value={recommendationName}
+                                onChange={(event) => setRecommendationName(event.target.value)}
+                                maxLength={255}
+                                placeholder={t('menuRecommend.placeholder')}
+                                className="min-w-0 flex-1 rounded border border-gray-300 px-4 py-2 focus:border-red-600 focus:outline-none"
+                            />
+                            <button
+                                type="submit"
+                                disabled={recommendLoading}
+                                className="rounded bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                            >{recommendLoading ? t('menuRecommend.searching') : t('menuRecommend.submit')}</button>
+                        </form>
+                        {recommendationError && <p role="alert" className="mt-3 text-sm text-red-600">{t(recommendationError)}</p>}
+                        {recommendLoading ? <div className="mt-5"><Loading /></div> : recommendedDishes.length === 0 ? (
+                            <EmptyState
+                                icon="🍽️"
+                                title={t(recommendationName ? 'menuRecommend.emptyTitleNotFound' : 'menuRecommend.emptyTitleNoName')}
+                                description={t('menuRecommend.emptyDescription')}
+                            />
+                        ) : (
+                            <div className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                                {recommendedDishes.map((dish) => (
+                                    <div key={dish.dish_id} className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                                        <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={translateDishName(dish)} className="h-44 w-full cursor-pointer object-cover" />
+                                        <div className="flex flex-grow flex-col p-4">
+                                            <h3 className="mb-1 text-lg font-semibold text-gray-800">{translateDishName(dish)}</h3>
+                                            <p className="mb-3 text-xl font-bold text-red-600">{Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ")}</p>
+                                            <div className="mt-auto flex gap-2">
+                                                <button onClick={() => handleAddToCart(dish, 'mang-ve')} className="flex-1 rounded border border-red-600 px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-600 hover:text-white">{translatePageText("Đặt Ship")}</button>
+                                                <button onClick={() => handleAddToCart(dish, 'dat-ban')} className="flex-1 rounded border border-red-600 px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-600 hover:text-white">{translatePageText("Đặt Bàn")}</button>
+                                            </div>
                                         </div>
-                                    )
-                                )}
+                                    </div>
+                                ))}
                             </div>
-
-                            {/* Mục: Các món ăn được đề xuất */}
-                            <div className="mb-6">
-                                <button
-                                    onClick={() => setShowRecommendedSection(prev => !prev)}
-                                    className="w-full flex items-center justify-start gap-3 text-left py-2 mb-4"
-                                >
-                                    <h2 className="text-xl font-bold text-red-600">{translatePageText("Các món ăn được đề xuất")}</h2>
-                                    <span className="text-red-600 text-lg">{showRecommendedSection ? '▲' : '▼'}</span>
-                                </button>
-                                {showRecommendedSection && (
-                                    recommendedDishes.length === 0 ? (
-                                        <p className="text-gray-500 text-sm">{translatePageText("Chưa đủ dữ liệu để đề xuất món phù hợp.")}</p>
-                                    ) : (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                            {recommendedDishes.map(dish => (
-                                                <div key={dish.dish_id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow flex flex-col h-full">
-                                                    <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={translateDishName(dish)} className="w-full h-44 sm:h-48 object-cover cursor-pointer" />
-                                                    <div className="p-4 flex flex-col flex-grow">
-                                                        <h3 className="font-semibold text-lg text-gray-800 mb-1">{translateDishName(dish)}</h3>
-                                                        <p className="text-red-600 font-bold text-xl mb-3">
-                                                            {Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
-                                                        <div className="mb-3 flex items-center justify-end">
-                                                            <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">{translatePageText("Xem chi tiết món") + " "}</button>
-                                                        </div>
-                                                        <div className="mt-auto grid grid-cols-2 gap-2">
-                                                            <button
-                                                                onClick={() => handleAddToCart(dish, 'mang-ve')}
-                                                                className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                                            >{translatePageText("Đặt Ship") + " "}</button>
-                                                            <button
-                                                                onClick={() => handleAddToCart(dish, 'dat-ban')}
-                                                                className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                                            >{translatePageText("Đặt Bàn") + " "}</button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )
-                                )}
-                            </div>
-
-                            <div className="text-center mt-6">
-                                <Button variant="primary" onClick={openRecommendModal}>{translatePageText("Chọn lại món yêu thích") + " "}</Button>
-                            </div>
-                        </>
-                    )
+                        )}
+                    </section>
                 ) : filteredDishes.length === 0 ? (
                     <EmptyState
                         icon="🔍"
@@ -705,43 +587,6 @@ const MenuPage = () => {
                 <p className="text-gray-700">{errorMessage}</p>
             </Modal>
 
-            {/* Recommendation Selection Modal */}
-            <Modal
-                isOpen={isRecommendModalOpen}
-                title={translatePageText("Chọn món yêu thích")}
-                titleClassName="text-red-600"
-                onClose={handleSkipRecommendModal}
-                onConfirm={handleConfirmRecommendModal}
-                confirmText="Xác nhận"
-                cancelText="Quay lại"
-            >
-                <div className="flex flex-col gap-4">
-                    <p className="text-sm text-gray-600">{translatePageText("Vui lòng chọn các món yêu thích theo thứ tự giảm dần (không bắt buộc chọn hết, tối đa 8 món).") + " "}</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto">
-                        {dishes.map(dish => {
-                            const order = modalSelections.indexOf(dish.dish_id);
-                            const isSelected = order !== -1;
-                            return (
-                                <div
-                                    key={dish.dish_id}
-                                    onClick={() => toggleModalSelection(dish.dish_id)}
-                                    className={`relative cursor-pointer rounded-lg border-2 overflow-hidden transition ${
-                                        isSelected ? 'border-red-600' : 'border-transparent hover:border-gray-300'
-                                    }`}
-                                >
-                                    <img src={dish.image_url} alt={translateDishName(dish)} className="w-full h-20 object-cover" />
-                                    <p className="text-xs p-1 truncate">{translateDishName(dish)}</p>
-                                    {isSelected && (
-                                        <span className="absolute top-1 right-1 bg-red-600 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                                            {order + 1}
-                                        </span>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </Modal>
         </div>
         </>
     );

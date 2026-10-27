@@ -4,12 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Dish;
 use App\Models\DishCustomization;
-use App\Models\DishSimilarity;
-use App\Models\FavoriteDish;
 use App\Models\DishType;
-use App\Models\IngredientStock;
+use App\Models\RecommendationExclusion;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class CustomRecipeOrderVariantTest extends TestCase
@@ -22,13 +21,17 @@ class CustomRecipeOrderVariantTest extends TestCase
         $dishType = DishType::create(['type_name' => 'Món chính']);
         $dish = Dish::create([
             'dish_name' => 'Phở bò',
+            'dish_name_en' => 'Beef Pho',
             'type_id' => $dishType->type_id,
             'image_url' => 'pho-bo.jpg',
             'price' => 50000,
             'is_bestseller' => false,
             'is_active' => true,
+            'ingredients' => 'bò, hành, nước dùng',
+            'ingredients_en' => 'beef, onion, broth',
+            'recipe_instructions' => 'nấu',
+            'recipe_instructions_en' => 'cook',
         ]);
-        $dish->forceFill(['ingredients' => 'bò, hành, nước dùng'])->save();
 
         $customization = DishCustomization::create([
             'user_id' => $user->user_id,
@@ -61,56 +64,63 @@ class CustomRecipeOrderVariantTest extends TestCase
         $this->assertTrue(true);
     }
 
-    public function test_recommendations_return_similar_dish_without_quantity_left(): void
+    public function test_recommendations_use_name_and_exclude_low_rated_dishes(): void
     {
         /** @var User $user */
         $user = User::factory()->create();
         $dishType = DishType::create(['type_name' => 'Món chính']);
-        $favorite = Dish::create([
-            'dish_name' => 'Món yêu thích',
+        $excluded = Dish::create([
+            'dish_name' => 'Súp cua bị chê',
+            'dish_name_en' => 'Poorly rated crab soup',
             'type_id' => $dishType->type_id,
-            'image_url' => 'favorite.jpg',
+            'image_url' => 'excluded.jpg',
             'price' => 50000,
             'is_bestseller' => false,
             'is_active' => true,
+            'ingredients' => 'cua',
+            'ingredients_en' => 'crab',
+            'recipe_instructions' => 'nấu',
+            'recipe_instructions_en' => 'cook',
         ]);
         $recommended = Dish::create([
-            'dish_name' => 'Món được đề xuất',
+            'dish_name' => 'Súp cua',
+            'dish_name_en' => 'Crab soup',
             'type_id' => $dishType->type_id,
             'image_url' => 'recommended.jpg',
             'price' => 50000,
             'is_bestseller' => false,
             'is_active' => true,
+            'ingredients' => 'cua',
+            'ingredients_en' => 'crab',
+            'recipe_instructions' => 'nấu',
+            'recipe_instructions_en' => 'cook',
         ]);
-        $recommended->forceFill(['ingredients' => 'bò, hành'])->save();
 
-        FavoriteDish::create([
+        RecommendationExclusion::create([
             'user_id' => $user->user_id,
-            'dish_id' => $favorite->dish_id,
-            'pick_order' => 1,
-            'updated_at' => now(),
-        ]);
-        DishSimilarity::create([
-            'dish_id_1' => $favorite->dish_id,
-            'dish_id_2' => $recommended->dish_id,
-            'similarity_score' => 0.9,
+            'dish_id' => $excluded->dish_id,
         ]);
 
-        foreach ([['bò', 12], ['hành', 3]] as [$ingredient, $quantity]) {
-            IngredientStock::create([
-                'ingredient_key' => $ingredient,
-                'ingredient_name' => $ingredient,
-                'stock_date' => now()->toDateString(),
-                'quantity_start' => 50,
-                'quantity_left' => $quantity,
-                'refill_count' => 0,
-            ]);
-        }
+        Http::fake([
+            '*' => Http::response([
+                'candidates' => [[
+                    'content' => [
+                        'parts' => [
+                            ['text' => json_encode(['dish_ids' => [$recommended->dish_id]])],
+                        ],
+                    ],
+                ]],
+            ], 200),
+        ]);
 
-        $response = $this->actingAs($user)->getJson('/api/recommendations');
+        $response = $this->actingAs($user)->postJson('/api/recommendations', ['name' => 'súp cua']);
 
         $response->assertOk();
         $response->assertJsonPath('data.0.dish_id', $recommended->dish_id);
-        $response->assertJsonMissingPath('data.0.quantity_left');
+        Http::assertSent(function (\Illuminate\Http\Client\Request $request) use ($excluded, $recommended): bool {
+            $prompt = json_encode($request->data(), JSON_UNESCAPED_UNICODE);
+            return str_contains($prompt, $recommended->dish_name)
+                && !str_contains($prompt, $excluded->dish_name);
+        });
     }
 }

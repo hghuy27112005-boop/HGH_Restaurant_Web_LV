@@ -14,12 +14,6 @@ const chatbotCustomerScripts = {
     options: [
       { id: "order_food", label: "Đặt món", intent: "Khách muốn đặt món ăn, đặt bàn hoặc đặt ship" },
       {
-        id: "recommend_food",
-        label: "Đề xuất món ăn",
-        intent: "Khách muốn xem các món ăn được gợi ý dựa trên món yêu thích của khách",
-        action: { type: "navigate", path: "/menu", state: { filter: "recommended" } },
-      },
-      {
         id: "modify_dish",
         label: "Sửa đổi món ăn",
         intent: "Khách muốn biết cách bỏ bớt nguyên liệu không thích để tạo công thức riêng cho món ăn",
@@ -38,14 +32,6 @@ const chatbotCustomerScripts = {
         action: { type: "navigate", path: "/profile" },
       },
       { id: "logout", label: "Đăng xuất", intent: "Khách muốn đăng xuất khỏi tài khoản" },
-    ],
-  },
-
-  recommend_food: {
-    intentSummary:
-      "Đã đưa bạn tới mục Đề xuất cho bạn trên trang thực đơn.",
-    options: [
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
