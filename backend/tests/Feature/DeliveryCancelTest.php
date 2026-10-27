@@ -32,6 +32,7 @@ class DeliveryCancelTest extends TestCase
             'address' => 'Địa chỉ thử',
             'D_payment_status' => 'paid',
             'delivery_status' => $deliveryStatus,
+            'cooking_at' => now()->addHour(),
         ]);
 
         Bill::create([

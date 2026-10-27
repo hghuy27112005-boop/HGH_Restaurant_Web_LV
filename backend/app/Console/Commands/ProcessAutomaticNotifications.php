@@ -27,6 +27,7 @@ class ProcessAutomaticNotifications extends Command
         Delivery::autoCompleteExpired();
         Delivery::autoStartReady();
         \App\Models\Stock::deductDueBookings();
+        BookingTable::autoCompleteStarted();
         $this->sendUnlockNotifications($notifications);
 
         return self::SUCCESS;

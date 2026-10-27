@@ -35,11 +35,16 @@ class BookingFlowTest extends TestCase
         $dishType = DishType::create(['type_name' => 'Món chính']);
         $this->dish = Dish::create([
             'dish_name' => 'Món thử',
+            'dish_name_en' => 'Test dish',
             'type_id' => $dishType->type_id,
             'image_url' => 'thu.jpg',
             'price' => 30000,
             'is_bestseller' => false,
             'is_active' => true,
+            'ingredients' => 'nguyên liệu',
+            'ingredients_en' => 'ingredient',
+            'recipe_instructions' => 'Nấu món ăn.',
+            'recipe_instructions_en' => 'Cook the dish.',
         ]);
     }
 
