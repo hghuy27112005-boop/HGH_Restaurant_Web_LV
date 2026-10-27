@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Dish;
+use App\Models\DishIngredientRule;
+use App\Models\Ingredient;
 use App\Models\IngredientStock;
 use App\Models\IngredientStockTransaction;
 use App\Models\IngredientReservation;
@@ -13,25 +14,40 @@ use Illuminate\Http\Request;
 class Admin_StockController extends Controller
 {
     /**
-     * Lấy kho nguyên liệu theo ngày. Mỗi nguyên liệu được suy ra động từ
-     * ingredients của toàn bộ món ăn nên món mới seed vào cũng tự xuất hiện.
+     * Lấy kho nguyên liệu theo ngày từ món ăn và danh mục đồ ăn kèm đang hoạt động.
      */
     public function ingredientsByDate(Request $request)
     {
         $date = $request->get('date', now()->format('Y-m-d'));
-        $names = [];
+        $ingredientIds = DishIngredientRule::query()
+            ->distinct()
+            ->pluck('ingredient_id')
+            ->merge(
+                Ingredient::query()->where('is_add_on', true)->pluck('ingredient_id')
+            )
+            ->unique()
+            ->values();
 
-        Dish::query()->orderBy('dish_id')->pluck('ingredients')->each(function ($ingredients) use (&$names) {
-            foreach (explode(',', (string) $ingredients) as $ingredient) {
-                $name = trim($ingredient);
-                if ($name !== '') {
-                    $names[IngredientStock::keyFor($name)] = $name;
-                }
-            }
-        });
+        $ingredients = Ingredient::query()
+            ->where('is_active', true)
+            ->whereIn('ingredient_id', $ingredientIds)
+            ->orderBy('ingredient_id')
+            ->get();
 
-        $stocks = collect($names)->map(function ($name) use ($date) {
-            return IngredientStock::getOrCreateForDate($name, $date);
+        $stocks = $ingredients->map(function (Ingredient $ingredient) use ($date): IngredientStock {
+            $stockName = trim((string) ($ingredient->ingredient_name ?: $ingredient->ingredient_name_vi));
+
+            return IngredientStock::firstOrCreate(
+                ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date],
+                [
+                    'ingredient_key' => $ingredient->ingredient_key,
+                    'ingredient_name' => $stockName,
+                    'quantity_start' => 50,
+                    'quantity_left' => 50,
+                    'refill_count' => 0,
+                ]
+            )->setAttribute('ingredient_name_en', $ingredient->ingredient_name)
+                ->setAttribute('ingredient_name_vi', $ingredient->ingredient_name_vi);
         })->values();
 
         $reservedByIngredient = IngredientReservation::where('stock_date', $date)
@@ -63,7 +79,7 @@ class Admin_StockController extends Controller
     public function ingredientHistory(Request $request)
     {
         $date = $request->get('date');
-        $query = IngredientStockTransaction::with(['stock', 'order.user', 'order.bill', 'order.items.dish'])
+        $query = IngredientStockTransaction::with(['stock.ingredient', 'order.user', 'order.bill', 'order.items.dish'])
             ->orderByDesc('created_at');
 
         if ($date) {
@@ -86,6 +102,7 @@ class Admin_StockController extends Controller
                 'items' => $order->items->map(fn ($item) => [
                     'dish_id' => $item->dish_id,
                     'dish_name' => $item->dish?->dish_name,
+                    'dish_name_en' => $item->dish?->dish_name_en,
                     'customization_id' => $item->customization_id,
                     'customization_name' => $item->customization_name,
                     'removed_ingredients' => $item->removed_ingredients ?? [],
@@ -93,6 +110,8 @@ class Admin_StockController extends Controller
                 ])->values(),
                 'ingredients' => $transactions->map(fn ($transaction) => [
                     'ingredient_name' => $transaction->ingredient_name,
+                    'ingredient_name_en' => $transaction->stock?->ingredient?->ingredient_name,
+                    'ingredient_name_vi' => $transaction->stock?->ingredient?->ingredient_name_vi,
                     'quantity_before' => $transaction->quantity_before,
                     'quantity_deducted' => $transaction->quantity_deducted,
                     'quantity_after' => $transaction->quantity_after,

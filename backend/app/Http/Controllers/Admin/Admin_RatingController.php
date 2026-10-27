@@ -60,6 +60,7 @@ class Admin_RatingController extends Controller
             'dish' => [
                 'dish_id' => $dish->dish_id,
                 'dish_name' => $dish->dish_name,
+                'dish_name_en' => $dish->dish_name_en,
             ],
             'review_count' => (int) $summary->review_count,
             'avg_rating' => $summary->review_count > 0 ? round((float) $summary->avg_rating, 1) : null,

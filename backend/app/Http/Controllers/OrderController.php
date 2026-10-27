@@ -358,6 +358,7 @@ class OrderController extends Controller
                 'items' => $order->items->map(fn ($item) => [
                     'dish_id'    => $item->dish_id,
                     'dish_name'  => $item->dish?->dish_name,
+                    'dish_name_en' => $item->dish?->dish_name_en,
                     'customization_id' => $item->customization_id,
                     'customization_name' => $item->customization_name,
                     'quantity'   => $item->quantity,

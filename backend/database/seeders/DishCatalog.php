@@ -114,7 +114,7 @@ return [
     [
         'dish_id' => 6,
         'dish_name' => 'Lagu gà',
-        'dish_name_en' => 'Chicken Stew / Chicken Lagu',
+        'dish_name_en' => 'Chicken Lagu',
         'type_id' => 5,
         'image_url' => '6.jpg',
         'price' => 30000,

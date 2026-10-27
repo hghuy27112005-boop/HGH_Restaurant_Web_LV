@@ -429,6 +429,7 @@ const DishDetailPage = () => {
             price: selectedDish.price,
             quantity: qty,
             image_url: selectedDish.image_url,
+            dish_name_en: selectedDish.dish_name_en ?? null,
             customization_id: selectedCustomization?.dish_customization_id ?? null,
             customization_name: selectedCustomization?.recipe_name ?? null,
             ingredients: selectedCustomization?.ingredients ?? null,

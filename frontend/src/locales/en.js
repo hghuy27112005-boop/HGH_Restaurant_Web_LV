@@ -59,6 +59,20 @@ const en = {
         markReadError: 'Could not update notification status.',
         markAllReadError: 'Could not mark notifications as read.',
     },
+    menuRecommend: {
+        optionLabel: '🎯 Recommend by dish name',
+        placeholder: 'Enter a dish name or what you feel like eating',
+        searching: 'Finding suitable dishes...',
+        submit: 'Suggest dishes',
+        emptyTitleNoName: 'Enter a dish name to get suggestions',
+        emptyTitleNotFound: 'No suitable dish found',
+        emptyDescription: 'AI suggests up to 6 dishes from the menu based on the name you enter.',
+        errorNameRequired: 'Please enter the name of the dish you want suggestions for.',
+        errorUnavailable: 'Could not suggest dishes right now. Please try again.',
+    },
+    adminStock: {
+        restockNeeded: 'Restock needed',
+    },
     dishDetail: {
         noReviews: 'No reviews yet',
     },

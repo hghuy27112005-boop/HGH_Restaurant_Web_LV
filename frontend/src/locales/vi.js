@@ -59,6 +59,20 @@ const vi = {
         markReadError: 'Không thể cập nhật trạng thái thông báo.',
         markAllReadError: 'Không thể đánh dấu đã đọc.',
     },
+    menuRecommend: {
+        optionLabel: '🎯 Đề xuất theo tên món',
+        placeholder: 'Nhập tên món hoặc món ăn bạn đang muốn',
+        searching: 'Đang tìm món phù hợp...',
+        submit: 'Gợi ý món ăn',
+        emptyTitleNoName: 'Nhập tên món để nhận gợi ý',
+        emptyTitleNotFound: 'Chưa tìm thấy món phù hợp',
+        emptyDescription: 'AI sẽ gợi ý tối đa 6 món trong thực đơn dựa trên tên bạn nhập.',
+        errorNameRequired: 'Vui lòng nhập tên món muốn gợi ý.',
+        errorUnavailable: 'Không thể gợi ý món lúc này. Vui lòng thử lại.',
+    },
+    adminStock: {
+        restockNeeded: 'Cần nhập thêm hàng',
+    },
     dishDetail: {
         noReviews: 'Chưa có đánh giá',
     },

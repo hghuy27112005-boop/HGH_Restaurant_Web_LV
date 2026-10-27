@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import axiosInstance from '../../services/api';
 import { TableLoading, Card, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
@@ -29,6 +30,8 @@ const getLevel = (item) => {
 };
 
 const AdminStockPage = () => {
+    const { t, i18n } = useTranslation();
+    const isEnglish = i18n.resolvedLanguage?.startsWith('en');
     const [stocks, setStocks] = useState([]);
     const [history, setHistory] = useState([]);
     const [view, setView] = useState('stocks');
@@ -79,8 +82,11 @@ const AdminStockPage = () => {
         if (searchTerm.trim()) {
             const keyword = normalize(searchTerm.trim());
             list = list.filter(s => {
-                const raw = s.ingredient_name || '';
-                return normalize(raw).includes(keyword) || normalize(translateIngredients(raw)).includes(keyword);
+                const names = [s.ingredient_name_en, s.ingredient_name_vi, s.ingredient_name]
+                    .filter(Boolean);
+                return names.some((name) =>
+                    normalize(name).includes(keyword) || normalize(translateIngredients(name)).includes(keyword)
+                );
             });
         }
         const byCode = (first, second) => first.ingredient_id - second.ingredient_id;
@@ -94,6 +100,11 @@ const AdminStockPage = () => {
     const lowStockCount = stocks.filter(s => s.quantity_left <= LOW_LIMIT).length;
     const outOfStockCount = stocks.filter(isOutOfStock).length;
     const filtered = getFiltered();
+    const stockCodeByStockId = new Map(
+        [...stocks]
+            .sort((first, second) => first.ingredient_id - second.ingredient_id)
+            .map((stock, index) => [stock.ingredient_stock_id, index + 1])
+    );
 
     const formatOrderItemName = (item) => {
         const removedIngredients = Array.isArray(item.removed_ingredients)
@@ -145,7 +156,7 @@ const AdminStockPage = () => {
                 {view === 'stocks' && (
                     <>
                         <div className="flex gap-2">
-                            {[['all', translatePageText("Tất cả")], ['low', `Cần nhập thêm hàng (${lowStockCount})`]].map(([key, label]) => (
+                            {[['all', translatePageText("Tất cả")], ['low', `${t('adminStock.restockNeeded')} (${lowStockCount})`]].map(([key, label]) => (
                                 <button key={key} onClick={() => setFilter(key)} className={chipClass(filter === key)}>
                                     {label}
                                 </button>
@@ -199,6 +210,10 @@ const AdminStockPage = () => {
                         <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                             {filtered.map(item => {
                                 const level = getLevel(item);
+                                const ingredientName = (isEnglish
+                                    ? item.ingredient_name_en
+                                    : item.ingredient_name_vi
+                                ) || item.ingredient_name;
                                 return (
                                     <div
                                         key={item.ingredient_stock_id}
@@ -206,9 +221,9 @@ const AdminStockPage = () => {
                                     >
                                         <div className={`w-1.5 flex-shrink-0 ${level.bar}`}></div>
                                         <div className="flex-1 min-w-0 px-3 py-2">
-                                            <p className="font-mono text-[11px] text-gray-400">{item.ingredient_id}</p>
-                                            <p className="font-semibold text-gray-800 truncate" title={item.ingredient_name ? translateIngredients(item.ingredient_name) : ''}>
-                                                {item.ingredient_name ? translateIngredients(item.ingredient_name) : 'N/A'}
+                                            <p className="font-mono text-[11px] text-gray-400">{stockCodeByStockId.get(item.ingredient_stock_id)}</p>
+                                            <p className="font-semibold text-gray-800 truncate" title={ingredientName || ''}>
+                                                {ingredientName || 'N/A'}
                                             </p>
                                             <p className={`text-xl font-bold leading-tight ${level.text}`}>
                                                 {item.quantity_left} / {item.quantity_start}
@@ -254,9 +269,12 @@ const AdminStockPage = () => {
                                         <thead className="bg-red-600 text-white">
                                             <tr>
                                                 <th className="border border-black px-3 py-2 text-left">{translatePageText("Trạng thái")}</th>
-                                                {order.ingredients.map((item) => (
-                                                    <th key={item.ingredient_name} className="border border-black px-3 py-2 text-center">
-                                                        {translateIngredients(item.ingredient_name)}
+                                                {order.ingredients.map((item, index) => (
+                                                    <th key={index} className="border border-black px-3 py-2 text-center">
+                                                        {(isEnglish
+                                                            ? item.ingredient_name_en
+                                                            : item.ingredient_name_vi
+                                                        ) || item.ingredient_name}
                                                     </th>
                                                 ))}
                                             </tr>
@@ -264,15 +282,15 @@ const AdminStockPage = () => {
                                         <tbody>
                                             <tr>
                                                 <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng trước khi đặt")}</th>
-                                                {order.ingredients.map((item) => <td key={`before-${item.ingredient_name}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_before}</td>)}
+                                                {order.ingredients.map((item, index) => <td key={`before-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_before}</td>)}
                                             </tr>
                                             <tr>
                                                 <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng đã trừ")}</th>
-                                                {order.ingredients.map((item) => <td key={`deducted-${item.ingredient_name}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_deducted}</td>)}
+                                                {order.ingredients.map((item, index) => <td key={`deducted-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_deducted}</td>)}
                                             </tr>
                                             <tr>
                                                 <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng còn lại")}</th>
-                                                {order.ingredients.map((item) => <td key={`after-${item.ingredient_name}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_after}</td>)}
+                                                {order.ingredients.map((item, index) => <td key={`after-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_after}</td>)}
                                             </tr>
                                         </tbody>
                                     </table>

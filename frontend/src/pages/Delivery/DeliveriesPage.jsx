@@ -186,7 +186,7 @@ const DeliveriesPage = () => {
 
         return (
             <>
-                <div>{translateDishName(dishName)}</div>
+                <div>{translateDishName(item.dish_name_en ? { dish_name: dishName, dish_name_en: item.dish_name_en } : dishName)}</div>
                 {customizationName && (
                     <div className="mt-1 text-xs text-gray-500">{translatePageText("Công thức thay thế:") + " "}{customizationName}</div>
                 )}
