@@ -4,8 +4,10 @@ import { authAPI } from '../../services/api';
 import { ErrorMessage, SuccessMessage } from '../../components/Shared';
 import { translatePageText } from '../../pageTextTranslations';
 
+import { API_BASE_URL } from '../../apiConfig';
+
 // Cùng ảnh nền với trang đăng nhập
-const AUTH_BACKGROUND = '/pics/30.jpg';
+const AUTH_BACKGROUND = `${API_BASE_URL}/dishes/00.jpg`;
 const OTP_SECONDS = 300; // khớp PasswordResetOtp::OTP_MINUTES (5 phút) ở backend
 
 const labelClass = 'block text-xs font-semibold text-white/90 mb-0.5';

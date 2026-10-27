@@ -7,8 +7,10 @@ import { useAuthContext } from '../../context/AuthContext';
 import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
 
+import { API_BASE_URL } from '../../apiConfig';
+
 // Ảnh nền của trang chủ: muốn đổi ảnh chỉ cần sửa dòng này
-const HOME_BACKGROUND = '/pics/30.jpg';
+const HOME_BACKGROUND = `${API_BASE_URL}/dishes/00.jpg`;
 
 // Tấm kính mờ dùng chung cho các vùng "nổi" trên nền (Giới thiệu, Bestsellers)
 const glassPanel = 'rounded-2xl border border-white/20 bg-black/40 shadow-2xl backdrop-blur-md';
@@ -90,7 +92,7 @@ export default function HomeApp() {
                                     className="rounded-2xl bg-white p-3 shadow-lg"
                                 >
                                     <img
-                                        src={dish.image_url || '/pics/01.jpg'}
+                                        src={dish.image_url}
                                         className="h-40 w-full rounded-xl object-cover sm:h-44"
                                         alt={translateDishName(dish)}
                                     />

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
 import { translatePageText } from '../../pageTextTranslations';
 
-const API_BASE = import.meta.env.VITE_API_URL || "/api";
+import { API_URL as API_BASE } from "../../apiConfig";
 
 function getToken() {
   return sessionStorage.getItem("auth_token") || "";

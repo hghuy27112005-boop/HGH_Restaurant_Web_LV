@@ -1,10 +1,9 @@
 import axios from 'axios';
 
-// Base API URL
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+import { API_URL } from '../apiConfig';
 
 const axiosInstance = axios.create({
-    baseURL: API_BASE_URL,
+    baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -116,13 +115,9 @@ export const dishCustomizationAPI = {
     preview: (dishId, data) => axiosInstance.post(`/dish-customizations/${dishId}/preview`, data),
 };
 
-// Recommendations API (AI gợi ý món dựa trên món yêu thích đã chọn)
+// Recommendations API (AI suggestions based on a customer-entered dish name)
 export const recommendationAPI = {
-    getStatus: () => axiosInstance.get('/recommendations/status'),
-    getRecommendations: () => axiosInstance.get('/recommendations'),
-    submitFavorites: (dishIds) =>
-        axiosInstance.post('/recommendations/favorites', { dish_ids: dishIds }),
-    skipModal: () => axiosInstance.post('/recommendations/skip'),
+    getRecommendations: (name) => axiosInstance.post('/recommendations', { name }),
 };
 
 // Ratings API (đánh giá dịch vụ - món ăn đã đặt)
@@ -197,6 +192,17 @@ export const adminAPI = {
     dishes: {
         // Lấy TOÀN BỘ món (kể cả đã ẩn) - chỉ dùng cho trang quản lý admin
         getAll: () => axiosInstance.get('/admin/dishes'),
+        analyzeIngredients: (formData) =>
+            axiosInstance.post('/admin/dishes/analyze-ingredients', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            }),
+        confirmIngredients: (ingredients, dishId = null, language = 'vi') =>
+            axiosInstance.post('/admin/dishes/confirm-ingredients', {
+                ingredients,
+                language,
+                ...(dishId ? { dish_id: dishId } : {}),
+            }),
+        previewRecipe: (data) => axiosInstance.post('/admin/dishes/preview-recipe', data),
         create: (formData) =>
             axiosInstance.post('/admin/dishes', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },

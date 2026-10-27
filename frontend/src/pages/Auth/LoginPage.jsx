@@ -3,8 +3,10 @@ import { useAuthContext } from '../../context/AuthContext';
 import { ErrorMessage, SuccessMessage, Modal } from '../../components/Shared';
 import { translatePageText } from '../../pageTextTranslations';
 
+import { API_BASE_URL } from '../../apiConfig';
+
 // Ảnh nền của trang đăng nhập/đăng ký: muốn đổi ảnh chỉ cần sửa dòng này
-const AUTH_BACKGROUND = '/pics/30.jpg';
+const AUTH_BACKGROUND = `${API_BASE_URL}/dishes/00.jpg`;
 
 // Kiểu dùng chung cho nhãn và ô nhập (ô nhập tab Đăng ký thấp hơn để form khỏi dài)
 const labelClass = 'block text-xs font-semibold text-white/90 mb-0.5';

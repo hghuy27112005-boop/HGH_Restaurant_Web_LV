@@ -34,7 +34,7 @@ class Dish extends Model
     public function getImageUrlAttribute($value)
     {
         if (!$value)
-            return asset('images/default-dish.png');
+            return asset('dishes/00.jpg');
         if (str_starts_with($value, 'http'))
             return $value;
         return asset('dishes/' . $value);
