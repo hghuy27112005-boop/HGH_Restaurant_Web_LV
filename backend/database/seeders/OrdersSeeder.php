@@ -86,14 +86,24 @@ class OrdersSeeder extends Seeder
                 }
                 $key = IngredientStock::keyFor($name);
                 if (!isset($ingredientIdByKey[$key])) {
-                    $newId = DB::table('ingredients')->insertGetId([
-                        'ingredient_key' => $key,
-                        'ingredient_name' => $name,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ], 'ingredient_id');
-                    $ingredientIdByKey[$key] = $newId;
-                    $ingredientNameById[$newId] = $name;
+                    $existingIngredientId = DB::table('ingredients')
+                        ->whereNotNull('ingredient_name_vi')
+                        ->whereRaw('LOWER(TRIM(ingredient_name_vi)) = ?', [mb_strtolower(trim($name), 'UTF-8')])
+                        ->value('ingredient_id');
+
+                    if ($existingIngredientId !== null) {
+                        $ingredientIdByKey[$key] = (int) $existingIngredientId;
+                    } else {
+                        $newId = DB::table('ingredients')->insertGetId([
+                            'ingredient_key' => $key,
+                            'ingredient_name_vi' => $name,
+                            'ingredient_name' => null,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ], 'ingredient_id');
+                        $ingredientIdByKey[$key] = $newId;
+                        $ingredientNameById[$newId] = $name;
+                    }
                 }
                 $ids[$ingredientIdByKey[$key]] = true;
             }

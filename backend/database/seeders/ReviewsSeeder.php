@@ -238,45 +238,28 @@ class ReviewsSeeder extends Seeder
             DB::table('reviews')->insert($chunk);
         }
 
-        // ===== 7) Tài khoản demo: dựng favorite_dishes / recommendation_exclusions theo luật thật =====
-        $demoIds = DB::table('users')->where('role', '<>', 'admin')->where('user_id', '>', 1000)->pluck('user_id')->all();
-        DB::table('favorite_dishes')->whereIn('user_id', $demoIds)->delete();
-        DB::table('recommendation_exclusions')->whereIn('user_id', $demoIds)->delete();
+        // Keep demo recommendation exclusions based on each user's latest rating.
+        $reviewerIds = DB::table('reviews')->distinct()->pluck('user_id')->all();
+        DB::table('recommendation_exclusions')->whereIn('user_id', $reviewerIds)->delete();
 
-        $favRows = [];
         $excRows = [];
-        foreach ($demoIds as $uid) {
+        foreach ($reviewerIds as $uid) {
             $userRatings = DB::table('reviews')->where('user_id', $uid)
                 ->orderBy('created_at')->orderBy('review_id')
                 ->get(['dish_id', 'rating', 'created_at']);
 
-            $fav = []; // [dish_id => ['rating' => sao, 'at' => thời điểm]]
-            $exc = []; // [dish_id => thời điểm bị loại lần đầu]
+            $exc = [];
             foreach ($userRatings as $rv) {
                 if ($rv->rating <= 3) {
-                    // Lần chấm gần nhất thắng: bị chê thì vào loại trừ và rời danh sách yêu thích
-                    $exc[$rv->dish_id] ??= $rv->created_at;
-                    unset($fav[$rv->dish_id]);
-                    continue;
-                }
-                unset($exc[$rv->dish_id]);
-                $fav[$rv->dish_id] = ['rating' => $rv->rating, 'at' => $rv->created_at];
-                if (count($fav) > 8) {
-                    // Giống promoteToFavorite: giữ 8 món mạnh nhất (sao cao trước, trùng sao thì mới hơn trước)
-                    uasort($fav, fn ($a, $b) => [$b['rating'], $b['at']] <=> [$a['rating'], $a['at']]);
-                    $fav = array_slice($fav, 0, 8, true);
+                    $exc[$rv->dish_id] = $rv->created_at;
+                } else {
+                    unset($exc[$rv->dish_id]);
                 }
             }
 
-            foreach ($fav as $dishId => $f) {
-                $favRows[] = ['user_id' => $uid, 'dish_id' => $dishId, 'rating_snapshot' => $f['rating'], 'pick_order' => null, 'updated_at' => $f['at']];
-            }
             foreach ($exc as $dishId => $at) {
                 $excRows[] = ['user_id' => $uid, 'dish_id' => $dishId, 'created_at' => $at];
             }
-        }
-        if ($favRows) {
-            DB::table('favorite_dishes')->insert($favRows);
         }
         if ($excRows) {
             DB::table('recommendation_exclusions')->insert($excRows);
