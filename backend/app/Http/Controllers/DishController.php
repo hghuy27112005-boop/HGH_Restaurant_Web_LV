@@ -537,6 +537,7 @@ class DishController extends Controller
 
         if (
             $language === 'en'
+            && $ingredient->ingredient_name
             && $ingredient->ingredient_name_vi
             && $this->normalizeIngredientName($ingredient->ingredient_name)
                 === $this->normalizeIngredientName($ingredient->ingredient_name_vi)

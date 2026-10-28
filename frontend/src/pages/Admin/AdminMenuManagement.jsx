@@ -5,6 +5,7 @@ import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
 import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
 import i18n from '../../i18n';
+import { useTranslation } from 'react-i18next';
 import { translateDishInstructions, translateIngredients } from '../Menu/DishDetailPage';
 
 import { API_BASE_URL } from '../../apiConfig';
@@ -62,6 +63,9 @@ const convertImageToJpeg = async (file) => {
 };
 
 const AdminMenuManagement = () => {
+    const { t } = useTranslation();
+    const renderMsg = (message) =>
+        typeof message === 'string' && message.startsWith('adminDish.') ? t(message) : message;
     const [dishes, setDishes] = useState([]);
     const [dishTypes, setDishTypes] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -282,7 +286,7 @@ const AdminMenuManagement = () => {
 
         setImageValidationError('');
         if (!file.type.startsWith("image/")) {
-            setImageValidationError(translatePageText("Vui lòng chọn một file ảnh hợp lệ!"));
+            setImageValidationError('adminDish.errImageInvalid');
             e.target.value = "";
             return;
         }
@@ -303,7 +307,7 @@ const AdminMenuManagement = () => {
             console.error('Image conversion failed:', error);
             setPreviewImage(null);
             e.target.value = '';
-            setImageValidationError(translatePageText("Không thể chuyển hình ảnh sang định dạng JPG. Vui lòng chọn ảnh khác."));
+            setImageValidationError('adminDish.errImageConvert');
         }
     };
 
@@ -313,15 +317,15 @@ const AdminMenuManagement = () => {
         if (editMode && !isEditing) return;
 
         if (!editMode && !selectedImage) {
-            setAlertMessage(translatePageText("Vui lòng tải lên một hình ảnh!"));
+            setAlertMessage('adminDish.errNeedImage');
             return;
         }
         if (!editMode && (!confirmedIngredients.length || !recipePreview)) {
-            setAlertMessage(translatePageText("Vui lòng nhận, xác nhận nguyên liệu và tạo công thức trước khi lưu món."));
+            setAlertMessage('adminDish.errNeedConfirm');
             return;
         }
         if (editMode && editRequiresReconfirmation) {
-            setAlertMessage(translatePageText("Vui lòng nhận và xác nhận lại nguyên liệu để tạo công thức trước khi lưu."));
+            setAlertMessage('adminDish.errNeedReconfirm');
             return;
         }
 
@@ -361,7 +365,7 @@ const AdminMenuManagement = () => {
 
             if (editMode) {
                 await adminAPI.dishes.update(selectedDishId, data);
-                setAlertMessage(translatePageText("Cập nhật món ăn thành công!"));
+                setAlertMessage('adminDish.updated');
                 setIsEditing(false);
                 setSelectedImage(null);
                 setDraftIngredients([]);
@@ -373,7 +377,7 @@ const AdminMenuManagement = () => {
                 fetchData();
             } else {
                 await adminAPI.dishes.create(data);
-                setAlertMessage(translatePageText("Thêm món ăn thành công!"));
+                setAlertMessage('adminDish.created');
                 setIsModalOpen(false);
                 setDraftIngredients([]);
                 setConfirmedIngredients([]);
@@ -383,9 +387,13 @@ const AdminMenuManagement = () => {
             }
         } catch (err) {
             console.error('Save dish error:', err.response?.data || err.message);
-            setAlertMessage(err.response?.data?.code === 'dish_name_invalid'
-                ? translatePageText("Tên món không hợp lệ hoặc không đúng ngôn ngữ đang chọn. Vui lòng nhập tên món bằng ngôn ngữ hiện tại.")
-                : err.response?.data?.message || translatePageText("Không thể lưu món ăn. Vui lòng thử lại."));
+            const code = err.response?.data?.code;
+            setAlertMessage(
+                code === 'dish_name_invalid' ? 'adminDish.nameInvalid'
+                : code === 'DISH_NAME_DUPLICATE' ? 'adminDish.nameDuplicate'
+                : code === 'TRANSLATION_UNAVAILABLE' ? 'adminDish.translationUnavailable'
+                : 'adminDish.saveFailed'
+            );
         } finally {
             setBusy(false);
         }
@@ -394,7 +402,7 @@ const AdminMenuManagement = () => {
     const handleAnalyzeIngredients = async () => {
         setImageValidationError('');
         if (!formData.dish_name.trim() || (!selectedImage && !editMode)) {
-            setImageValidationError(translatePageText("Vui lòng nhập tên món và tải hình ảnh trước."));
+            setImageValidationError('adminDish.errNeedNameAndImage');
             return;
         }
         if (editMode) setEditRequiresReconfirmation(true);
@@ -417,11 +425,11 @@ const AdminMenuManagement = () => {
             setRecipePreview(null);
         } catch (err) {
             if (err.response?.data?.code === 'dish_name_invalid') {
-                setImageValidationError(translatePageText("Tên món không hợp lệ hoặc không đúng ngôn ngữ đang chọn. Vui lòng nhập tên món bằng ngôn ngữ hiện tại."));
+                setImageValidationError('adminDish.nameInvalid');
             } else if (err.response?.data?.code === 'dish_input_rejected') {
-                setImageValidationError(translatePageText("Hình ảnh không phù hợp. Vui lòng chọn hình khác"));
+                setImageValidationError('adminDish.imageRejected');
             } else {
-                setImageValidationError(err.response?.data?.message || translatePageText("Không thể nhận diện nguyên liệu. Vui lòng thử lại."));
+                setImageValidationError('adminDish.analyzeFailed');
             }
         } finally {
             setWorkflowBusy(false);
@@ -459,7 +467,7 @@ const AdminMenuManagement = () => {
             });
             if (editMode) setEditRequiresReconfirmation(false);
         } catch (err) {
-            setAlertMessage(err.response?.data?.message || translatePageText("Không thể xác nhận nguyên liệu hoặc tạo công thức. Vui lòng thử lại."));
+            setAlertMessage('adminDish.confirmFailed');
         } finally {
             setWorkflowBusy(false);
             setWorkflowAction('');
@@ -848,7 +856,7 @@ const AdminMenuManagement = () => {
                                 </div>
                                 {imageValidationError && (
                                     <p role="alert" className="mt-2 text-sm font-medium text-red-600">
-                                        {imageValidationError}
+                                        {renderMsg(imageValidationError)}
                                     </p>
                                 )}
                             </div>
@@ -1089,7 +1097,7 @@ const AdminMenuManagement = () => {
                 showFooterClose={false}
                 onClose={() => setAlertMessage('')}
             >
-                <p className="text-gray-700">{alertMessage}</p>
+                <p className="text-gray-700">{renderMsg(alertMessage)}</p>
             </Modal>
 
             {/* Modal xác nhận (thay cho window.confirm) */}
