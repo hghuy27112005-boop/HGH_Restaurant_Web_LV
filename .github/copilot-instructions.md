@@ -7,7 +7,7 @@ Dự án: Laravel (backend) + React Vite (frontend) + i18next. Web có hai ngôn
 2. Logic, state, API, database chỉ dùng ID hoặc code ổn định (ingredient_id, slot_key, enum). TUYỆT ĐỐI không so sánh, khớp hay làm key bằng chuỗi hiển thị.
 3. Tên nguyên liệu, tên món hiển thị phải tra theo ID rồi chọn name_vi/name_en theo ngôn ngữ hiện tại lúc render. Không lưu chuỗi đã dịch vào state gửi lên server.
 4. State của toast/modal lưu code hoặc key (kèm params), KHÔNG lưu chuỗi đã dịch, để đổi ngôn ngữ khi đang mở vẫn đúng.
-5. Backend: response lỗi hoặc thành công mới phải trả thêm trường `code` ổn định (ví dụ DISH_NAME_INVALID) bên cạnh `message`.
+5. Backend: response lỗi hoặc thành công mới phải trả thêm trường `code` ổn định (ví dụ dish_name_invalid, TRANSLATION_UNAVAILABLE; mã đã có thì giữ đúng chữ hoa/thường như trong code, vì frontend so khớp chính xác) bên cạnh `message`.
 6. Dữ liệu người dùng nhập (tên công thức, ghi chú) giữ nguyên văn, không dịch.
 7. Database: bảng có cột song ngữ thì tên Việt ghi vào cột _vi, tên Anh ghi vào cột Anh. Không ghi chuỗi Việt vào cột Anh.
 8. Gemini chỉ được gọi từ backend. Mọi hàm gọi Gemini phải kiểm tra output đủ trường, đủ số mục.
