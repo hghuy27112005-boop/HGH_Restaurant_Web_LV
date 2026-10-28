@@ -368,6 +368,84 @@ class DishEditWorkflowTest extends TestCase
         });
     }
 
+    public function test_ingredient_analysis_handles_pantry_items_with_missing_names_in_both_languages(): void
+    {
+        $this->createDishes();
+        $vietnameseOnly = $this->createIngredient('Chicken catalog name', 'Thịt gà');
+        $vietnameseOnly->ingredient_name = null;
+        $vietnameseOnly->save();
+
+        $englishOnly = $this->createIngredient('Onion', 'Hành tây');
+        $englishOnly->ingredient_name_vi = null;
+        $englishOnly->save();
+
+        $inactiveWithoutEnglishName = $this->createIngredient('Inactive garlic', 'Tỏi', false);
+        $inactiveWithoutEnglishName->ingredient_name = null;
+        $inactiveWithoutEnglishName->save();
+
+        $responseFor = static fn (string $language, array $ingredients): array => [
+            'candidates' => [[
+                'content' => ['parts' => [[
+                    'text' => json_encode([
+                        'source_language' => $language,
+                        'name_valid' => true,
+                        'is_valid' => true,
+                        'ingredients' => $ingredients,
+                    ]),
+                ]]],
+            ]],
+        ];
+        $vietnameseIngredients = [
+            ['name' => 'Thịt gà', 'ingredient_id' => $vietnameseOnly->ingredient_id, 'role' => 'required_fixed'],
+            ['name' => 'Hành tây', 'ingredient_id' => $englishOnly->ingredient_id, 'role' => 'required_replaceable'],
+            ['name' => 'Tỏi', 'ingredient_id' => $inactiveWithoutEnglishName->ingredient_id, 'role' => 'optional'],
+        ];
+        $englishIngredients = [
+            ['name' => 'Chicken', 'ingredient_id' => $vietnameseOnly->ingredient_id, 'role' => 'required_fixed'],
+            ['name' => 'Onion', 'ingredient_id' => $englishOnly->ingredient_id, 'role' => 'required_replaceable'],
+            ['name' => 'Garlic', 'ingredient_id' => $inactiveWithoutEnglishName->ingredient_id, 'role' => 'optional'],
+        ];
+        config(['services.gemini.api_key' => 'test-key']);
+        Http::fake([
+            'generativelanguage.googleapis.com/*' => Http::sequence()
+                ->push($responseFor('vi', $vietnameseIngredients))
+                ->push($responseFor('en', $englishIngredients)),
+        ]);
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->actingAs($admin)
+            ->post('/api/admin/dishes/analyze-ingredients', [
+                'dish_name' => 'Món kiểm tra',
+                'language' => 'vi',
+                'image' => UploadedFile::fake()->create('dish-vi.jpg', 20, 'image/jpeg'),
+            ])
+            ->assertOk()
+            ->assertJsonPath('language', 'vi')
+            ->assertJsonPath('ingredients.0.ingredient_id', $vietnameseOnly->ingredient_id)
+            ->assertJsonPath('ingredients.0.name_vi', 'Thịt gà')
+            ->assertJsonPath('ingredients.1.ingredient_id', $englishOnly->ingredient_id)
+            ->assertJsonPath('ingredients.1.name_vi', 'Hành tây')
+            ->assertJsonPath('ingredients.2.ingredient_id', $inactiveWithoutEnglishName->ingredient_id)
+            ->assertJsonPath('ingredients.2.name_vi', 'Tỏi');
+
+        $this->actingAs($admin)
+            ->post('/api/admin/dishes/analyze-ingredients', [
+                'dish_name' => 'Test dish',
+                'language' => 'en',
+                'image' => UploadedFile::fake()->create('dish-en.jpg', 20, 'image/jpeg'),
+            ])
+            ->assertOk()
+            ->assertJsonPath('language', 'en')
+            ->assertJsonPath('ingredients.0.ingredient_id', $vietnameseOnly->ingredient_id)
+            ->assertJsonPath('ingredients.0.name_en', 'Chicken')
+            ->assertJsonPath('ingredients.1.ingredient_id', $englishOnly->ingredient_id)
+            ->assertJsonPath('ingredients.1.name_en', 'Onion')
+            ->assertJsonPath('ingredients.2.ingredient_id', $inactiveWithoutEnglishName->ingredient_id)
+            ->assertJsonPath('ingredients.2.name_en', 'Garlic');
+
+        Http::assertSentCount(2);
+    }
+
     public function test_admin_cannot_change_original_dish_name_through_either_edit_path(): void
     {
         [$dish, , $type] = $this->createDishes();
