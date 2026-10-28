@@ -783,7 +783,7 @@ const AdminMenuManagement = () => {
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
                         <div className="bg-red-600 px-6 py-4 flex justify-between items-center">
                             <h3 className="text-xl font-bold text-white">
-                                {editMode ? translatePageText("Chi tiết món ăn") : translatePageText("Thêm món ăn mới")}
+                                {editMode ? t('adminDish.titleDetail') : t('adminDish.titleNew')}
                             </h3>
                             <button onClick={handleCloseModal} disabled={busy || workflowBusy} className="text-white hover:text-gray-200 disabled:opacity-50">
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
@@ -794,7 +794,7 @@ const AdminMenuManagement = () => {
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                        {translatePageText(editMode ? "Tên món (không thể thay đổi)" : "Tên món")}
+                                        {editMode ? t('adminDish.labelNameFixed') : t('adminDish.labelName')}
                                         {!editMode && " (*)"}
                                     </label>
                                     <input
@@ -809,21 +809,21 @@ const AdminMenuManagement = () => {
                                             setImageValidationError('');
                                         }}
                                         className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${editMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                        placeholder={translatePageText(currentLanguage === 'en'
-                                            ? "Nhập tên món bằng tiếng Anh"
-                                            : "Nhập tên món bằng tiếng Việt")}
+                                        placeholder={currentLanguage === 'en'
+                                            ? t('adminDish.placeholderNameEn')
+                                            : t('adminDish.placeholderNameVi')}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Loại món")}{!editMode && " (*)"}</label>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{t('adminDish.labelType')}{!editMode && " (*)"}</label>
                                     <select
                                         required disabled={busy || (editMode && !isEditing)}
                                         value={formData.type_id}
                                         onChange={e => setFormData({ ...formData, type_id: e.target.value })}
                                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
                                     >
-                                        <option value="" disabled>{translatePageText("-- Chọn loại món --")}</option>
+                                        <option value="" disabled>{t('adminDish.selectType')}</option>
                                         {dishTypes.map(type => (
                                             <option key={type.type_id} value={type.type_id}>{translatePageText(type.type_name)}</option>
                                         ))}
@@ -831,7 +831,7 @@ const AdminMenuManagement = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Giá thành")}</label>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{t('adminDish.labelPrice')}</label>
                                     <input
                                         type="number" required min="0" step="1000" readOnly={editMode && !isEditing} disabled={busy}
                                         value={formData.price}
@@ -842,10 +842,10 @@ const AdminMenuManagement = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">{translatePageText("Hình ảnh")}{!editMode && " (*)"}</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('adminDish.labelImage')}{!editMode && " (*)"}</label>
                                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
                                     {previewImage && (
-                                        <img src={previewImage} alt={translatePageText("Hình ảnh")} className="mx-auto h-32 object-contain mb-3" />
+                                        <img src={previewImage} alt={t('adminDish.labelImage')} className="mx-auto h-32 object-contain mb-3" />
                                     )}
                                     <input
                                         type="file" ref={fileInputRef} accept="image/*"
@@ -862,7 +862,7 @@ const AdminMenuManagement = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Nguyên liệu")}</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{t('adminDish.labelIngredients')}</label>
                                 {editMode && !isEditing ? (
                                     <textarea
                                         rows={3} readOnly={editMode || !isEditing} disabled={busy}
@@ -880,12 +880,8 @@ const AdminMenuManagement = () => {
                                             <input
                                                 type="text"
                                                 readOnly
-                                                aria-label={translatePageText(editMode
-                                                    ? "Nhấn nhận nguyên liệu để cập nhật danh sách theo tên và hình món"
-                                                    : "Vui lòng điền tên và tải ảnh lên để lấy nguyên liệu")}
-                                                placeholder={translatePageText(editMode
-                                                    ? "Nhấn nhận nguyên liệu để cập nhật danh sách theo tên và hình món"
-                                                    : "Vui lòng điền tên và tải ảnh lên để lấy nguyên liệu")}
+                                                aria-label={editMode ? t('adminDish.ingredientsHintEdit') : t('adminDish.ingredientsHintNew')}
+                                                placeholder={editMode ? t('adminDish.ingredientsHintEdit') : t('adminDish.ingredientsHintNew')}
                                                 className="min-w-0 flex-1 rounded border border-gray-300 px-3 py-2 text-gray-500"
                                             />
                                             <button
@@ -894,26 +890,26 @@ const AdminMenuManagement = () => {
                                                 disabled={workflowBusy || busy || (!editMode && !selectedImage) || !formData.dish_name.trim()}
                                                 className="shrink-0 rounded bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                                             >
-                                                {workflowAction === 'analyze' ? translatePageText("Đang nhận nguyên liệu...") : translatePageText("Nhận nguyên liệu")}
+                                                {workflowAction === 'analyze' ? t('adminDish.btnAnalyzing') : t('adminDish.btnAnalyze')}
                                             </button>
                                         </div>
                                         {draftIngredients.map((ingredient, index) => (
                                             <div key={index} className="grid grid-cols-1 gap-2 rounded border border-gray-200 p-3 sm:grid-cols-[1fr_220px]">
                                                 <input
-                                                    aria-label={translatePageText((workflowLanguage || currentLanguage) === 'en' ? "Tên nguyên liệu tiếng Anh" : "Tên nguyên liệu tiếng Việt")}
+                                                    aria-label={(workflowLanguage || currentLanguage) === 'en' ? t('adminDish.ingredientNameEn') : t('adminDish.ingredientNameVi')}
                                                     value={ingredient[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi']}
                                                     onChange={(event) => updateDraftIngredient(index, (workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi', event.target.value)}
                                                     className="min-w-0 rounded border border-gray-300 px-3 py-2"
                                                 />
                                                 <select
-                                                    aria-label={translatePageText("Phân loại nguyên liệu")}
+                                                    aria-label={t('adminDish.ingredientRole')}
                                                     value={ingredient.role}
                                                     onChange={(event) => updateDraftIngredient(index, 'role', event.target.value)}
                                                     className="rounded border border-gray-300 px-3 py-2 sm:col-span-1"
                                                 >
-                                                    <option value="required_replaceable">{translatePageText("Bắt buộc, có thể thay thế")}</option>
-                                                    <option value="required_fixed">{translatePageText("Bắt buộc, không thể thay thế")}</option>
-                                                    <option value="optional">{translatePageText("Có thể bỏ")}</option>
+                                                    <option value="required_replaceable">{t('adminDish.roleReplaceable')}</option>
+                                                    <option value="required_fixed">{t('adminDish.roleFixed')}</option>
+                                                    <option value="optional">{t('adminDish.roleOptional')}</option>
                                                 </select>
                                             </div>
                                         ))}
@@ -926,11 +922,11 @@ const AdminMenuManagement = () => {
                                                     className="rounded bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                                                 >
                                                     {workflowAction === 'confirm'
-                                                        ? translatePageText("Đang xác nhận nguyên liệu và tạo công thức...")
-                                                        : translatePageText("Xác nhận nguyên liệu")}
+                                                        ? t('adminDish.btnConfirming')
+                                                        : t('adminDish.btnConfirm')}
                                                 </button>
                                                 {confirmedIngredients.length > 0 && (
-                                                    <span className="text-sm text-emerald-700">{translatePageText("Đã đối chiếu và lưu nguyên liệu vào kho.")}</span>
+                                                    <span className="text-sm text-emerald-700">{t('adminDish.confirmedNote')}</span>
                                                 )}
                                             </div>
                                         )}
@@ -939,7 +935,7 @@ const AdminMenuManagement = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-1">{translatePageText("Công thức nấu")}</label>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1">{t('adminDish.labelRecipe')}</label>
                                 {!editMode || isEditing ? (
                                     <div className="space-y-3">
                                         {recipePreview ? (
@@ -953,10 +949,8 @@ const AdminMenuManagement = () => {
                                             <input
                                                 type="text"
                                                 readOnly
-                                                aria-label={translatePageText("Xác nhận nguyên liệu để tạo công thức")}
-                                                placeholder={translatePageText(editMode
-                                                    ? "Xác nhận nguyên liệu để tạo công thức mới"
-                                                    : "Xác nhận nguyên liệu để tạo công thức")}
+                                                aria-label={t('adminDish.recipeAria')}
+                                                placeholder={editMode ? t('adminDish.recipeHintEdit') : t('adminDish.recipeHintNew')}
                                                 className="w-full rounded border border-gray-300 px-3 py-2 text-gray-500"
                                             />
                                         )}
@@ -966,7 +960,7 @@ const AdminMenuManagement = () => {
                                         {getRecipeSteps(translateDishInstructions(dishes.find((dish) => dish.dish_id === selectedDishId))).map((step, index) => <li key={`${index}-${step}`}>{step}</li>)}
                                     </ol>
                                 ) : (
-                                    <p className="text-gray-500">{translatePageText("Chưa có công thức nấu")}</p>
+                                    <p className="text-gray-500">{t('adminDish.noRecipe')}</p>
                                 )}
                             </div>
 
@@ -978,19 +972,19 @@ const AdminMenuManagement = () => {
                                             onClick={isEditing ? handleCancelEditing : () => setIsEditing(true)}
                                             disabled={busy}
                                             className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 font-semibold disabled:opacity-50"
-                                        >{translatePageText(isEditing ? "Quay lại" : "Chỉnh sửa")}</button>
+                                        >{isEditing ? t('adminDish.btnBack') : t('adminDish.btnEdit')}</button>
                                         {isEditing ? (
                                             <button
                                                 type="submit"
                                                 disabled={busy || workflowBusy || editRequiresReconfirmation}
                                                 className="px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 font-semibold disabled:opacity-50"
-                                            >{busy ? translatePageText("Đang lưu...") : translatePageText("Lưu thay đổi")}</button>
+                                            >{busy ? t('adminDish.btnSaving') : t('adminDish.btnSaveChanges')}</button>
                                         ) : (
                                             <button
                                                 type="button"
                                                 onClick={handleCloseModal}
                                                 className="px-4 py-2 bg-gray-600 rounded text-white hover:bg-gray-700 font-semibold"
-                                            >{translatePageText("Đóng")}</button>
+                                            >{t('adminDish.btnClose')}</button>
                                         )}
                                     </>
                                 ) : (
@@ -999,14 +993,14 @@ const AdminMenuManagement = () => {
                                             type="button"
                                             onClick={handleCloseModal}
                                             className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 font-semibold"
-                                        >{translatePageText("Hủy")}</button>
+                                        >{t('adminDish.btnCancel')}</button>
                                         <button
                                             type="submit"
                                             disabled={busy || workflowBusy || (!confirmedIngredients.length || !recipePreview)}
                                             className="px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 font-semibold disabled:opacity-50"
                                         >{busy
-                                            ? translatePageText("Đang tạo phiên bản còn lại của món ăn")
-                                            : translatePageText("Tạo món")}</button>
+                                            ? t('adminDish.btnCreating')
+                                            : t('adminDish.btnCreate')}</button>
                                     </>
                                 )}
                             </div>
