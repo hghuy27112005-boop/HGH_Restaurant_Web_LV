@@ -7,6 +7,8 @@ use App\Models\DishIngredientRule;
 use App\Models\DishType;
 use App\Models\Ingredient;
 use App\Models\IngredientStock;
+use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
@@ -17,6 +19,46 @@ use Tests\TestCase;
 class DishEditWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_showing_a_missing_dish_returns_not_found_code(): void
+    {
+        $this->getJson('/api/dishes/999999')
+            ->assertNotFound()
+            ->assertJsonPath('code', 'dish_not_found');
+    }
+
+    public function test_deleting_a_dish_with_an_order_returns_conflict_code(): void
+    {
+        [$dish] = $this->createDishes();
+        $user = User::factory()->create();
+        $order = Order::create([
+            'order_id' => 'dish-delete-test',
+            'user_id' => $user->user_id,
+            'order_type' => 'delivery',
+            'subtotal_price' => 30000,
+        ]);
+        OrderItem::create([
+            'order_id' => $order->order_id,
+            'dish_id' => $dish->dish_id,
+            'quantity' => 1,
+            'unit_price' => 30000,
+        ]);
+
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->deleteJson('/api/admin/dishes/' . $dish->dish_id)
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'dish_has_orders');
+    }
+
+    public function test_confirming_an_invalid_ingredient_list_returns_validation_code(): void
+    {
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->postJson('/api/admin/dishes/confirm-ingredients', [
+                'ingredients' => [],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'ingredient_list_invalid');
+    }
 
     public function test_confirmation_does_not_change_dish_rules_and_update_synchronizes_removed_ingredients(): void
     {

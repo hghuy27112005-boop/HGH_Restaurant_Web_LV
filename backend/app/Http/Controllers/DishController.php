@@ -51,7 +51,10 @@ class DishController extends Controller
         $dish = Dish::find($id);
         if (!$dish) {
             if ($request->expectsJson()) {
-                return response()->json(['message' => 'Không tìm thấy món ăn'], 404);
+                return response()->json([
+                    'code' => 'dish_not_found',
+                    'message' => 'Không tìm thấy món ăn',
+                ], 404);
             }
             abort(404);
         }
@@ -175,6 +178,7 @@ class DishController extends Controller
         } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
             report($exception);
             return response()->json([
+                'code' => 'ingredient_analysis_unavailable',
                 'message' => 'Chưa thể nhận diện nguyên liệu lúc này. Vui lòng thử lại.',
             ], 503);
         }
@@ -184,15 +188,30 @@ class DishController extends Controller
     {
         $language = $request->input('language') === 'en' ? 'en' : 'vi';
         $nameField = $language === 'en' ? 'name_en' : 'name_vi';
-        $data = $request->validate([
-            'dish_id' => 'nullable|integer|exists:dishes,dish_id',
-            'language' => 'nullable|in:vi,en',
-            'ingredients' => 'required|array|min:1|max:40',
-            'ingredients.*.ingredient_id' => 'nullable|integer|exists:ingredients,ingredient_id',
-            'ingredients.*.name' => 'nullable|string|max:255',
-            "ingredients.*.{$nameField}" => 'required|string|max:255',
-            'ingredients.*.role' => 'required|in:required_replaceable,required_fixed,optional',
-        ]);
+        try {
+            $data = $request->validate([
+                'dish_id' => 'nullable|integer|exists:dishes,dish_id',
+                'language' => 'nullable|in:vi,en',
+                'ingredients' => 'required|array|min:1|max:40',
+                'ingredients.*.ingredient_id' => 'nullable|integer|exists:ingredients,ingredient_id',
+                'ingredients.*.name' => 'nullable|string|max:255',
+                "ingredients.*.{$nameField}" => 'required|string|max:255',
+                'ingredients.*.role' => 'required|in:required_replaceable,required_fixed,optional',
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $errors = $exception->errors();
+            if (!collect(array_keys($errors))->contains(
+                fn (string $field): bool => str_starts_with($field, 'ingredients')
+            )) {
+                throw $exception;
+            }
+
+            return response()->json([
+                'message' => $exception->getMessage(),
+                'errors' => $errors,
+                'code' => 'ingredient_list_invalid',
+            ], $exception->status);
+        }
 
         $confirmed = DB::transaction(function () use ($data, $language, $nameField): array {
             $catalog = Ingredient::query()->get();
@@ -277,12 +296,18 @@ class DishController extends Controller
             ->whereIn('ingredient_id', $data['ingredient_ids'])
             ->orderBy('ingredient_id')->get();
         if ($ingredients->count() !== count($data['ingredient_ids'])) {
-            return response()->json(['message' => 'Danh sách nguyên liệu không hợp lệ.'], 422);
+            return response()->json([
+                'code' => 'ingredient_list_invalid',
+                'message' => 'Danh sách nguyên liệu không hợp lệ.',
+            ], 422);
         }
         $submittedNames = collect($data['ingredient_names'] ?? [])
             ->keyBy(fn (array $item): int => (int) $item['ingredient_id']);
         if ($submittedNames->isNotEmpty() && $submittedNames->keys()->diff($ingredients->pluck('ingredient_id'))->isNotEmpty()) {
-            return response()->json(['message' => 'Tên nguyên liệu không khớp với danh sách đã chọn.'], 422);
+            return response()->json([
+                'code' => 'ingredient_names_mismatch',
+                'message' => 'Tên nguyên liệu không khớp với danh sách đã chọn.',
+            ], 422);
         }
         $ingredientNames = $ingredients->map(fn (Ingredient $ingredient): string =>
             trim((string) ($submittedNames->get((int) $ingredient->ingredient_id)['name'] ?? $this->canonicalIngredientName($ingredient, $language) ?? $ingredient->ingredient_name))
@@ -296,7 +321,10 @@ class DishController extends Controller
             );
         } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
             report($exception);
-            return response()->json(['message' => 'Chưa thể tạo công thức lúc này. Vui lòng thử lại.'], 503);
+            return response()->json([
+                'code' => 'recipe_preview_unavailable',
+                'message' => 'Chưa thể tạo công thức lúc này. Vui lòng thử lại.',
+            ], 503);
         }
 
         return response()->json([
@@ -334,7 +362,10 @@ class DishController extends Controller
             ->whereIn('ingredient_id', $selected->keys())
             ->orderBy('ingredient_id')->get();
         if ($ingredients->count() !== $selected->count()) {
-            return response()->json(['message' => 'Danh sách nguyên liệu không hợp lệ.'], 422);
+            return response()->json([
+                'code' => 'ingredient_list_invalid',
+                'message' => 'Danh sách nguyên liệu không hợp lệ.',
+            ], 422);
         }
 
         $language = $validated['language'];
@@ -396,7 +427,10 @@ class DishController extends Controller
 
         $directory = public_path('dishes');
         if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
-            return response()->json(['message' => 'Không thể tạo thư mục lưu hình món ăn.'], 500);
+            return response()->json([
+                'code' => 'image_directory_unavailable',
+                'message' => 'Không thể tạo thư mục lưu hình món ăn.',
+            ], 500);
         }
         $image = $request->file('image');
         $imageName = null;
@@ -475,6 +509,7 @@ class DishController extends Controller
             Log::error('Dish creation failed.', ['exception' => $exception]);
             return response()->json([
                 'success' => false,
+                'code' => 'dish_create_failed',
                 'message' => 'Không thể tạo món ăn. Vui lòng kiểm tra tên món và thử lại.',
             ], 500);
         }
@@ -736,9 +771,11 @@ class DishController extends Controller
                     rename($imageBackup, $imagePath);
                 }
             }
+            report($e);
             return response()->json([
                 'success' => false,
-                'message' => 'Lỗi: ' . $e->getMessage()
+                'code' => 'dish_update_failed',
+                'message' => 'Không thể cập nhật món ăn. Vui lòng thử lại.',
             ], 500);
         }
     }
@@ -776,7 +813,10 @@ class DishController extends Controller
             ->whereIn('ingredient_id', $selected->keys())
             ->orderBy('ingredient_id')->get();
         if ($ingredients->count() !== $selected->count()) {
-            return response()->json(['message' => 'Danh sách nguyên liệu chưa được xác nhận.'], 422);
+            return response()->json([
+                'code' => 'ingredient_list_invalid',
+                'message' => 'Danh sách nguyên liệu chưa được xác nhận.',
+            ], 422);
         }
 
         $sourceIngredientNames = $ingredients->map(fn (Ingredient $ingredient) => trim((string) (
@@ -976,6 +1016,7 @@ class DishController extends Controller
             report($exception);
             return response()->json([
                 'success' => false,
+                'code' => 'dish_update_failed',
                 'message' => 'Không thể cập nhật món ăn. Vui lòng thử lại.',
             ], 500);
         }
@@ -1016,6 +1057,7 @@ class DishController extends Controller
         if (!$dish) {
             return response()->json([
                 'success' => false,
+                'code' => 'dish_not_found',
                 'message' => 'Không tìm thấy món ăn này.'
             ], 404);
         }
@@ -1045,6 +1087,7 @@ class DishController extends Controller
         if (!$dish) {
             return response()->json([
                 'success' => false,
+                'code' => 'dish_not_found',
                 'message' => 'Không tìm thấy món ăn này (có thể đã bị xóa trước đó).'
             ], 404);
         }
@@ -1056,6 +1099,7 @@ class DishController extends Controller
         if ($hasBeenOrdered) {
             return response()->json([
                 'success' => false,
+                'code' => 'dish_has_orders',
                 'message' => 'Không thể xóa món ăn này vì đã từng phát sinh trong đơn hàng. Hãy dùng nút "Ẩn" để ngừng bán món này thay vì xóa hẳn.'
             ], 409);
         }
@@ -1087,18 +1131,23 @@ class DishController extends Controller
             if (in_array($e->getCode(), ['23503', '23000'])) {
                 return response()->json([
                     'success' => false,
+                    'code' => 'dish_referenced',
                     'message' => 'Không thể xóa món ăn này vì đang được tham chiếu ở bảng khác trong hệ thống (vd: tồn kho, đơn hàng...). Hãy dùng nút "Ẩn" để ngừng bán món này thay vì xóa hẳn.'
                 ], 409);
             }
 
+            report($e);
             return response()->json([
                 'success' => false,
-                'message' => 'Lỗi cơ sở dữ liệu: ' . $e->getMessage()
+                'code' => 'dish_delete_failed',
+                'message' => 'Không thể xóa món ăn. Vui lòng thử lại.',
             ], 500);
         } catch (\Exception $e) {
+            report($e);
             return response()->json([
                 'success' => false,
-                'message' => 'Lỗi: ' . $e->getMessage()
+                'code' => 'dish_delete_failed',
+                'message' => 'Không thể xóa món ăn. Vui lòng thử lại.',
             ], 500);
         }
     }
