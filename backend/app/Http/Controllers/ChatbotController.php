@@ -176,7 +176,7 @@ class ChatbotController extends Controller
         if ($request->type === 'button') {
             // Đã biết chính xác node đích, dùng thẳng intentSummary của node đó (gửi từ frontend)
             $matchedId = $request->selected_option_id;
-            $reply = $this->gemini->generateReply($request->target_intent);
+            $reply = $this->gemini->generateReply($request->target_intent, $request->selected_label);
         } else {
             $result = $this->gemini->classifyAndReply(
                 $request->current_node_intent,

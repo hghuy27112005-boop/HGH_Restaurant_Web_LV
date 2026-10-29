@@ -24,8 +24,11 @@ class GeminiChatbotService
         $this->apiKey = (string) config('services.gemini.api_key', '');
     }
 
-    public function generateReply(string $targetIntentSummary): string
+    public function generateReply(string $targetIntentSummary, ?string $userInput = null): string
     {
+        $languageRule = $userInput !== null && trim($userInput) !== ''
+            ? '- NGÔN NGỮ ĐẦU RA (ưu tiên cao nhất, cao hơn mọi quy tắc khác): khách vừa gõ "' . str_replace('"', "'", $userInput) . '". Nếu câu đó viết bằng tiếng Anh thì phải dịch nội dung gốc và viết câu trả lời HOÀN TOÀN bằng tiếng Anh (vẫn giữ giới hạn độ dài). Nếu viết bằng tiếng Việt hoặc ngôn ngữ khác thì viết bằng tiếng Việt.'
+            : '- Viết bằng tiếng Việt.';
         $prompt = <<<PROMPT
 Bạn là trợ lý chatbot của một nhà hàng. Bạn tự xưng "Tôi", gọi khách hàng là "Bạn".
 Văn phong thân thiện, ngắn gọn, tự nhiên như người thật, không máy móc, không dùng markdown.
@@ -36,10 +39,12 @@ QUY TẮC BẮT BUỘC:
 - Nếu nội dung gốc là một câu hỏi, hãy viết lại thành câu hỏi. Nếu là thông báo, viết lại thành thông báo. Không tự đổi loại câu.
 - Ưu tiên câu trả lời thật ngắn: tối đa 1 câu, chỉ giữ ý chính của nội dung gốc.
 - Chỉ viết 1 câu ngắn, tối đa 18 từ và khoảng 100 ký tự. Không liệt kê, không giải thích thêm, không dùng dấu ba chấm.
+{$languageRule}
 
 Nội dung gốc cần truyền đạt cho khách: "{$targetIntentSummary}"
 
-Hãy viết MỘT câu trả lời hoàn chỉnh, tự nhiên, bám sát đúng nội dung gốc. Chỉ viết 1 câu ngắn, tối đa 18 từ và khoảng 100 ký tự. Chỉ trả về câu trả lời, không thêm giải thích.
+Hãy viết MỘT câu trả lời hoàn chỉnh, tự nhiên, bám sát đúng nội dung gốc, theo đúng quy tắc NGÔN NGỮ ĐẦU RA ở trên. Chỉ viết 1 câu ngắn, tối đa 18 từ và khoảng 100 ký tự. Chỉ trả về câu trả lời, không thêm giải thích.
+{$languageRule}
 PROMPT;
 
         $response = $this->callGemini($prompt, false)['text'] ?? '';
@@ -163,7 +168,7 @@ PROMPT;
 
         return [
             'matched_id' => $matchedId,
-            'reply' => $this->generateReply($targetIntent),
+            'reply' => $this->generateReply($targetIntent, $userInput),
         ];
     }
 
@@ -892,9 +897,10 @@ QUY TẮC BẮT BUỘC:
 - Nếu câu hỏi không liên quan gì tới nhà hàng, hãy lịch sự nói rằng bạn chưa thể hỗ trợ việc đó và gợi ý khách liên hệ nhà hàng trực tiếp.
 - Nếu câu trả lời liên quan trực tiếp tới 1 trang cụ thể trong danh sách trên (khách muốn xem/thực hiện điều gì đó ở trang đó), hãy đề xuất route tương ứng. Nếu không liên quan tới trang nào cụ thể, để suggested_route là null.
 - Trả lời ngắn gọn, đúng trọng tâm câu hỏi.
+- NGÔN NGỮ ĐẦU RA (ưu tiên cao nhất): nếu câu hỏi của khách viết bằng tiếng Anh (kể cả sai chính tả) thì phải viết trường "reply" HOÀN TOÀN bằng tiếng Anh, dịch thông tin từ tài liệu sang tiếng Anh. Nếu viết bằng tiếng Việt hoặc ngôn ngữ khác thì viết bằng tiếng Việt.
 
 Trả về CHÍNH XÁC định dạng JSON sau, không thêm gì khác:
-{"reply": "<câu trả lời>", "suggested_route": "<route hoặc null>", "suggested_label": "<nhãn ngắn dạng 'Tới trang ...' hoặc null>"}
+{"reply": "<câu trả lời, viết bằng ngôn ngữ của câu hỏi>", "suggested_route": "<route hoặc null>", "suggested_label": "<nhãn ngắn dạng 'Tới trang ...' hoặc null>"}
 PROMPT;
 
         $result = $this->callGemini($prompt, true);

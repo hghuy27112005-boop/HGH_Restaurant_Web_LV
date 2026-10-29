@@ -4,8 +4,18 @@ import { chatbotAPI } from '@/services/chatbotApi';
 import { useAuthContext } from '@/context/AuthContext';
 import chatbotScripts from '@/data/chatbot_customer_scripts';
 import { translatePageText } from '../../pageTextTranslations';
+import { useTranslation } from 'react-i18next';
+
+const getNavLabelKey = (route) => {
+    if (route === '/menu') return 'chatbot.nav.menu';
+    if (/^\/dish-details\//.test(route)) return 'chatbot.nav.dishDetail';
+    if (route === '/profile/orders') return 'chatbot.nav.orders';
+    if (route === '/profile') return 'chatbot.nav.profile';
+    return 'chatbot.nav.related';
+};
 
 const ChatbotWidget = ({ isOpen, setIsOpen }) => {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const { logout, isAuthenticated } = useAuthContext();
 
@@ -332,7 +342,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             if (!map.has(opt.id)) {
                 map.set(opt.id, {
                     id: opt.id,
-                    label: opt.label,
+                    label: t(opt.labelKey, { lng: 'vi' }),
                     intent: opt.intent,
                     targetIntent: chatbotScripts[opt.id]?.intentSummary || opt.intent,
                 });
@@ -375,7 +385,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         if (loading) return;
         setSuppressOptions(false);
         setSuggestedNav(null);
-        setMessages((prev) => [...prev, { sender: 'user', content: option.label, created_at: new Date().toISOString() }]);
+        setMessages((prev) => [...prev, { sender: 'user', content: t(option.labelKey, { lng: 'vi' }), labelKey: option.labelKey, created_at: new Date().toISOString() }]);
         setLoading(true);
 
         const targetNode = chatbotScripts[option.id];
@@ -384,7 +394,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             const res = await chatbotAPI.interact({
                 type: 'button',
                 selected_option_id: option.id,
-                selected_label: option.label,
+                selected_label: t(option.labelKey),
                 target_intent: targetNode?.intentSummary || option.intent,
             });
             appendBotMessages(res.data.matched_id, res.data.reply);
@@ -430,7 +440,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         navigate(route);
                         setSuggestedNav(null);
                     } else {
-                        setSuggestedNav({ route, label: res.data.suggested_label || 'Tới trang liên quan' });
+                        setSuggestedNav({ route });
                     }
                 } else {
                     setSuggestedNav(null);
@@ -668,7 +678,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                         </button>
                                     )}
                                     {msg.content && msg.content !== translatePageText("[Hình ảnh]") && (
-                                        <div>{msg.content}</div>
+                                        <div>{msg.labelKey ? t(msg.labelKey) : msg.content}</div>
                                     )}
                                 </div>
                             </div>
@@ -690,7 +700,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                             <div style={styles.optionsWrap}>
                                 {currentNode.options.map((opt) => (
                                     <button key={opt.id} style={styles.optionBtn} onClick={() => handleOptionClick(opt)}>
-                                        {opt.label}
+                                        {t(opt.labelKey)}
                                     </button>
                                 ))}
                             </div>
@@ -705,7 +715,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                         setSuggestedNav(null);
                                     }}
                                 >
-                                    {suggestedNav.label}
+                                    {t(getNavLabelKey(suggestedNav.route))}
                                 </button>
                             </div>
                         )}

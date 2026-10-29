@@ -12,26 +12,26 @@ const chatbotCustomerScripts = {
     intentSummary:
       "Chào khách, giới thiệu ngắn gọn có thể giúp gì, liệt kê các chức năng chính để khách chọn.",
     options: [
-      { id: "order_food", label: "Đặt món", intent: "Khách muốn đặt món ăn, đặt bàn hoặc đặt ship" },
+      { id: "order_food", labelKey: "chatbot.options.orderFood", intent: "Khách muốn đặt món ăn, đặt bàn hoặc đặt ship" },
       {
         id: "modify_dish",
-        label: "Sửa đổi món ăn",
+        labelKey: "chatbot.options.modifyDish",
         intent: "Khách muốn biết cách bỏ bớt nguyên liệu không thích để tạo công thức riêng cho món ăn",
       },
       {
         id: "view_history",
-        label: "Xem lịch sử giao dịch",
+        labelKey: "chatbot.options.viewHistory",
         intent: "Khách muốn xem lại lịch sử các đơn hàng đã đặt, hoặc xem/xuất hóa đơn",
         action: { type: "navigate", path: "/profile/orders" },
       },
-      { id: "cancel_order", label: "Hủy đơn hàng", intent: "Khách muốn hủy 1 đơn hàng đã đặt" },
+      { id: "cancel_order", labelKey: "chatbot.options.cancelOrder", intent: "Khách muốn hủy 1 đơn hàng đã đặt" },
       {
         id: "view_profile",
-        label: "Xem, sửa thông tin cá nhân",
+        labelKey: "chatbot.options.viewProfile",
         intent: "Khách muốn xem hoặc chỉnh sửa thông tin tài khoản cá nhân",
         action: { type: "navigate", path: "/profile" },
       },
-      { id: "logout", label: "Đăng xuất", intent: "Khách muốn đăng xuất khỏi tài khoản" },
+      { id: "logout", labelKey: "chatbot.options.logout", intent: "Khách muốn đăng xuất khỏi tài khoản" },
     ],
   },
 
@@ -41,11 +41,11 @@ const chatbotCustomerScripts = {
     options: [
       {
         id: "modify_dish.goto_menu",
-        label: "Đi tới thực đơn để thử",
+        labelKey: "chatbot.options.gotoMenuTry",
         intent: "Khách muốn qua trang menu để bắt đầu tạo công thức riêng",
         action: { type: "navigate", path: "/menu" },
       },
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
@@ -53,7 +53,7 @@ const chatbotCustomerScripts = {
     intentSummary:
       "Đã đưa khách tới trang thực đơn. Hướng dẫn khách chọn một món bất kỳ, mở trang chi tiết món đó, sau đó nhấn vào mục xem công thức thay thế để bắt đầu bỏ nguyên liệu và lưu công thức riêng.",
     options: [
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
@@ -62,9 +62,9 @@ const chatbotCustomerScripts = {
     intentSummary:
       "Khách muốn đặt món nhưng chưa nói rõ hình thức. Cần hỏi khách muốn đặt bàn tại quán hay đặt ship, giải thích nhà hàng có 2 hình thức đó. Khách có thể chọn món nhanh ngay trên trang Menu, hoặc mở trang chi tiết món để xem thông tin cụ thể trước khi đặt. Tại trang chi tiết món, khách cũng có thể tạo và lưu một công thức mới để dùng lại trong những lần đặt sau.",
     options: [
-      { id: "order_food.booking", label: "Đặt bàn tại quán", intent: "Khách muốn đặt bàn ăn tại quán" },
-      { id: "order_food.delivery", label: "Đặt ship đồ ăn", intent: "Khách muốn đặt đồ ăn giao tận nơi, không tới quán" },
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính, không đặt món nữa" },
+      { id: "order_food.booking", labelKey: "chatbot.options.orderBooking", intent: "Khách muốn đặt bàn ăn tại quán" },
+      { id: "order_food.delivery", labelKey: "chatbot.options.orderDelivery", intent: "Khách muốn đặt đồ ăn giao tận nơi, không tới quán" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính, không đặt món nữa" },
     ],
   },
 
@@ -81,13 +81,13 @@ const chatbotCustomerScripts = {
     options: [
       {
         id: "order_food.booking.goto_menu",
-        label: "Chưa, đưa tôi qua trang menu",
+        labelKey: "chatbot.options.notYetGoMenu",
         intent: "Khách chưa chọn món, chưa đặt món ở trang menu",
         action: { type: "navigate", path: "/menu" },
       },
       {
         id: "order_food.booking.goto_table",
-        label: "Rồi, tôi đã chọn món xong",
+        labelKey: "chatbot.options.doneChoosing",
         intent: "Khách đã chọn món xong ở trang menu rồi",
         action: { type: "navigate", path: "/cart/bookings" },
       },
@@ -100,7 +100,7 @@ const chatbotCustomerScripts = {
     options: [
       {
         id: "order_food.booking.goto_table",
-        label: "Tôi đã chọn món xong",
+        labelKey: "chatbot.options.doneChoosingShort",
         intent: "Khách xác nhận đã hoàn tất chọn món ở trang menu",
         action: { type: "navigate", path: "/cart/bookings" },
       },
@@ -119,7 +119,7 @@ const chatbotCustomerScripts = {
     ],
     afterNote: "Sau khi thanh toán xong, bạn có thể hủy đơn đặt bàn nếu cần.",
     options: [
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
@@ -136,13 +136,13 @@ const chatbotCustomerScripts = {
     options: [
       {
         id: "order_food.delivery.goto_menu",
-        label: "Chưa, đưa tôi qua trang menu",
+        labelKey: "chatbot.options.notYetGoMenu",
         intent: "Khách chưa chọn món, chưa đặt món ở trang menu",
         action: { type: "navigate", path: "/menu" },
       },
       {
         id: "order_food.delivery.goto_delivery",
-        label: "Rồi, tôi đã chọn món xong",
+        labelKey: "chatbot.options.doneChoosing",
         intent: "Khách đã chọn món xong ở trang menu rồi",
         action: { type: "navigate", path: "/cart/deliveries" },
       },
@@ -155,7 +155,7 @@ const chatbotCustomerScripts = {
     options: [
       {
         id: "order_food.delivery.goto_delivery",
-        label: "Tôi đã chọn món xong",
+        labelKey: "chatbot.options.doneChoosingShort",
         intent: "Khách xác nhận đã hoàn tất chọn món ở trang menu",
         action: { type: "navigate", path: "/cart/deliveries" },
       },
@@ -174,7 +174,7 @@ const chatbotCustomerScripts = {
     ],
     afterNote: "Nhà hàng sẽ bắt đầu giao hàng cho bạn sau khi chuẩn bị xong món ăn.",
     options: [
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
@@ -183,7 +183,7 @@ const chatbotCustomerScripts = {
     intentSummary:
       "Đã đưa khách tới mục Lịch sử giao dịch trong trang cá nhân. Cho khách biết ở đây có thể xem lại tất cả đơn hàng đã đặt, đồng thời xem và xuất hóa đơn PDF cho từng đơn.",
     options: [
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
@@ -193,17 +193,17 @@ const chatbotCustomerScripts = {
     options: [
       {
         id: "cancel_order.booking",
-        label: "Hủy đơn đặt bàn",
+        labelKey: "chatbot.options.cancelBooking",
         intent: "Khách muốn hủy đơn đặt bàn tại quán",
         action: { type: "navigate", path: "/cart/bookings" },
       },
       {
         id: "cancel_order.delivery",
-        label: "Hủy đơn đặt ship",
+        labelKey: "chatbot.options.cancelDelivery",
         intent: "Khách muốn hủy đơn đặt ship đồ ăn",
         action: { type: "navigate", path: "/cart/deliveries" },
       },
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính, không hủy đơn nữa" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính, không hủy đơn nữa" },
     ],
   },
 
@@ -211,7 +211,7 @@ const chatbotCustomerScripts = {
     intentSummary:
       "Đã đưa khách tới trang đặt bàn để tìm đơn cần hủy. Nhắc khách rằng sau khi thanh toán, mỗi đơn hàng sẽ có mã hóa đơn riêng, khách nên chụp lại màn hình sau mỗi giao dịch để dễ tra cứu, tìm đúng đơn cần hủy bằng mã hóa đơn đó.",
     options: [
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
@@ -219,7 +219,7 @@ const chatbotCustomerScripts = {
     intentSummary:
       "Đã đưa khách tới trang đặt ship để tìm đơn cần hủy. Nhắc khách rằng sau khi thanh toán, mỗi đơn hàng sẽ có mã hóa đơn riêng, khách nên chụp lại màn hình sau mỗi giao dịch để dễ tra cứu, tìm đúng đơn cần hủy bằng mã hóa đơn đó.",
     options: [
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
@@ -227,15 +227,15 @@ const chatbotCustomerScripts = {
     intentSummary:
       "Đã đưa khách tới trang cá nhân. Cho khách biết ngoài việc xem các thông tin cơ bản, khách cũng có thể xem điểm tích lũy và bậc thành viên hiện tại ngay ở trang này, và chuyển sang các mục Lịch sử giao dịch, Đánh giá dịch vụ.",
     options: [
-      { id: "root", label: "Quay lại menu chính", intent: "Khách muốn quay lại danh sách chức năng chính" },
+      { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
   },
 
   logout: {
     intentSummary: "Xác nhận khách muốn đăng xuất khỏi tài khoản.",
     options: [
-      { id: "root", label: "Không, quay lại menu chính", intent: "Khách đổi ý, không muốn đăng xuất nữa" },
-      { id: "logout.confirm", label: "Đồng ý đăng xuất", intent: "Khách xác nhận chắc chắn muốn đăng xuất", action: { type: "logout" } },
+      { id: "root", labelKey: "chatbot.options.noBackToRoot", intent: "Khách đổi ý, không muốn đăng xuất nữa" },
+      { id: "logout.confirm", labelKey: "chatbot.options.confirmLogout", intent: "Khách xác nhận chắc chắn muốn đăng xuất", action: { type: "logout" } },
     ],
   },
   "logout.confirm": {
