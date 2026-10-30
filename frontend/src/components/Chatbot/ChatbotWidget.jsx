@@ -15,7 +15,8 @@ const getNavLabelKey = (route) => {
 };
 
 const ChatbotWidget = ({ isOpen, setIsOpen }) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+    const replyLangRef = useRef(i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi');
     const navigate = useNavigate();
     const { logout, isAuthenticated } = useAuthContext();
 
@@ -182,12 +183,15 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             .filter(Boolean);
         const contents = replyParts.length > 0 ? replyParts : [String(replyText || '')];
 
-        if (node?.stepsList?.length) {
-            contents.push(...node.stepsList.map((step, index) => `Bước ${index + 1}: ${step}`));
+        const lng = replyLangRef.current;
+        if (node?.stepsKeys?.length) {
+            contents.push(...node.stepsKeys.map((key, index) =>
+                t('chatbot.script.stepLabel', { lng, n: index + 1, text: t(key, { lng }) })
+            ));
         }
 
-        if (node?.afterNote) {
-            contents.push(node.afterNote);
+        if (node?.afterNoteKey) {
+            contents.push(t(node.afterNoteKey, { lng }));
         }
 
         return contents.filter(Boolean);
@@ -210,6 +214,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 type: 'auto',
                 target_node_id: targetNodeId,
                 target_intent: targetNode?.intentSummary || '',
+                selected_label: t('chatbot.script.autoHint', { lng: replyLangRef.current }),
             });
             appendBotMessages(res.data.matched_id, res.data.reply);
             setCurrentNodeId(res.data.matched_id);
@@ -218,7 +223,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         }
     };
 
-        const loadChatDays = async () => {
+    const loadChatDays = async () => {
         try {
                 const [daysResponse, imagesResponse] = await Promise.all([
                     chatbotAPI.getChatDays(),
@@ -386,6 +391,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         setSuppressOptions(false);
         setSuggestedNav(null);
         setMessages((prev) => [...prev, { sender: 'user', content: t(option.labelKey, { lng: 'vi' }), labelKey: option.labelKey, created_at: new Date().toISOString() }]);
+        replyLangRef.current = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi';
         setLoading(true);
 
         const targetNode = chatbotScripts[option.id];
@@ -410,6 +416,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         if (loading || historyDate || moderationBlocked || !inputText.trim()) return;
 
         const text = inputText.trim();
+        replyLangRef.current = /[\u00C0-\u024F\u1EA0-\u1EF9]/.test(text) ? 'vi' : 'en';
         setInputText('');
         if (inputRef.current) inputRef.current.style.height = 'auto';
         setMessages((prev) => [...prev, { sender: 'user', content: text, created_at: new Date().toISOString() }]);

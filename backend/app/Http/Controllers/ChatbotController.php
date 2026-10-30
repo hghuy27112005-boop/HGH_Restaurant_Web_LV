@@ -145,7 +145,7 @@ class ChatbotController extends Controller
 
         // === auto: bot tự nói tiếp, không có input thật từ người dùng ===
         if ($request->type === 'auto') {
-            $reply = $this->gemini->generateReply($request->target_intent);
+            $reply = $this->gemini->generateReply($request->target_intent, $request->selected_label);
 
             ChatMessage::create([
                 'session_id' => $session->session_id,

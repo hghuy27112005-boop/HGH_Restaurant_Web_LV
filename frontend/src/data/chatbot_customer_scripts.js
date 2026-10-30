@@ -110,14 +110,14 @@ const chatbotCustomerScripts = {
   "order_food.booking.goto_table": {
     intentSummary:
       "Xác nhận khách đã chọn món xong, đã đưa khách tới trang đặt bàn. Cho biết các bước tiếp theo sẽ được liệt kê ngay dưới đây.",
-    stepsList: [
-      "Chỉnh sửa số lượng của mỗi món nếu cần",
-      "Chọn ngày giờ đến ăn",
-      "Chọn (các) bàn bạn muốn đặt",
-      "Xác nhận thông tin đặt bàn",
-      "Thanh toán",
+    stepsKeys: [
+      "chatbot.script.stepEditQty",
+      "chatbot.script.stepPickDateTime",
+      "chatbot.script.stepPickTables",
+      "chatbot.script.stepConfirmBooking",
+      "chatbot.script.stepPay",
     ],
-    afterNote: "Sau khi thanh toán xong, bạn có thể hủy đơn đặt bàn nếu cần.",
+    afterNoteKey: "chatbot.script.afterBooking",
     options: [
       { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],
@@ -165,14 +165,14 @@ const chatbotCustomerScripts = {
   "order_food.delivery.goto_delivery": {
     intentSummary:
       "Xác nhận khách đã chọn món xong, đã đưa khách tới trang đặt ship. Liệt kê lần lượt các bước.",
-    stepsList: [
-      "Chỉnh sửa số lượng của mỗi món nếu cần",
-      "Nhập địa chỉ giao hàng",
-      "Chọn giờ hàng tới nếu muốn (giờ sau 22:00 sẽ bắt đầu chuẩn bị lúc 07:30 sáng hôm sau)",
-      "Xác nhận thông tin đặt hàng",
-      "Thanh toán",
+    stepsKeys: [
+      "chatbot.script.stepEditQty",
+      "chatbot.script.stepAddress",
+      "chatbot.script.stepPickDeliveryTime",
+      "chatbot.script.stepConfirmDelivery",
+      "chatbot.script.stepPay",
     ],
-    afterNote: "Nhà hàng sẽ bắt đầu giao hàng cho bạn sau khi chuẩn bị xong món ăn.",
+    afterNoteKey: "chatbot.script.afterDelivery",
     options: [
       { id: "root", labelKey: "chatbot.options.backToRoot", intent: "Khách muốn quay lại danh sách chức năng chính" },
     ],

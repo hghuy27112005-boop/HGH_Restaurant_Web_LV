@@ -71,6 +71,20 @@ const vi = {
         errorUnavailable: 'Không thể gợi ý món lúc này. Vui lòng thử lại.',
     },
     chatbot: {
+        script: {
+            stepLabel: 'Bước {{n}}: {{text}}',
+            stepEditQty: 'Chỉnh sửa số lượng của mỗi món nếu cần',
+            stepPickDateTime: 'Chọn ngày giờ đến ăn',
+            stepPickTables: 'Chọn (các) bàn bạn muốn đặt',
+            stepConfirmBooking: 'Xác nhận thông tin đặt bàn',
+            stepPay: 'Thanh toán',
+            stepAddress: 'Nhập địa chỉ giao hàng',
+            stepPickDeliveryTime: 'Chọn giờ hàng tới nếu muốn (giờ sau 22:00 sẽ bắt đầu chuẩn bị lúc 07:30 sáng hôm sau)',
+            stepConfirmDelivery: 'Xác nhận thông tin đặt hàng',
+            afterBooking: 'Sau khi thanh toán xong, bạn có thể hủy đơn đặt bàn nếu cần.',
+            afterDelivery: 'Nhà hàng sẽ bắt đầu giao hàng cho bạn sau khi chuẩn bị xong món ăn.',
+            autoHint: 'Trả lời bằng tiếng Việt.',
+        },
         nav: {
             menu: 'Tới trang thực đơn',
             dishDetail: 'Xem chi tiết món',

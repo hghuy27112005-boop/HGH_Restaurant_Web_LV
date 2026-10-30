@@ -71,6 +71,20 @@ const en = {
         errorUnavailable: 'Could not suggest dishes right now. Please try again.',
     },
     chatbot: {
+        script: {
+            stepLabel: 'Step {{n}}: {{text}}',
+            stepEditQty: 'Adjust the quantity of each dish if needed',
+            stepPickDateTime: 'Choose the date and time of your visit',
+            stepPickTables: 'Choose the table(s) you want to book',
+            stepConfirmBooking: 'Confirm the booking details',
+            stepPay: 'Pay',
+            stepAddress: 'Enter the delivery address',
+            stepPickDeliveryTime: 'Choose a delivery time if you wish (after 22:00, preparation starts at 07:30 the next morning)',
+            stepConfirmDelivery: 'Confirm the order details',
+            afterBooking: 'After paying, you can cancel the booking if needed.',
+            afterDelivery: 'The restaurant will start delivering once your food is prepared.',
+            autoHint: 'Reply in English.',
+        },
         nav: {
             menu: 'Go to the menu',
             dishDetail: 'View dish details',
