@@ -68,6 +68,7 @@ class ChatbotController extends Controller
 
         $request->validate([
             'type' => 'required|in:button,text,auto',
+            'lang' => 'nullable|in:vi,en',
             'user_input' => 'required_if:type,text|nullable|string|max:500',
             'selected_option_id' => 'required_if:type,button|nullable|string',
             'selected_label' => 'nullable|string',
@@ -87,7 +88,10 @@ class ChatbotController extends Controller
             return response()->json([
                 'success' => false,
                 'blocked' => true,
-                'message' => 'Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.',
+                'code' => 'chatbot_blocked',
+                'message' => $request->input('lang') === 'en'
+                    ? 'Your chatbot and reviews are suspended for the rest of the day after 2 language-policy violations today.'
+                    : 'Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.',
                 'moderation' => $blockedStatus,
             ], 403);
         }
@@ -145,7 +149,7 @@ class ChatbotController extends Controller
 
         // === auto: bot tự nói tiếp, không có input thật từ người dùng ===
         if ($request->type === 'auto') {
-            $reply = $this->gemini->generateReply($request->target_intent, $request->selected_label);
+            $reply = $this->gemini->generateReply($request->target_intent, $request->selected_label, $request->input('lang'));
 
             ChatMessage::create([
                 'session_id' => $session->session_id,
@@ -176,19 +180,20 @@ class ChatbotController extends Controller
         if ($request->type === 'button') {
             // Đã biết chính xác node đích, dùng thẳng intentSummary của node đó (gửi từ frontend)
             $matchedId = $request->selected_option_id;
-            $reply = $this->gemini->generateReply($request->target_intent, $request->selected_label);
+            $reply = $this->gemini->generateReply($request->target_intent, $request->selected_label, $request->input('lang'));
         } else {
             $result = $this->gemini->classifyAndReply(
                 $request->current_node_intent,
                 $request->user_input,
-                $request->candidate_options
+                $request->candidate_options,
+                $request->input('lang')
             );
             $matchedId = $result['matched_id'];
 
             if ($matchedId === 'unclear') {
                 // Phương án dự phòng: câu hỏi không khớp kịch bản, để AI tự trả lời
                 // dựa trên tài liệu kiến thức tổng quát về website, kèm gợi ý điều hướng.
-                $freeform = $this->gemini->answerFreeform($request->user_input);
+                $freeform = $this->gemini->answerFreeform($request->user_input, $request->input('lang'));
                 $reply = $freeform['reply'];
                 $suggestedRoute = $freeform['suggested_route'];
                 $suggestedLabel = $freeform['suggested_label'];

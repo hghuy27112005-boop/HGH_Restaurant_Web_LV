@@ -24,7 +24,7 @@ class GeminiChatbotService
         $this->apiKey = (string) config('services.gemini.api_key', '');
     }
 
-    public function generateReply(string $targetIntentSummary, ?string $userInput = null): string
+    public function generateReply(string $targetIntentSummary, ?string $userInput = null, ?string $lang = null): string
     {
         $languageRule = $userInput !== null && trim($userInput) !== ''
             ? '- NGÔN NGỮ ĐẦU RA (ưu tiên cao nhất, cao hơn mọi quy tắc khác): khách vừa gõ "' . str_replace('"', "'", $userInput) . '". Nếu câu đó viết bằng tiếng Anh thì phải dịch nội dung gốc và viết câu trả lời HOÀN TOÀN bằng tiếng Anh (vẫn giữ giới hạn độ dài). Nếu viết bằng tiếng Việt hoặc ngôn ngữ khác thì viết bằng tiếng Việt.'
@@ -49,7 +49,13 @@ PROMPT;
 
         $response = $this->callGemini($prompt, false)['text'] ?? '';
 
-        return $this->compactChatReply($response !== '' ? $response : $targetIntentSummary);
+        if ($response === '') {
+            return $lang === 'en'
+                ? "Sorry, I'm having a little trouble right now. Please try again in a moment."
+                : 'Xin lỗi, hiện tại tôi đang gặp chút trục trặc. Bạn vui lòng thử lại sau một lát nhé.';
+        }
+
+        return $this->compactChatReply($response);
     }
 
     private function compactChatReply(string $text): string
@@ -130,7 +136,7 @@ PROMPT;
         return isset($result['profane']) ? (bool) $result['profane'] : null;
     }
 
-    public function classifyAndReply(string $currentNodeIntent, string $userInput, array $candidateOptions): array
+    public function classifyAndReply(string $currentNodeIntent, string $userInput, array $candidateOptions, ?string $lang = null): array
     {
         $optionsText = collect($candidateOptions)
             ->map(fn($opt, $i) => ($i + 1) . ". id=\"{$opt['id']}\" | nhãn=\"{$opt['label']}\" | điều kiện khớp=\"{$opt['intent']}\"")
@@ -168,7 +174,7 @@ PROMPT;
 
         return [
             'matched_id' => $matchedId,
-            'reply' => $this->generateReply($targetIntent, $userInput),
+            'reply' => $this->generateReply($targetIntent, $userInput, $lang),
         ];
     }
 
@@ -860,7 +866,7 @@ PROMPT;
      * phòng khi câu hỏi khách không khớp bất kỳ lựa chọn nào trong kịch bản hiện tại.
      * Kèm gợi ý điều hướng tới trang liên quan nếu phù hợp.
      */
-    public function answerFreeform(string $userInput): array
+    public function answerFreeform(string $userInput, ?string $lang = null): array
     {
         $knowledgePath = resource_path('chatbot/website_knowledge.txt');
         $knowledge = file_exists($knowledgePath) ? file_get_contents($knowledgePath) : '';
@@ -906,7 +912,9 @@ PROMPT;
         $result = $this->callGemini($prompt, true);
 
         return [
-            'reply' => $result['reply'] ?? 'Xin lỗi, tôi chưa có thông tin về việc này. Bạn có thể liên hệ trực tiếp nhà hàng để được hỗ trợ thêm nhé.',
+            'reply' => $result['reply'] ?? ($lang === 'en'
+                ? "Sorry, I don't have information about that. You can contact the restaurant directly for more help."
+                : 'Xin lỗi, tôi chưa có thông tin về việc này. Bạn có thể liên hệ trực tiếp nhà hàng để được hỗ trợ thêm nhé.'),
             'suggested_route' => $result['suggested_route'] ?? null,
             'suggested_label' => $result['suggested_label'] ?? null,
         ];

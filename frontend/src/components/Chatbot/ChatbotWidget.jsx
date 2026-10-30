@@ -215,6 +215,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 target_node_id: targetNodeId,
                 target_intent: targetNode?.intentSummary || '',
                 selected_label: t('chatbot.script.autoHint', { lng: replyLangRef.current }),
+                lang: replyLangRef.current,
             });
             appendBotMessages(res.data.matched_id, res.data.reply);
             setCurrentNodeId(res.data.matched_id);
@@ -401,6 +402,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 type: 'button',
                 selected_option_id: option.id,
                 selected_label: t(option.labelKey),
+                lang: replyLangRef.current,
                 target_intent: targetNode?.intentSummary || option.intent,
             });
             appendBotMessages(res.data.matched_id, res.data.reply);
@@ -428,6 +430,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 user_input: text,
                 current_node_intent: currentNode?.intentSummary || '',
                 candidate_options: buildCandidateOptions(currentNode),
+                lang: replyLangRef.current,
             });
             appendBotMessages(res.data.matched_id, res.data.reply);
 
