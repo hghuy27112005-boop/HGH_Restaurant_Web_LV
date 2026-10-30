@@ -507,6 +507,7 @@ class ChatbotController extends Controller
             if ($items !== []) {
                 $imagesByDate[$dateKey] = [
                     'date' => $dateKey,
+                    'is_today' => $dateKey === $today->format('Y-m-d'),
                     'label' => $dateKey === $today->format('Y-m-d')
                         ? 'Hình ảnh hôm nay'
                         : 'Hình ảnh ngày ' . $date->format('d/m/Y'),

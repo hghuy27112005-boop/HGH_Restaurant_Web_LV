@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-25T13:43:25.660Z",
+  "updatedAt": "2026-10-30T10:22:08.482Z",
   "findings": [
     {
       "id": "407e203b7b733b0bc34c15e122bf26a8c2c38b0f23f0281f53b3c02d928ab219",
@@ -51,22 +51,10 @@
       "message": "[vi] prop aria-label: \"Xem ảnh\""
     },
     {
-      "id": "88a05c4b2b25df5b8b8f201241187fd2981787d96ad30703b860d38424b8ea2b",
-      "group": "4. Hardcoded Vietnamese",
-      "file": "src/components/Chatbot/ChatbotWidget.jsx",
-      "message": "[vi] prop aria-label: \"Tùy chọn\""
-    },
-    {
       "id": "f16733f88f83b6c4574a58e6aebc71f9bd8409845df03766be39516b41751be6",
       "group": "4. Hardcoded Vietnamese",
       "file": "src/components/Chatbot/ChatbotWidget.jsx",
       "message": "[vi] prop aria-label: \"Xem ảnh chờ gửi\""
-    },
-    {
-      "id": "f8cddde84d10e3d13acee4853522fac774ee2de15628f4ee726e49b7c324358f",
-      "group": "4. Hardcoded Vietnamese",
-      "file": "src/components/Chatbot/ChatbotWidget.jsx",
-      "message": "[en] prop aria-label: \"Xem\""
     },
     {
       "id": "a79910cd2519980c8631afde66c54f4f514c0900f602ffa05753b456fffebb9c",

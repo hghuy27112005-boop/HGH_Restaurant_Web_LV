@@ -54,7 +54,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         ...imageGroups.flatMap((group) => group.images.map((image) => ({
             url: image.image_url,
             name: image.filename,
-            label: image.filename || 'Ảnh trong thư viện',
+            label: image.filename || t('chatbot.imageLibraryFallback'),
         }))),
         ...(historyDate ? historyMessages : messages)
             .filter((message) => message.image_url)
@@ -66,7 +66,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         ...pendingImages.map((image, index) => ({
             url: image.url,
             name: image.file.name || `pending-image-${index + 1}.png`,
-            label: `Ảnh chờ gửi ${index + 1}`,
+            label: t('chatbot.imagePendingLabel', { n: index + 1 }),
         })),
     ].map((image) => [image.url, image])).values());
     const currentPreview = previewIndex === null ? null : previewImages[previewIndex] || null;
@@ -611,7 +611,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                     <div style={styles.emptyHistory}>{translatePageText("Chưa có hình ảnh đã gửi.")}</div>
                                 ) : imageGroups.map((group) => (
                                     <section key={group.date} style={styles.imageDayGroup}>
-                                        <div style={styles.imageDayTitle}>{group.label}</div>
+                                        <div style={styles.imageDayTitle}>{group.is_today ? t('chatbot.imagesToday') : t('chatbot.imagesDate', { date: group.date.split('-').reverse().join('/') })}</div>
                                         <div style={styles.imageGrid}>
                                             {group.images.map((image) => (
                                                 <button
@@ -637,12 +637,12 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                             ) : chatDays.map((day) => (
                                 <div key={day.date} style={styles.dayItem}>
                                     <button style={styles.dayLabel} onClick={() => handleSelectDay(day)}>
-                                        {day.label}
+                                        {day.is_today ? t('chatbot.historyToday') : t('chatbot.historyDate', { date: day.date.split('-').reverse().join('/') })}
                                     </button>
                                     <button
                                         style={styles.moreBtn}
                                         onClick={() => setActionDate(actionDate === day.date ? null : day.date)}
-                                        aria-label={`Tùy chọn ${day.label}`}
+                                        aria-label={t('chatbot.historyOptionsAria', { label: day.is_today ? t('chatbot.historyToday') : t('chatbot.historyDate', { date: day.date.split('-').reverse().join('/') }) })}
                                     >
                                         ⋯
                                     </button>
@@ -875,7 +875,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 type="button"
                                 style={{ ...styles.imageViewerThumbnail, ...(index === previewIndex ? styles.imageViewerThumbnailActive : {}) }}
                                 onClick={() => setPreviewIndex(index)}
-                                aria-label={`Xem ${image.label.toLowerCase()} ${index + 1}`}
+                                aria-label={t('chatbot.imageViewAria', { label: image.label.toLowerCase(), n: index + 1 })}
                                 aria-current={index === previewIndex ? 'true' : undefined}
                             >
                                 <img src={image.url} alt="" style={styles.imageViewerThumbnailImage} />
