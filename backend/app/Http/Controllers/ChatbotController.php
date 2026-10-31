@@ -8,16 +8,12 @@ use App\Services\GeminiChatbotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Services\ContentModerationService;
-use App\Models\Dish;
-use App\Services\DishCustomizationService;
-use Illuminate\Support\Str;
 
 class ChatbotController extends Controller
 {
     public function __construct(
         private GeminiChatbotService $gemini,
-        private ContentModerationService $moderation,
-        private DishCustomizationService $dishCustomization
+        private ContentModerationService $moderation
     ) {}
 
     public function getSession()
@@ -185,127 +181,6 @@ class ChatbotController extends Controller
             'reply' => $reply,
             'suggested_route' => $suggestedRoute,
             'suggested_label' => $suggestedLabel,
-        ]);
-    }
-
-    private function looksLikeRecipeChange(string $input): bool
-    {
-        return Str::contains(Str::lower($input), [
-            'công thức', 'nguyên liệu', 'không thích', 'bỏ ', 'thay ', 'đổi ', 'loại bỏ',
-        ]);
-    }
-
-    private function detectDishDetailSuggestion(string $input): ?array
-    {
-        $normalizedInput = mb_strtolower($input, 'UTF-8');
-        $ingredientKeywords = [
-            'nguyên liệu', 'thành phần', 'ingredient', 'ingredients',
-            'công thức', 'cách nấu', 'cách làm', 'các bước', 'recipe', 'reicpe',
-            'nấu như thế nào', 'nấu ra sao', 'chế biến', 'bật mí', 'thế nào',
-            'có những gì', 'gồm những gì', 'có gì', 'giải thích', 'món này'
-        ];
-        $preferenceKeywords = [
-            'không thích', 'ko thích', 'không ăn', 'ko ăn', 'bỏ', 'loại bỏ', 'không muốn',
-            'không thích ăn', 'không ăn rau', 'không ăn thịt', 'bớt', 'thay', 'đổi', 'rau'
-        ];
-
-        $hasIngredientIntent = collect($ingredientKeywords)->contains(fn ($keyword) => Str::contains($normalizedInput, mb_strtolower($keyword, 'UTF-8')));
-        $hasPreferenceIntent = collect($preferenceKeywords)->contains(fn ($keyword) => Str::contains($normalizedInput, mb_strtolower($keyword, 'UTF-8')));
-
-        if (!$hasIngredientIntent && !$hasPreferenceIntent) {
-            return null;
-        }
-
-        $dishes = Dish::active()->get(['dish_id', 'dish_name']);
-        $bestMatch = null;
-        $bestLength = 0;
-
-        foreach ($dishes as $dish) {
-            $name = mb_strtolower($dish->dish_name, 'UTF-8');
-            if (Str::contains($normalizedInput, $name)) {
-                $length = mb_strlen($name, 'UTF-8');
-                if ($length > $bestLength) {
-                    $bestMatch = $dish;
-                    $bestLength = $length;
-                }
-            }
-        }
-
-        if ($bestMatch) {
-            return [
-                'reply' => "Món {$bestMatch->dish_name} có nguyên liệu và công thức nấu chi tiết ở trang chi tiết món. Bạn có thể tự do bỏ bớt các nguyên liệu mà bạn không thích, sau đó xác nhận nguyên liệu để tạo 1 công thức mới.",
-                'suggested_route' => '/dish-details/' . $bestMatch->dish_id,
-                'suggested_label' => 'Đến trang chi tiết món ' . $bestMatch->dish_name,
-            ];
-        }
-
-        return [
-            'reply' => 'Bạn có thể xem danh sách món ăn trên trang thực đơn để chọn món muốn biết nguyên liệu hoặc công thức. Bạn có thể tự do bỏ bớt các nguyên liệu mà bạn không thích, sau đó xác nhận nguyên liệu để tạo 1 công thức mới.',
-            'suggested_route' => '/menu',
-            'suggested_label' => 'Tới trang thực đơn',
-        ];
-    }
-
-    private function createRecipeCustomization(string $input, ChatSession $session, ?string $lang = null)
-    {
-        $dishes = Dish::active()->get(['dish_id', 'dish_name', 'ingredients', 'recipe_instructions']);
-        $result = $this->gemini->buildAlternativeRecipe($input, $dishes->toArray());
-
-        if (!($result['matched'] ?? false)) {
-            return null;
-        }
-
-        $dish = $dishes->firstWhere('dish_id', (int) ($result['dish_id'] ?? 0));
-        $removed = array_values(array_filter($result['removed_ingredients'] ?? [], 'is_string'));
-
-        if (!$dish || count($removed) === 0) {
-            return null;
-        }
-
-        $options = $this->dishCustomization->options($dish);
-        $optionalByName = collect($options['optional'])->keyBy(fn ($ingredient) => Str::lower($ingredient['name']));
-        $removedIds = collect($removed)->map(function ($ingredient) use ($optionalByName) {
-            return $optionalByName->get(Str::lower(trim($ingredient)))['ingredient_id'] ?? null;
-        });
-        if ($removedIds->contains(null)) {
-            return null;
-        }
-        $selection = [
-            'replacements' => [],
-            'removed_ingredient_ids' => $removedIds->values()->all(),
-            'add_on_ingredient_ids' => [],
-        ];
-        $resolved = $this->dishCustomization->resolveSelection($dish, $selection);
-        $instructions = $this->gemini->generateRecipeFromIngredients(
-            (string) $dish->recipe_instructions,
-            $resolved['ingredients'],
-            'vi'
-        );
-
-        $customization = $this->dishCustomization->save(
-            $dish,
-            $result['recipe_name'] ?? (($lang === 'en' ? 'Alternative recipe ' : 'Công thức thay thế ') . now()->format('d/m/Y H:i')),
-            $instructions,
-            $selection
-        );
-
-        ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'user', 'content' => $input]);
-        $removedLabels = $lang === 'en'
-            ? array_map(fn ($ingredient) => trim($ingredient), $resolved['removed_ingredients'])
-            : array_map(fn ($ingredient) => $this->dishCustomization->ingredientLabel($ingredient), $resolved['removed_ingredients']);
-        $dishNameEn = Dish::where('dish_id', $dish->dish_id)->value('dish_name_en') ?: $dish->dish_name;
-        $reply = $lang === 'en'
-            ? "I've created and saved an alternative recipe for {$dishNameEn}, with these removed: " . implode(', ', $removedLabels) . '. You can view it on the dish details page.'
-            : "Tôi đã tạo và lưu công thức thay thế cho món {$dish->dish_name}, đã bỏ: " . implode(', ', $removedLabels) . ". Bạn có thể xem công thức này ở trang chi tiết món ăn.";
-        ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'bot', 'content' => $reply]);
-
-        return response()->json([
-            'success' => true,
-            'matched_id' => 'unclear',
-            'reply' => $reply,
-            'custom_recipe' => $customization,
-            'suggested_route' => '/dish-details/' . $dish->dish_id,
-            'suggested_label' => $lang === 'en' ? 'View alternative recipe' : 'Xem công thức thay thế',
         ]);
     }
 
