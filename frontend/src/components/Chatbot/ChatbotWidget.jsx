@@ -322,17 +322,15 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
 
         setLoading(true);
         try {
-            const uploadedMessages = [];
             for (const pendingImage of pendingImages) {
                 const formData = new FormData();
                 formData.append('image', pendingImage.file);
                 formData.append('lang', i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi');
                 const response = await chatbotAPI.uploadImage(formData);
-                uploadedMessages.push(response.data.message);
+                setMessages((prev) => [...prev, response.data.message]);
+                setPendingImages((current) => current.filter((item) => item.url !== pendingImage.url));
                 URL.revokeObjectURL(pendingImage.url);
             }
-            setMessages((prev) => [...prev, ...uploadedMessages]);
-            setPendingImages([]);
         } catch (error) {
             setImageError(error.response?.status === 422 && error.response?.data?.errors?.image?.[0]
                 ? error.response.data.errors.image[0]
