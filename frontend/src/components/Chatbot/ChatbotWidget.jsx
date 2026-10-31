@@ -336,7 +336,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         } catch (error) {
             setImageError(error.response?.status === 422 && error.response?.data?.errors?.image?.[0]
                 ? error.response.data.errors.image[0]
-                : t('chatbot.imageUploadFailed'));
+                : { key: 'chatbot.imageUploadFailed' });
         } finally {
             setLoading(false);
         }
@@ -836,7 +836,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                     <div style={styles.imageErrorModal} onClick={(event) => event.stopPropagation()}>
                         <div style={styles.imageErrorIcon}>!</div>
                         <h2 style={styles.imageErrorTitle}>{translatePageText("Không thể gửi hình ảnh")}</h2>
-                        <p style={styles.imageErrorText}>{imageError}</p>
+                        <p style={styles.imageErrorText}>{typeof imageError === 'object' ? t(imageError.key) : imageError}</p>
                         <button style={styles.deleteBtn} onClick={() => setImageError('')}>{translatePageText("Đã hiểu")}</button>
                     </div>
                 </div>
