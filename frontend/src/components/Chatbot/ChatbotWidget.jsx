@@ -688,7 +688,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                             <img src={msg.image_url} alt={translatePageText("Ảnh đã gửi")} style={styles.chatImage} />
                                         </button>
                                     )}
-                                    {msg.content && msg.content !== translatePageText("[Hình ảnh]") && (
+                                    {msg.content && !msg.image_url && (
                                         <div>{msg.labelKey ? t(msg.labelKey) : msg.content}</div>
                                     )}
                                 </div>

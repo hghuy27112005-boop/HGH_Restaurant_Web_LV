@@ -41,6 +41,7 @@ class ChatbotController extends Controller
         $messages = ChatMessage::where('session_id', $session->session_id)
             ->whereBetween('created_at', [$todayStart, $todayEnd])
             ->orderBy('created_at')
+            ->orderBy('message_id')
             ->get(['sender', 'content', 'image_path', 'created_at']);
 
         $messages->transform(function ($message) {
@@ -243,6 +244,7 @@ class ChatbotController extends Controller
         $messages = ChatMessage::where('session_id', $session->session_id)
             ->whereBetween('created_at', [$date->copy()->startOfDay(), $date->copy()->endOfDay()])
             ->orderBy('created_at')
+            ->orderBy('message_id')
             ->get(['sender', 'content', 'image_path', 'created_at']);
 
         $messages->transform(function ($message) {
