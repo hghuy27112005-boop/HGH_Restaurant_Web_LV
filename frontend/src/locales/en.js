@@ -93,6 +93,7 @@ const en = {
         imageLibraryFallback: 'Library image',
         imagePendingLabel: 'Pending image {{n}}',
         imageViewAria: 'View {{label}} {{n}}',
+        imageUploadFailed: 'Could not save the image. Please try again.',
         nav: {
             menu: 'Go to the menu',
             dishDetail: 'View dish details',

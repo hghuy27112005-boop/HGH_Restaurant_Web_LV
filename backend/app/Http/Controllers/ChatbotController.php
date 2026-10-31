@@ -257,11 +257,18 @@ class ChatbotController extends Controller
     {
         $request->validate([
             'image' => 'required|image|mimes:jpeg,jpg,png,gif,webp,bmp,tif,tiff,avif,heic,heif,svg|max:10240',
-        ], [
+        ], $request->input('lang') === 'en' ? [
+            'image.required' => 'Please choose an image.',
+            'image.image' => 'The file must be an image.',
+            'image.mimes' => 'The file must be a supported image format.',
+            'image.max' => 'The image must not exceed 10MB.',
+            'image.uploaded' => 'The image could not be uploaded. It may be too large.',
+        ] : [
             'image.required' => 'Vui lòng chọn ảnh.',
             'image.image' => 'File phải là ảnh.',
             'image.mimes' => 'File phải là định dạng hình ảnh được hỗ trợ.',
             'image.max' => 'Ảnh không được vượt quá 10MB.',
+            'image.uploaded' => 'Không thể tải ảnh lên. Ảnh có thể quá lớn.',
         ]);
 
         $user = Auth::user();

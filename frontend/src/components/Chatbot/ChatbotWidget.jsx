@@ -326,6 +326,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             for (const pendingImage of pendingImages) {
                 const formData = new FormData();
                 formData.append('image', pendingImage.file);
+                formData.append('lang', i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi');
                 const response = await chatbotAPI.uploadImage(formData);
                 uploadedMessages.push(response.data.message);
                 URL.revokeObjectURL(pendingImage.url);
@@ -333,7 +334,9 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             setMessages((prev) => [...prev, ...uploadedMessages]);
             setPendingImages([]);
         } catch (error) {
-            setImageError(error.response?.data?.message || 'Không thể lưu hình ảnh. Vui lòng thử lại.');
+            setImageError(error.response?.status === 422 && error.response?.data?.errors?.image?.[0]
+                ? error.response.data.errors.image[0]
+                : t('chatbot.imageUploadFailed'));
         } finally {
             setLoading(false);
         }

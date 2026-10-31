@@ -93,6 +93,7 @@ const vi = {
         imageLibraryFallback: 'Ảnh trong thư viện',
         imagePendingLabel: 'Ảnh chờ gửi {{n}}',
         imageViewAria: 'Xem {{label}} {{n}}',
+        imageUploadFailed: 'Không thể lưu hình ảnh. Vui lòng thử lại.',
         nav: {
             menu: 'Tới trang thực đơn',
             dishDetail: 'Xem chi tiết món',
