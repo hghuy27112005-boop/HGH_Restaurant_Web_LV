@@ -114,39 +114,6 @@ class ChatbotController extends Controller
             ['current_node_id' => 'root', 'context_data' => []]
         );
 
-        if ($request->type === 'text' && $this->looksLikeRecipeChange($request->user_input)) {
-            $customization = $this->createRecipeCustomization($request->user_input, $session);
-            if ($customization) {
-                return $customization;
-            }
-        }
-
-        if ($request->type === 'text') {
-            $dishDetailSuggestion = $this->detectDishDetailSuggestion($request->user_input);
-            if ($dishDetailSuggestion) {
-                ChatMessage::create([
-                    'session_id' => $session->session_id,
-                    'sender' => 'user',
-                    'content' => $request->user_input,
-                ]);
-                ChatMessage::create([
-                    'session_id' => $session->session_id,
-                    'sender' => 'bot',
-                    'content' => $dishDetailSuggestion['reply'],
-                ]);
-
-                $session->update(['current_node_id' => 'root']);
-
-                return response()->json([
-                    'success' => true,
-                    'matched_id' => 'unclear',
-                    'reply' => $dishDetailSuggestion['reply'],
-                    'suggested_route' => $dishDetailSuggestion['suggested_route'],
-                    'suggested_label' => $dishDetailSuggestion['suggested_label'],
-                ]);
-            }
-        }
-
         // === auto: bot tự nói tiếp, không có input thật từ người dùng ===
         if ($request->type === 'auto') {
             $reply = $this->gemini->generateReply($request->target_intent, $request->selected_label, $request->input('lang'));
@@ -279,7 +246,7 @@ class ChatbotController extends Controller
         ];
     }
 
-    private function createRecipeCustomization(string $input, ChatSession $session)
+    private function createRecipeCustomization(string $input, ChatSession $session, ?string $lang = null)
     {
         $dishes = Dish::active()->get(['dish_id', 'dish_name', 'ingredients', 'recipe_instructions']);
         $result = $this->gemini->buildAlternativeRecipe($input, $dishes->toArray());
@@ -317,14 +284,19 @@ class ChatbotController extends Controller
 
         $customization = $this->dishCustomization->save(
             $dish,
-            $result['recipe_name'] ?? 'Công thức thay thế ' . now()->format('d/m/Y H:i'),
+            $result['recipe_name'] ?? (($lang === 'en' ? 'Alternative recipe ' : 'Công thức thay thế ') . now()->format('d/m/Y H:i')),
             $instructions,
             $selection
         );
 
         ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'user', 'content' => $input]);
-        $removedLabels = array_map(fn ($ingredient) => $this->dishCustomization->ingredientLabel($ingredient), $resolved['removed_ingredients']);
-        $reply = "Tôi đã tạo và lưu công thức thay thế cho món {$dish->dish_name}, đã bỏ: " . implode(', ', $removedLabels) . ". Bạn có thể xem công thức này ở trang chi tiết món ăn.";
+        $removedLabels = $lang === 'en'
+            ? array_map(fn ($ingredient) => trim($ingredient), $resolved['removed_ingredients'])
+            : array_map(fn ($ingredient) => $this->dishCustomization->ingredientLabel($ingredient), $resolved['removed_ingredients']);
+        $dishNameEn = Dish::where('dish_id', $dish->dish_id)->value('dish_name_en') ?: $dish->dish_name;
+        $reply = $lang === 'en'
+            ? "I've created and saved an alternative recipe for {$dishNameEn}, with these removed: " . implode(', ', $removedLabels) . '. You can view it on the dish details page.'
+            : "Tôi đã tạo và lưu công thức thay thế cho món {$dish->dish_name}, đã bỏ: " . implode(', ', $removedLabels) . ". Bạn có thể xem công thức này ở trang chi tiết món ăn.";
         ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'bot', 'content' => $reply]);
 
         return response()->json([
@@ -333,7 +305,7 @@ class ChatbotController extends Controller
             'reply' => $reply,
             'custom_recipe' => $customization,
             'suggested_route' => '/dish-details/' . $dish->dish_id,
-            'suggested_label' => 'Xem công thức thay thế',
+            'suggested_label' => $lang === 'en' ? 'View alternative recipe' : 'Xem công thức thay thế',
         ]);
     }
 
