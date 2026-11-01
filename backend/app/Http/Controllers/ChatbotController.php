@@ -66,6 +66,8 @@ class ChatbotController extends Controller
         $request->validate([
             'type' => 'required|in:button,text,auto',
             'lang' => 'nullable|in:vi,en',
+            'defer_reply' => 'nullable|boolean',
+            'resume_pending' => 'nullable|boolean',
             'user_input' => 'required_if:type,text|nullable|string|max:500',
             'selected_option_id' => 'required_if:type,button|nullable|string',
             'selected_label' => 'nullable|string',
@@ -93,7 +95,7 @@ class ChatbotController extends Controller
             ], 403);
         }
 
-        if ($request->type === 'text') {
+        if ($request->type === 'text' && !$request->boolean('resume_pending')) {
             $moderationResult = $this->moderation->check($request->user_input, $user->user_id, 'chatbot');
             if ($moderationResult) {
                 return response()->json([
@@ -110,6 +112,47 @@ class ChatbotController extends Controller
             ['user_id' => $user->user_id],
             ['current_node_id' => 'root', 'context_data' => []]
         );
+
+        $resuming = false;
+
+        if ($request->type === 'text' && $request->boolean('defer_reply')) {
+            // Tin chữ đi kèm hình: lưu tin của khách, chờ hình gửi xong mới trả lời.
+            $userMessage = ChatMessage::create([
+                'session_id' => $session->session_id,
+                'sender' => 'user',
+                'content' => $request->user_input,
+            ]);
+            $context = $session->context_data ?? [];
+            $context['pending_text'] = [
+                'message_id' => $userMessage->message_id,
+                'content' => $request->user_input,
+                'expires_at' => now()->addMinutes(10)->toIso8601String(),
+            ];
+            $session->update(['context_data' => $context]);
+
+            return response()->json(['success' => true, 'deferred' => true]);
+        }
+
+        if ($request->type === 'text' && $request->boolean('resume_pending')) {
+            $context = $session->context_data ?? [];
+            $pending = $context['pending_text'] ?? null;
+            unset($context['pending_text']);
+            $session->update(['context_data' => $context]);
+
+            if (!$pending || now()->greaterThan(\Carbon\Carbon::parse($pending['expires_at']))) {
+                return response()->json([
+                    'success' => false,
+                    'code' => 'pending_text_missing',
+                    'message' => $request->input('lang') === 'en'
+                        ? 'Your message expired. Please send it again.'
+                        : 'Tin nhắn đã hết hạn. Vui lòng gửi lại.',
+                ], 409);
+            }
+
+            // Dùng đúng nội dung đã kiểm duyệt ở lượt trước, bỏ qua chữ client gửi lại.
+            $request->merge(['user_input' => $pending['content']]);
+            $resuming = true;
+        }
 
         // === auto: bot tự nói tiếp, không có input thật từ người dùng ===
         if ($request->type === 'auto') {
@@ -135,11 +178,13 @@ class ChatbotController extends Controller
             ? ($request->selected_label ?? $request->selected_option_id)
             : $request->user_input;
 
-        ChatMessage::create([
-            'session_id' => $session->session_id,
-            'sender' => 'user',
-            'content' => $userMessageContent,
-        ]);
+        if (!$resuming) {
+            ChatMessage::create([
+                'session_id' => $session->session_id,
+                'sender' => 'user',
+                'content' => $userMessageContent,
+            ]);
+        }
 
         if ($request->type === 'button') {
             // Đã biết chính xác node đích, dùng thẳng intentSummary của node đó (gửi từ frontend)
@@ -259,6 +304,7 @@ class ChatbotController extends Controller
     {
         $request->validate([
             'image' => 'required|image|mimes:jpeg,jpg,png,gif,webp,bmp,tif,tiff,avif,heic,heif,svg|max:10240',
+            'ack' => 'nullable|boolean',
         ], $request->input('lang') === 'en' ? [
             'image.required' => 'Please choose an image.',
             'image.image' => 'The file must be an image.',
@@ -311,8 +357,23 @@ class ChatbotController extends Controller
             'image_path' => $imagePath,
         ]);
 
+        $ackMessage = null;
+        if ($request->boolean('ack')) {
+            $ackMessage = ChatMessage::create([
+                'session_id' => $session->session_id,
+                'sender' => 'bot',
+                'content' => $request->input('lang') === 'en' ? 'Image received' : 'Đã nhận hình',
+            ]);
+        }
+
         return response()->json([
             'success' => true,
+            'ack_message' => $ackMessage ? [
+                'message_id' => $ackMessage->message_id,
+                'sender' => $ackMessage->sender,
+                'content' => $ackMessage->content,
+                'created_at' => $ackMessage->created_at,
+            ] : null,
             'message' => [
                 'message_id' => $message->message_id,
                 'sender' => $message->sender,
