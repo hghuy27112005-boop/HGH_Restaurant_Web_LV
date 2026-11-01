@@ -1,9 +1,9 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { chatbotAPI } from '@/services/chatbotApi';
 import { useAuthContext } from '@/context/AuthContext';
 import chatbotScripts from '@/data/chatbot_customer_scripts';
-import { translatePageText } from '../../pageTextTranslations';
 import { useTranslation } from 'react-i18next';
 
 const getNavLabelKey = (route) => {
@@ -12,6 +12,20 @@ const getNavLabelKey = (route) => {
     if (route === '/profile/orders') return 'chatbot.nav.orders';
     if (route === '/profile') return 'chatbot.nav.profile';
     return 'chatbot.nav.related';
+};
+
+const detectReplyLanguage = (text, fallbackLanguage) => {
+    if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/iu.test(text)) return 'vi';
+    const normalized = String(text || '').toLowerCase().trim().replace(/\s+/g, ' ');
+    const vietnameseMarkers = /\b(toi|minh|muon|ban|nha hang|mon|dat|giao|hom nay|giup|bao nhieu|khong|cho|voi|cua|sao|nao|xin chao)\b/;
+    if (vietnameseMarkers.test(normalized)) return 'vi';
+
+    // Short greetings like "hi" have no language markers, but are unambiguously
+    // English in chat. Accent detection alone cannot identify unaccented Vietnamese.
+    const englishGreeting = /^(hi|hello|hey|hiya|howdy|good morning|good afternoon|good evening|thanks|thank you|thx|bye|goodbye)[.!?,\s]*$/;
+    const englishMarkers = /\b(hello|hey|good morning|good afternoon|good evening|thanks|thank you|please|help|there|i|we|you|my|me|the|what|where|when|why|who|how|is|are|can|could|would|want|need|order|menu|price|delivery|book|reservation)\b/;
+    if (englishGreeting.test(normalized) || englishMarkers.test(normalized)) return 'en';
+    return fallbackLanguage === 'en' ? 'en' : 'vi';
 };
 
 const ChatbotWidget = ({ isOpen, setIsOpen }) => {
@@ -61,7 +75,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             .map((message, index) => ({
                 url: message.image_url,
                 name: message.filename || `chat-image-${index + 1}.png`,
-                get label() { return translatePageText("Ảnh trong tin nhắn"); },
+                get label() { return i18n.t("Ảnh trong tin nhắn", { ns: 'legacy', keySeparator: false }); },
             })),
         ...pendingImages.map((image, index) => ({
             url: image.url,
@@ -87,7 +101,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 setMessages(data.messages || []);
                 setModerationBlocked(Boolean(data.moderation?.blocked));
                 if (data.moderation?.blocked) {
-                    setModerationMessage(translatePageText("Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay."));
+                    setModerationMessage(i18n.t("Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.", { ns: 'legacy', keySeparator: false }));
                 }
                 setLoaded(true);
 
@@ -125,7 +139,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             const imageItem = clipboardItems.find((item) => item.type.startsWith('image/'));
             const hasFile = clipboardItems.some((item) => item.kind === 'file');
             if (!imageItem) {
-                if (hasFile) setImageError(translatePageText("Chỉ có thể nhận hình ảnh trong khung chat."));
+                if (hasFile) setImageError(i18n.t("Chỉ có thể nhận hình ảnh trong khung chat.", { ns: 'legacy', keySeparator: false }));
                 return;
             }
 
@@ -294,7 +308,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         };
         const invalidFile = selectedFiles.find((file) => !isImageFile(file));
         if (invalidFile) {
-            setImageError(translatePageText("Chỉ có thể nhận hình ảnh trong khung chat."));
+            setImageError(i18n.t("Chỉ có thể nhận hình ảnh trong khung chat.", { ns: 'legacy', keySeparator: false }));
         }
 
         const imageFiles = selectedFiles.filter(isImageFile);
@@ -316,7 +330,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     const sendPendingImage = async () => {
         if (pendingImages.length === 0 || loading) return;
         if (pendingImages.length > 5) {
-            setImageError(translatePageText("Bạn chỉ có thể gửi tối đa 5 hình ảnh trong một lần."));
+            setImageError(i18n.t("Bạn chỉ có thể gửi tối đa 5 hình ảnh trong một lần.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -419,7 +433,8 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         if (loading || historyDate || moderationBlocked || !inputText.trim()) return;
 
         const text = inputText.trim();
-        replyLangRef.current = /[\u00C0-\u024F\u1EA0-\u1EF9]/.test(text) ? 'vi' : 'en';
+        const interfaceLanguage = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi';
+        replyLangRef.current = detectReplyLanguage(text, interfaceLanguage);
         setInputText('');
         if (inputRef.current) inputRef.current.style.height = 'auto';
         setMessages((prev) => [...prev, { sender: 'user', content: text, created_at: new Date().toISOString() }]);
@@ -504,6 +519,45 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     return (
         <>
             <style>{`
+                .chatbot-window {
+                    --chat-surface: #ffffff;
+                    --chat-surface-muted: #fafafa;
+                    --chat-bot-bubble: #f1f1f1;
+                    --chat-text: #333333;
+                    --chat-muted-text: #6b7280;
+                    --chat-border: #e5e7eb;
+                    --chat-border-soft: #eeeeee;
+                    --chat-input-placeholder: #9ca3af;
+                    --chat-warning-bg: #fff3cd;
+                    --chat-warning-text: #856404;
+                    --chat-modal-title: #b91c1c;
+                }
+
+                html[data-theme='dark'] .chatbot-window {
+                    --chat-surface: #1f232b;
+                    --chat-surface-muted: #181c23;
+                    --chat-bot-bubble: #343a46;
+                    --chat-text: #f3f4f6;
+                    --chat-muted-text: #c1c7d0;
+                    --chat-border: #454c58;
+                    --chat-border-soft: #3a414c;
+                    --chat-input-placeholder: #9ca3af;
+                    --chat-warning-bg: #493b20;
+                    --chat-warning-text: #f7d889;
+                    --chat-modal-title: #fca5a5;
+                }
+
+                .chatbot-window input,
+                .chatbot-window textarea {
+                    background-color: var(--chat-surface);
+                    color: var(--chat-text);
+                }
+
+                .chatbot-window input::placeholder,
+                .chatbot-window textarea::placeholder {
+                    color: var(--chat-input-placeholder);
+                }
+
                 @keyframes pageSlideIn {
                     from {
                         opacity: 0.35;
@@ -570,7 +624,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 }
             `}</style>
             {!isOpen && (
-                <button style={styles.bubble} onClick={() => setIsOpen(true)} aria-label={translatePageText("Mở chat hỗ trợ")}>
+                <button style={styles.bubble} onClick={() => setIsOpen(true)} aria-label={i18n.t("Mở chat hỗ trợ", { ns: 'legacy', keySeparator: false })}>
                     <img src="/pics/chatbot.png" alt="" style={styles.bubbleIcon} />
                 </button>
             )}
@@ -581,7 +635,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                     <button
                         style={styles.menuBtn}
                         onClick={handleHistoryMenuToggle}
-                        aria-label={translatePageText("Xem đoạn chat theo ngày")}
+                        aria-label={i18n.t("Xem đoạn chat theo ngày", { ns: 'legacy', keySeparator: false })}
                     >
                         <span style={styles.menuIcon} aria-hidden="true">
                             <span style={styles.menuIconBar} />
@@ -597,14 +651,14 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 <div style={styles.screenWrapper}>
                     <div style={{ ...styles.historyScreen, ...styles.pageSlideIn }}>
                         <div style={styles.historyHeadingRow}>
-                            <div style={{ ...styles.historyHeading, padding: 0 }}>{translatePageText("Hình ảnh")}</div>
+                            <div style={{ ...styles.historyHeading, padding: 0 }}>{i18n.t("Hình ảnh", { ns: 'legacy', keySeparator: false })}</div>
                             <button
                                 type="button"
                                 style={styles.collapseImagesBtn}
                                 onClick={() => setImagesExpanded((expanded) => !expanded)}
-                                aria-label={imagesExpanded ? translatePageText("Thu gọn mục hình ảnh") : translatePageText("Mở rộng mục hình ảnh")}
+                                aria-label={imagesExpanded ? i18n.t("Thu gọn mục hình ảnh", { ns: 'legacy', keySeparator: false }) : i18n.t("Mở rộng mục hình ảnh", { ns: 'legacy', keySeparator: false })}
                                 aria-expanded={imagesExpanded}
-                                title={imagesExpanded ? translatePageText("Thu gọn hình ảnh") : translatePageText("Mở rộng hình ảnh")}
+                                title={imagesExpanded ? i18n.t("Thu gọn hình ảnh", { ns: 'legacy', keySeparator: false }) : i18n.t("Mở rộng hình ảnh", { ns: 'legacy', keySeparator: false })}
                             >
                                 <span style={{ ...styles.collapseTriangle, transform: imagesExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                             </button>
@@ -612,7 +666,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         {imagesExpanded && (
                             <div style={styles.imageHistoryList}>
                                 {imageGroups.length === 0 ? (
-                                    <div style={styles.emptyHistory}>{translatePageText("Chưa có hình ảnh đã gửi.")}</div>
+                                    <div style={styles.emptyHistory}>{i18n.t("Chưa có hình ảnh đã gửi.", { ns: 'legacy', keySeparator: false })}</div>
                                 ) : imageGroups.map((group) => (
                                     <section key={group.date} style={styles.imageDayGroup}>
                                         <div style={styles.imageDayTitle}>{group.is_today ? t('chatbot.imagesToday') : t('chatbot.imagesDate', { date: group.date.split('-').reverse().join('/') })}</div>
@@ -623,7 +677,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                                     type="button"
                                                     style={styles.historyImageButton}
                                                     onClick={() => openImageViewer(image.image_url)}
-                                                    aria-label={`Xem ảnh ${image.filename}`}
+                                                    aria-label={t('chatbot.imagePreviewAria', { filename: image.filename })}
                                                     title={image.filename}
                                                 >
                                                     <img src={image.image_url} alt={image.filename} style={styles.historyImage} />
@@ -634,10 +688,10 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 ))}
                             </div>
                         )}
-                        <div style={styles.historyHeading}>{translatePageText("Lịch sử chat")}</div>
+                        <div style={styles.historyHeading}>{i18n.t("Lịch sử chat", { ns: 'legacy', keySeparator: false })}</div>
                         <div style={styles.historyList}>
                             {chatDays.length === 0 ? (
-                                <div style={styles.emptyHistory}>{translatePageText("Chưa có lịch sử chat.")}</div>
+                                <div style={styles.emptyHistory}>{i18n.t("Chưa có lịch sử chat.", { ns: 'legacy', keySeparator: false })}</div>
                             ) : chatDays.map((day) => (
                                 <div key={day.date} style={styles.dayItem}>
                                     <button style={styles.dayLabel} onClick={() => handleSelectDay(day)}>
@@ -657,7 +711,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                                 setActionDate(null);
                                                 setDeleteDate(day.date);
                                             }}
-                                        >{translatePageText("Xóa lịch sử chat") + " "}</button>
+                                        >{i18n.t("Xóa lịch sử chat", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     )}
                                 </div>
                             ))}
@@ -672,7 +726,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 <div style={styles.moderationBanner}>{moderationMessage}</div>
                             )}
                         {historyDate && (
-                            <div style={styles.historyBanner}>{translatePageText("Đang xem lại đoạn chat cũ — chỉ xem, không thể nhắn tiếp") + " "}</div>
+                            <div style={styles.historyBanner}>{i18n.t("Đang xem lại đoạn chat cũ — chỉ xem, không thể nhắn tiếp", { ns: 'legacy', keySeparator: false }) + " "}</div>
                         )}
 
                         {(historyDate ? historyMessages : messages).map((msg, idx) => (
@@ -683,9 +737,9 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                             type="button"
                                             style={styles.chatImagePreviewButton}
                                             onClick={() => openImageViewer(msg.image_url)}
-                                            aria-label={translatePageText("Xem ảnh đã gửi")}
+                                            aria-label={i18n.t("Xem ảnh đã gửi", { ns: 'legacy', keySeparator: false })}
                                         >
-                                            <img src={msg.image_url} alt={translatePageText("Ảnh đã gửi")} style={styles.chatImage} />
+                                            <img src={msg.image_url} alt={i18n.t("Ảnh đã gửi", { ns: 'legacy', keySeparator: false })} style={styles.chatImage} />
                                         </button>
                                     )}
                                     {msg.content && !msg.image_url && (
@@ -742,7 +796,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                             type="button"
                                             style={styles.pendingPreviewButton}
                                             onClick={() => openImageViewer(pendingImage.url)}
-                                            aria-label={`Xem ảnh chờ gửi ${index + 1}`}
+                                            aria-label={t('chatbot.pendingImageAria', { n: index + 1 })}
                                         >
                                             <img src={pendingImage.url} alt="" style={styles.pendingImage} />
                                         </button>
@@ -779,8 +833,8 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 style={styles.uploadBtn}
                                 onClick={() => imageInputRef.current?.click()}
                                 disabled={loading || !!historyDate || moderationBlocked}
-                                aria-label={translatePageText("Tải ảnh lên")}
-                                title={translatePageText("Tải ảnh lên")}
+                                aria-label={i18n.t("Tải ảnh lên", { ns: 'legacy', keySeparator: false })}
+                                title={i18n.t("Tải ảnh lên", { ns: 'legacy', keySeparator: false })}
                             >
                                 <svg viewBox="0 0 24 24" style={styles.plusSvg} aria-hidden="true">
                                     <path d="M12 4v16M4 12h16" stroke="white" strokeWidth="3.5" strokeLinecap="round" />
@@ -793,7 +847,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 value={inputText}
                                 onChange={(e) => { setInputText(e.target.value); autoResizeTextarea(); }}
                                 onKeyDown={handleTextareaKeyDown}
-                                placeholder={historyDate ? translatePageText("Đang xem đoạn chat cũ...") : translatePageText("Nhập tin nhắn...")}
+                                placeholder={historyDate ? i18n.t("Đang xem đoạn chat cũ...", { ns: 'legacy', keySeparator: false }) : i18n.t("Nhập tin nhắn...", { ns: 'legacy', keySeparator: false })}
                                 disabled={loading || !!historyDate || moderationBlocked}
                             />
                             <button type="submit" style={styles.sendBtn} disabled={loading || !!historyDate || moderationBlocked}>
@@ -809,20 +863,20 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             {deleteDate && (
                 <div style={styles.modalBackdrop} onClick={() => !deleteLoading && setDeleteDate(null)}>
                     <div style={styles.deleteModal} onClick={(event) => event.stopPropagation()}>
-                        <h2 style={styles.modalTitle}>{translatePageText("Xóa lịch sử chat?")}</h2>
-                        <p style={styles.modalText}>{translatePageText("Lịch sử chat ngày") + " "}{new Date(`${deleteDate}T00:00:00`).toLocaleDateString('vi-VN')}{" " + translatePageText("sẽ bị xóa vĩnh viễn.") + " "}</p>
+                        <h2 style={styles.modalTitle}>{i18n.t("Xóa lịch sử chat?", { ns: 'legacy', keySeparator: false })}</h2>
+                        <p style={styles.modalText}>{i18n.t("Lịch sử chat ngày", { ns: 'legacy', keySeparator: false }) + " "}{new Date(`${deleteDate}T00:00:00`).toLocaleDateString('vi-VN')}{" " + i18n.t("sẽ bị xóa vĩnh viễn.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                         <div style={styles.modalActions}>
                             <button
                                 style={styles.cancelBtn}
                                 onClick={() => setDeleteDate(null)}
                                 disabled={deleteLoading}
-                            >{translatePageText("Hủy") + " "}</button>
+                            >{i18n.t("Hủy", { ns: 'legacy', keySeparator: false }) + " "}</button>
                             <button
                                 style={styles.deleteBtn}
                                 onClick={handleDeleteHistory}
                                 disabled={deleteLoading}
                             >
-                                {deleteLoading ? translatePageText("Đang xóa...") : translatePageText("Xóa lịch sử chat")}
+                                {deleteLoading ? i18n.t("Đang xóa...", { ns: 'legacy', keySeparator: false }) : i18n.t("Xóa lịch sử chat", { ns: 'legacy', keySeparator: false })}
                             </button>
                         </div>
                     </div>
@@ -833,21 +887,21 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 <div style={styles.imageErrorBackdrop} onClick={() => setImageError('')}>
                     <div style={styles.imageErrorModal} onClick={(event) => event.stopPropagation()}>
                         <div style={styles.imageErrorIcon}>!</div>
-                        <h2 style={styles.imageErrorTitle}>{translatePageText("Không thể gửi hình ảnh")}</h2>
+                        <h2 style={styles.imageErrorTitle}>{i18n.t("Không thể gửi hình ảnh", { ns: 'legacy', keySeparator: false })}</h2>
                         <p style={styles.imageErrorText}>{typeof imageError === 'object' ? t(imageError.key) : imageError}</p>
-                        <button style={styles.deleteBtn} onClick={() => setImageError('')}>{translatePageText("Đã hiểu")}</button>
+                        <button style={styles.deleteBtn} onClick={() => setImageError('')}>{i18n.t("Đã hiểu", { ns: 'legacy', keySeparator: false })}</button>
                     </div>
                 </div>
             )}
             </div>
             )}
             {currentPreview && (
-                <div style={styles.imagePreviewBackdrop} role="dialog" aria-modal="true" aria-label={translatePageText("Trình xem ảnh")}>
+                <div style={styles.imagePreviewBackdrop} role="dialog" aria-modal="true" aria-label={i18n.t("Trình xem ảnh", { ns: 'legacy', keySeparator: false })}>
                     <div style={styles.imageViewerToolbar}>
-                        <button type="button" style={styles.imageViewerAction} onClick={downloadPreviewImage} aria-label={translatePageText("Tải ảnh xuống")} title={translatePageText("Tải ảnh xuống")}>
+                        <button type="button" style={styles.imageViewerAction} onClick={downloadPreviewImage} aria-label={i18n.t("Tải ảnh xuống", { ns: 'legacy', keySeparator: false })} title={i18n.t("Tải ảnh xuống", { ns: 'legacy', keySeparator: false })}>
                             <svg viewBox="0 0 24 24" style={styles.imageViewerIcon} aria-hidden="true"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 17v4h14v-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                         </button>
-                        <button type="button" style={styles.imageViewerAction} onClick={() => setPreviewIndex(null)} aria-label={translatePageText("Đóng trình xem ảnh")} title={translatePageText("Đóng")}>
+                        <button type="button" style={styles.imageViewerAction} onClick={() => setPreviewIndex(null)} aria-label={i18n.t("Đóng trình xem ảnh", { ns: 'legacy', keySeparator: false })} title={i18n.t("Đóng", { ns: 'legacy', keySeparator: false })}>
                             <svg viewBox="0 0 24 24" style={styles.imageViewerIcon} aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
                         </button>
                     </div>
@@ -856,7 +910,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         style={{ ...styles.imageViewerArrow, ...styles.imageViewerArrowLeft }}
                         onClick={() => setPreviewIndex((index) => Math.max(0, index - 1))}
                         disabled={previewIndex === 0}
-                        aria-label={translatePageText("Ảnh trước")}
+                        aria-label={i18n.t("Ảnh trước", { ns: 'legacy', keySeparator: false })}
                     >
                         <svg viewBox="0 0 24 24" style={styles.imageViewerIcon} aria-hidden="true"><path d="m15 18-6-6 6-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
@@ -868,11 +922,11 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         style={{ ...styles.imageViewerArrow, ...styles.imageViewerArrowRight }}
                         onClick={() => setPreviewIndex((index) => Math.min(previewImages.length - 1, index + 1))}
                         disabled={previewIndex === previewImages.length - 1}
-                        aria-label={translatePageText("Ảnh tiếp theo")}
+                        aria-label={i18n.t("Ảnh tiếp theo", { ns: 'legacy', keySeparator: false })}
                     >
                         <svg viewBox="0 0 24 24" style={styles.imageViewerIcon} aria-hidden="true"><path d="m9 18 6-6-6-6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
-                    <div style={styles.imageViewerThumbnails} aria-label={translatePageText("Danh sách ảnh")}>
+                    <div style={styles.imageViewerThumbnails} aria-label={i18n.t("Danh sách ảnh", { ns: 'legacy', keySeparator: false })}>
                         {previewImages.map((image, index) => (
                             <button
                                 key={`${image.url}-${index}`}
@@ -902,12 +956,12 @@ const styles = {
     bubbleIcon: { width: '100%', height: '100%', objectFit: 'contain', filter: 'hue-rotate(135deg) saturate(1.35)' },
     window: {
         position: 'fixed', inset: '0 0 0 auto', width: 'clamp(320px, 24vw, 420px)',
-        backgroundColor: 'white', borderLeft: '1px solid #e5e7eb', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+        backgroundColor: 'var(--chat-surface)', color: 'var(--chat-text)', borderLeft: '1px solid var(--chat-border)', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000,
     },
     header: {
-        backgroundColor: 'white', color: '#dc2626', padding: '12px 16px',
-        borderBottom: '1px solid #e5e7eb',
+        backgroundColor: 'var(--chat-surface)', color: '#dc2626', padding: '12px 16px',
+        borderBottom: '1px solid var(--chat-border)',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 600,
     },
     headerControls: { display: 'flex', alignItems: 'center' },
@@ -929,19 +983,19 @@ const styles = {
         borderRadius: '12px 12px 0 12px', maxWidth: '75%', fontSize: '14px', whiteSpace: 'pre-line',
     },
     botMsg: {
-        backgroundColor: '#f1f1f1', color: '#333', padding: '8px 12px',
+        backgroundColor: 'var(--chat-bot-bubble)', color: 'var(--chat-text)', padding: '8px 12px',
         borderRadius: '12px 12px 12px 0', maxWidth: '75%', fontSize: '14px', whiteSpace: 'pre-line',
     },
     chatImage: { display: 'block', width: 'min(240px, 100%)', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' },
     chatImagePreviewButton: { display: 'block', maxWidth: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
     optionsWrap: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' },
     optionBtn: {
-        backgroundColor: 'white', border: '1.5px solid #dc2626', color: '#dc2626',
+        backgroundColor: 'var(--chat-surface)', border: '1.5px solid #dc2626', color: '#dc2626',
         borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer', textAlign: 'left',
     },
-    inputRow: { display: 'flex', alignItems: 'flex-end', borderTop: '1px solid #eee', padding: '8px', gap: '6px' },
+    inputRow: { display: 'flex', alignItems: 'flex-end', backgroundColor: 'var(--chat-surface)', borderTop: '1px solid var(--chat-border-soft)', padding: '8px', gap: '6px' },
     hiddenInput: { display: 'none' },
-    mediaBtn: { minWidth: '34px', height: '32px', flexShrink: 0, border: '1px solid #dc2626', borderRadius: '7px', background: 'white', color: '#dc2626', fontSize: '12px', fontWeight: 700, lineHeight: 1, cursor: 'pointer', padding: '0 6px' },
+    mediaBtn: { minWidth: '34px', height: '32px', flexShrink: 0, border: '1px solid #dc2626', borderRadius: '7px', background: 'var(--chat-surface)', color: '#dc2626', fontSize: '12px', fontWeight: 700, lineHeight: 1, cursor: 'pointer', padding: '0 6px' },
     uploadBtn: {
         width: '34px', height: '34px', minWidth: '34px', flexShrink: 0,
         border: 'none', borderRadius: '8px',
@@ -954,24 +1008,24 @@ const styles = {
         width: '18px', height: '18px', display: 'block',
         stroke: '#ffffff', overflow: 'visible',
     },
-    pendingImageRow: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignSelf: 'stretch', margin: '8px 12px 0', padding: '6px', border: '1px solid #d1d5db', borderRadius: '8px', background: '#f3f4f6' },
+    pendingImageRow: { display: 'flex', flexWrap: 'wrap', gap: '8px', alignSelf: 'stretch', margin: '8px 12px 0', padding: '6px', border: '1px solid var(--chat-border)', borderRadius: '8px', background: 'var(--chat-surface-muted)' },
     pendingImageItem: { position: 'relative', display: 'inline-flex' },
     pendingPreviewButton: { display: 'block', padding: 0, border: 'none', borderRadius: '5px', background: 'transparent', cursor: 'pointer' },
     pendingImage: { display: 'block', width: '90px', height: '70px', objectFit: 'cover', borderRadius: '5px' },
-    removeImageBtn: { position: 'absolute', top: '-9px', right: '-9px', width: '22px', height: '22px', border: '1px solid #d1d5db', borderRadius: '50%', background: 'white', color: '#dc2626', fontSize: '18px', lineHeight: 1, cursor: 'pointer' },
-    input: { flex: 1, border: '1px solid #ddd', borderRadius: '8px', padding: '8px 10px', fontSize: '14px' },
+    removeImageBtn: { position: 'absolute', top: '-9px', right: '-9px', width: '22px', height: '22px', border: '1px solid var(--chat-border)', borderRadius: '50%', background: 'var(--chat-surface)', color: '#dc2626', fontSize: '18px', lineHeight: 1, cursor: 'pointer' },
+    input: { flex: 1, border: '1px solid var(--chat-border)', borderRadius: '8px', padding: '8px 10px', fontSize: '14px' },
     textarea: {
-        flex: 1, border: '1px solid #ddd', borderRadius: '8px', padding: '8px 10px',
+        flex: 1, border: '1px solid var(--chat-border)', borderRadius: '8px', padding: '8px 10px',
         fontSize: '14px', fontFamily: 'inherit', resize: 'none', maxHeight: '110px',
         overflowY: 'auto', lineHeight: '18px',
     },
     menuBtn: {
-        background: 'white', border: '2px solid #dc2626', color: '#dc2626',
+        background: 'var(--chat-surface)', border: '2px solid #dc2626', color: '#dc2626',
         borderRadius: '12px', cursor: 'pointer', padding: '8px 10px', lineHeight: 1,
     },
     menuIcon: { display: 'flex', flexDirection: 'column', gap: '4px', width: '20px' },
     menuIconBar: { display: 'block', width: '20px', height: '2px', backgroundColor: '#dc2626' },
-    historyScreen: { flex: 1, minHeight: 0, backgroundColor: '#fafafa', overflowY: 'auto', padding: '18px 10px' },
+    historyScreen: { flex: 1, minHeight: 0, backgroundColor: 'var(--chat-surface-muted)', color: 'var(--chat-text)', overflowY: 'auto', padding: '18px 10px' },
     historyHeading: { color: '#dc2626', fontSize: '18px', fontWeight: 700, padding: '0 6px 16px' },
     historyHeadingRow: { display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '8px', padding: '0 4px 12px 6px' },
     collapseImagesBtn: { width: '20px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: '6px', background: 'transparent', color: '#dc2626', cursor: 'pointer', padding: 0 },
@@ -979,24 +1033,24 @@ const styles = {
     historyList: { display: 'flex', flexDirection: 'column' },
     imageHistoryList: { marginBottom: '22px' },
     imageDayGroup: { marginBottom: '14px' },
-    imageDayTitle: { color: '#4b5563', fontSize: '13px', fontWeight: 600, padding: '4px 6px 8px' },
+    imageDayTitle: { color: 'var(--chat-muted-text)', fontSize: '13px', fontWeight: 600, padding: '4px 6px 8px' },
     imageGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px', padding: '0 6px' },
     historyImageButton: { display: 'block', width: '100%', padding: 0, border: 'none', borderRadius: '7px', background: 'transparent', cursor: 'pointer' },
     historyImage: { display: 'block', width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '7px', border: '1px solid #e5e7eb' },
-    emptyHistory: { color: '#6b7280', fontSize: '13px', padding: '8px 6px' },
+    emptyHistory: { color: 'var(--chat-muted-text)', fontSize: '13px', padding: '8px 6px' },
     dayItem: {
         position: 'relative', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '8px',
-        borderBottom: '1px solid #f5f5f5',
+        borderBottom: '1px solid var(--chat-border-soft)',
     },
-    dayLabel: { flex: 1, background: 'none', border: 'none', color: '#333', textAlign: 'left', padding: '10px 6px', fontSize: '13px', cursor: 'pointer' },
+    dayLabel: { flex: 1, background: 'none', border: 'none', color: 'var(--chat-text)', textAlign: 'left', padding: '10px 6px', fontSize: '13px', cursor: 'pointer' },
     moreBtn: { background: 'none', border: 'none', color: '#dc2626', fontSize: '22px', lineHeight: 1, padding: '4px 8px', cursor: 'pointer' },
-    deleteHistoryAction: { position: 'absolute', right: '8px', top: '38px', zIndex: 3, background: 'white', border: '1px solid #dc2626', borderRadius: '8px', boxShadow: '0 5px 14px rgba(0, 0, 0, 0.18)', color: '#dc2626', fontSize: '13px', padding: '10px 14px', cursor: 'pointer', whiteSpace: 'nowrap' },
+    deleteHistoryAction: { position: 'absolute', right: '8px', top: '38px', zIndex: 3, background: 'var(--chat-surface)', border: '1px solid #dc2626', borderRadius: '8px', boxShadow: '0 5px 14px rgba(0, 0, 0, 0.18)', color: '#dc2626', fontSize: '13px', padding: '10px 14px', cursor: 'pointer', whiteSpace: 'nowrap' },
     historyBanner: {
-        backgroundColor: '#fff3cd', color: '#856404', fontSize: '12px', padding: '6px 10px',
+        backgroundColor: 'var(--chat-warning-bg)', color: 'var(--chat-warning-text)', fontSize: '12px', padding: '6px 10px',
         borderRadius: '6px', textAlign: 'center', marginBottom: '4px',
     },
     moderationBanner: {
-        backgroundColor: '#fff3cd', color: '#856404', fontSize: '12px', padding: '8px 10px',
+        backgroundColor: 'var(--chat-warning-bg)', color: 'var(--chat-warning-text)', fontSize: '12px', padding: '8px 10px',
         borderRadius: '6px', textAlign: 'center', marginBottom: '4px',
     },
     sendBtn: {
@@ -1005,11 +1059,11 @@ const styles = {
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
     },
     modalBackdrop: { position: 'absolute', inset: 0, zIndex: 1002, backgroundColor: 'rgba(127, 29, 29, 0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' },
-    deleteModal: { width: '100%', backgroundColor: 'white', border: '2px solid #dc2626', borderRadius: '14px', boxShadow: '0 12px 30px rgba(127, 29, 29, 0.3)', padding: '20px' },
-    modalTitle: { color: '#b91c1c', fontSize: '20px', margin: '0 0 10px' },
-    modalText: { color: '#374151', fontSize: '14px', lineHeight: 1.5, margin: '0 0 20px' },
+    deleteModal: { width: '100%', backgroundColor: 'var(--chat-surface)', color: 'var(--chat-text)', border: '2px solid #dc2626', borderRadius: '14px', boxShadow: '0 12px 30px rgba(127, 29, 29, 0.3)', padding: '20px' },
+    modalTitle: { color: 'var(--chat-modal-title)', fontSize: '20px', margin: '0 0 10px' },
+    modalText: { color: 'var(--chat-muted-text)', fontSize: '14px', lineHeight: 1.5, margin: '0 0 20px' },
     modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '8px' },
-    cancelBtn: { background: 'white', color: '#dc2626', border: '1px solid #dc2626', borderRadius: '7px', padding: '8px 14px', cursor: 'pointer' },
+    cancelBtn: { background: 'var(--chat-surface)', color: '#dc2626', border: '1px solid #dc2626', borderRadius: '7px', padding: '8px 14px', cursor: 'pointer' },
     deleteBtn: { background: '#dc2626', color: 'white', border: '1px solid #dc2626', borderRadius: '7px', padding: '8px 14px', cursor: 'pointer' },
     imageErrorBackdrop: { position: 'absolute', inset: 0, zIndex: 1004, background: 'rgba(0, 0, 0, 0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' },
     imagePreviewBackdrop: { position: 'fixed', inset: 0, zIndex: 1200, display: 'flex', flexDirection: 'column', background: '#17181c', color: 'white' },
@@ -1025,10 +1079,10 @@ const styles = {
     imageViewerThumbnail: { width: '60px', height: '52px', flex: '0 0 auto', padding: '2px', overflow: 'hidden', border: '1px solid transparent', borderRadius: '6px', background: 'rgba(255,255,255,0.18)', cursor: 'pointer' },
     imageViewerThumbnailActive: { borderColor: '#60a5fa', background: 'rgba(96,165,250,0.45)' },
     imageViewerThumbnailImage: { display: 'block', width: '100%', height: '100%', objectFit: 'cover', borderRadius: '3px' },
-    imageErrorModal: { width: '100%', maxWidth: '320px', background: 'white', border: '2px solid #dc2626', borderRadius: '12px', boxShadow: '0 10px 28px rgba(0, 0, 0, 0.25)', padding: '20px', textAlign: 'center' },
+    imageErrorModal: { width: '100%', maxWidth: '320px', background: 'var(--chat-surface)', color: 'var(--chat-text)', border: '2px solid #dc2626', borderRadius: '12px', boxShadow: '0 10px 28px rgba(0, 0, 0, 0.25)', padding: '20px', textAlign: 'center' },
     imageErrorIcon: { width: '34px', height: '34px', margin: '0 auto 10px', borderRadius: '50%', background: '#dc2626', color: 'white', fontSize: '24px', fontWeight: 700, lineHeight: '34px' },
-    imageErrorTitle: { margin: '0 0 8px', color: '#b91c1c', fontSize: '18px' },
-    imageErrorText: { margin: '0 0 18px', color: '#374151', fontSize: '14px', lineHeight: 1.5 },
+    imageErrorTitle: { margin: '0 0 8px', color: 'var(--chat-modal-title)', fontSize: '18px' },
+    imageErrorText: { margin: '0 0 18px', color: 'var(--chat-muted-text)', fontSize: '14px', lineHeight: 1.5 },
 };
 
 export default ChatbotWidget;

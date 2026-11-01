@@ -1,10 +1,10 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { dishAPI } from '../../services/api';
 import { Link } from 'react-router-dom';
 import Footer from '../../components/Footer';
 import { useAuthContext } from '../../context/AuthContext';
-import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
 
 import { API_BASE_URL } from '../../apiConfig';
@@ -72,9 +72,9 @@ export default function HomeApp() {
                             {t('common.aboutRestaurant')}
                         </h2>
                         <div className="space-y-4 text-base leading-relaxed text-white/90 sm:text-lg">
-                            <p>{translatePageText("Tọa lạc tại trung tâm TP. Cần Thơ, Nhà hàng HGH là điểm đến lý tưởng cho những ai yêu thích hương vị cơm gia đình thuần túy.") + " "}</p>
-                            <p>{translatePageText("Chúng tôi tự hào mang đến những món ăn không chỉ ngon miệng mà còn đảm bảo vệ sinh, được chế biến từ nguồn nguyên liệu tươi sạch đặc trưng của vùng sông nước miền Tây.") + " "}</p>
-                            <p>{translatePageText("Với không gian ấm cúng và đội ngũ nhân viên nhiệt tình, HGH mong muốn mỗi bữa ăn của quý khách đều mang lại cảm giác thân thuộc như tại chính ngôi nhà của mình.") + " "}</p>
+                            <p>{i18n.t("Tọa lạc tại trung tâm TP. Cần Thơ, Nhà hàng HGH là điểm đến lý tưởng cho những ai yêu thích hương vị cơm gia đình thuần túy.", { ns: 'legacy', keySeparator: false }) + " "}</p>
+                            <p>{i18n.t("Chúng tôi tự hào mang đến những món ăn không chỉ ngon miệng mà còn đảm bảo vệ sinh, được chế biến từ nguồn nguyên liệu tươi sạch đặc trưng của vùng sông nước miền Tây.", { ns: 'legacy', keySeparator: false }) + " "}</p>
+                            <p>{i18n.t("Với không gian ấm cúng và đội ngũ nhân viên nhiệt tình, HGH mong muốn mỗi bữa ăn của quý khách đều mang lại cảm giác thân thuộc như tại chính ngôi nhà của mình.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                         </div>
                     </section>
 
@@ -82,7 +82,7 @@ export default function HomeApp() {
                     <section className={`${glassPanel} p-4 sm:p-8`}>
                         <h2 className="mb-6 flex items-center gap-2 border-l-4 border-red-600 pl-4 text-2xl font-bold text-white">
                             <i className="fas fa-star text-yellow-400"></i>
-                            Bestsellers
+                            {i18n.t("Món bán chạy", { ns: 'legacy', keySeparator: false })}
                         </h2>
 
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
@@ -99,7 +99,7 @@ export default function HomeApp() {
                                     <div className="px-1 pb-1 pt-3 text-center">
                                         <h3 className="text-lg font-semibold text-gray-800">{translateDishName(dish)}</h3>
                                         <p className="mt-1 text-xl font-bold text-red-600">
-                                            {Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
+                                            {Number(dish.price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</p>
                                     </div>
                                 </div>
                             ))}

@@ -1,5 +1,5 @@
+import i18n from '../../../i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
-import { translatePageText } from '../../../pageTextTranslations';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -74,9 +74,9 @@ export const DateFilter = ({ label, value, onChange }) => {
 
     let summary;
     if (value.mode === 'month') {
-        summary = value.month ? `${translatePageText("Tháng")} ${value.month}` : translatePageText("Tất cả");
+        summary = value.month ? `${i18n.t("Tháng", { ns: 'legacy', keySeparator: false })} ${value.month}` : i18n.t("Tất cả", { ns: 'legacy', keySeparator: false });
     } else if (value.dates.length === 0) {
-        summary = translatePageText("Tất cả");
+        summary = i18n.t("Tất cả", { ns: 'legacy', keySeparator: false });
     } else if (value.dates.length === 1) {
         summary = formatDisplayDate(value.dates[0]);
     } else {
@@ -101,9 +101,9 @@ export const DateFilter = ({ label, value, onChange }) => {
             {open && (
                 <div className="absolute left-0 top-full mt-2 z-30 w-72 bg-white border border-gray-200 rounded-lg shadow-xl p-4">
                     <div className="flex items-center gap-2 mb-3 text-sm">
-                        <span className="text-gray-600">{translatePageText("Lọc theo:")}</span>
+                        <span className="text-gray-600">{i18n.t("Lọc theo:", { ns: 'legacy', keySeparator: false })}</span>
                         <div className="inline-flex rounded border border-red-600 overflow-hidden">
-                            {[['day', translatePageText("Ngày")], ['month', translatePageText("Tháng")]].map(([mode, text]) => (
+                            {[['day', i18n.t("Ngày", { ns: 'legacy', keySeparator: false })], ['month', i18n.t("Tháng", { ns: 'legacy', keySeparator: false })]].map(([mode, text]) => (
                                 <button
                                     key={mode}
                                     type="button"
@@ -120,8 +120,8 @@ export const DateFilter = ({ label, value, onChange }) => {
                         <button type="button" onClick={() => move(-1)} className="w-8 h-8 rounded hover:bg-gray-100 font-bold">‹</button>
                         <span className="font-semibold text-gray-800">
                             {value.mode === 'month'
-                                ? `${translatePageText("Năm")} ${year}`
-                                : `${translatePageText("Tháng")} ${month + 1}/${year}`}
+                                ? `${i18n.t("Năm", { ns: 'legacy', keySeparator: false })} ${year}`
+                                : `${i18n.t("Tháng", { ns: 'legacy', keySeparator: false })} ${month + 1}/${year}`}
                         </span>
                         <button type="button" onClick={() => move(1)} className="w-8 h-8 rounded hover:bg-gray-100 font-bold">›</button>
                     </div>
@@ -158,7 +158,7 @@ export const DateFilter = ({ label, value, onChange }) => {
                                         type="button"
                                         onClick={() => pickMonth(m)}
                                         className={`py-2 rounded text-sm ${selected ? 'bg-red-600 text-white font-bold' : 'hover:bg-red-50 text-gray-700 border border-gray-200'}`}
-                                    >{translatePageText("Tháng") + " "}{m + 1}
+                                    >{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m + 1}
                                     </button>
                                 );
                             })}
@@ -170,13 +170,13 @@ export const DateFilter = ({ label, value, onChange }) => {
                             type="button"
                             onClick={() => onChange({ ...value, dates: [], month: '' })}
                             className="text-gray-500 hover:text-red-600 font-semibold"
-                        >{translatePageText("Xóa chọn") + " "}</button>
+                        >{i18n.t("Xóa chọn", { ns: 'legacy', keySeparator: false }) + " "}</button>
                         <button
                             type="button"
                             onClick={() => setOpen(false)}
                             className="px-3 py-1 rounded bg-red-600 text-white font-semibold hover:bg-red-700"
                         >
-                            {translatePageText("Xong")}
+                            {i18n.t("Xong", { ns: 'legacy', keySeparator: false })}
                         </button>
                     </div>
                 </div>
@@ -216,7 +216,7 @@ export const Pagination = ({ currentPage, lastPage, onChange }) => {
                 className="w-16 px-2 py-1 border border-gray-300 rounded text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
             <span>/ {lastPage}</span>
-            <button onClick={go} className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700">{translatePageText("Đi tới") + " "}</button>
+            <button onClick={go} className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700">{i18n.t("Đi tới", { ns: 'legacy', keySeparator: false }) + " "}</button>
         </div>
     );
 };

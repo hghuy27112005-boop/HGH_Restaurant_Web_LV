@@ -1,12 +1,12 @@
+import i18n from '../../i18n.js';
 import React from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { getCartStatus } from '../../utils/cartStorage';
-import { translatePageText } from '../../pageTextTranslations';
 
 // Thứ tự hiển thị: Đặt bàn bên trái, Đặt ship bên phải
 const TABS = [
-    { type: 'booking', get label() { return translatePageText("Đặt bàn"); }, get title() { return translatePageText("Đặt bàn"); }, path: '/cart/bookings' },
-    { type: 'delivery', get label() { return translatePageText("Đặt ship"); }, get title() { return translatePageText("Giao hàng"); }, path: '/cart/deliveries' },
+    { type: 'booking', get label() { return i18n.t("Đặt bàn", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Đặt bàn", { ns: 'legacy', keySeparator: false }); }, path: '/cart/bookings' },
+    { type: 'delivery', get label() { return i18n.t("Đặt ship", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Giao hàng", { ns: 'legacy', keySeparator: false }); }, path: '/cart/deliveries' },
 ];
 
 // Khung chung của Giỏ hàng: tiêu đề trang + nút chuyển qua lại cùng 1 dòng, bên dưới là trang con.
@@ -63,9 +63,9 @@ export const CartIndex = () => {
     return (
         <div className="max-w-6xl mx-auto px-4 py-16 text-center text-gray-500">
             <i className="fas fa-shopping-basket text-5xl mb-4 text-gray-300 block"></i>
-            <p className="text-lg">{translatePageText("Bạn chưa thêm món vào giỏ hàng...")}</p>
-            <p className="text-sm mt-2">{translatePageText("Bấm Đặt bàn hoặc Đặt ship ở góc trên để xem các đơn đã đặt.")}</p>
-            <Link to="/menu" className="inline-block mt-4 bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700">{translatePageText("Đến Menu") + " "}</Link>
+            <p className="text-lg">{i18n.t("Bạn chưa thêm món vào giỏ hàng...", { ns: 'legacy', keySeparator: false })}</p>
+            <p className="text-sm mt-2">{i18n.t("Bấm Đặt bàn hoặc Đặt ship ở góc trên để xem các đơn đã đặt.", { ns: 'legacy', keySeparator: false })}</p>
+            <Link to="/menu" className="inline-block mt-4 bg-red-600 text-white px-4 py-2 rounded font-semibold hover:bg-red-700">{i18n.t("Đến Menu", { ns: 'legacy', keySeparator: false }) + " "}</Link>
         </div>
     );
 };

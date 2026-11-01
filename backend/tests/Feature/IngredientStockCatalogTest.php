@@ -52,13 +52,14 @@ class IngredientStockCatalogTest extends TestCase
         $this->assertDatabaseCount('ingredients', 1);
     }
 
-    public function test_get_or_create_keeps_undetected_unaccented_name_in_english_column(): void
+    public function test_get_or_create_treats_unaccented_name_as_vietnamese_by_default(): void
     {
         $stock = IngredientStock::getOrCreateForDate('chanh', '2026-10-25');
         $ingredient = $stock->ingredient;
 
         $this->assertSame('chanh', $ingredient->ingredient_key);
-        $this->assertSame('chanh', $ingredient->ingredient_name);
-        $this->assertNull($ingredient->ingredient_name_vi);
+        $this->assertNull($ingredient->ingredient_name);
+        $this->assertSame('chanh', $ingredient->ingredient_name_vi);
+        $this->assertSame('', $stock->ingredient_name);
     }
 }

@@ -75,7 +75,9 @@ class OrdersSeeder extends Seeder
 
         // ===== 2) Nguyên liệu của từng món =====
         $ingredientIdByKey = DB::table('ingredients')->pluck('ingredient_id', 'ingredient_key')->all();
-        $ingredientNameById = DB::table('ingredients')->pluck('ingredient_name', 'ingredient_id')->all();
+        $ingredientNameById = DB::table('ingredients')->pluck('ingredient_name', 'ingredient_id')
+            ->map(fn ($name) => $name ?? '')
+            ->all();
         $dishIngredients = [];
         foreach ($dishes as $dish) {
             $ids = [];
@@ -102,7 +104,9 @@ class OrdersSeeder extends Seeder
                             'updated_at' => $now,
                         ], 'ingredient_id');
                         $ingredientIdByKey[$key] = $newId;
-                        $ingredientNameById[$newId] = $name;
+                        // Snapshot columns named ingredient_name are English-only.
+                        // Store an empty string when an English translation is absent.
+                        $ingredientNameById[$newId] = '';
                     }
                 }
                 $ids[$ingredientIdByKey[$key]] = true;

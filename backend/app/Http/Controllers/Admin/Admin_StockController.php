@@ -35,13 +35,12 @@ class Admin_StockController extends Controller
             ->get();
 
         $stocks = $ingredients->map(function (Ingredient $ingredient) use ($date): IngredientStock {
-            $stockName = trim((string) ($ingredient->ingredient_name ?: $ingredient->ingredient_name_vi));
-
             return IngredientStock::firstOrCreate(
                 ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date],
                 [
                     'ingredient_key' => $ingredient->ingredient_key,
-                    'ingredient_name' => $stockName,
+                    // The stock snapshot column is non-nullable in existing databases.
+                    'ingredient_name' => $ingredient->ingredient_name ?? '',
                     'quantity_start' => 50,
                     'quantity_left' => 50,
                     'refill_count' => 0,

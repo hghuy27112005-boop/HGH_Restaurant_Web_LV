@@ -180,7 +180,7 @@ class Admin_UserController extends Controller
             Mail::to($user->email)->send(new UserLockedMail($user));
         } catch (\Throwable $e) {
             Log::error('Gửi mail khóa tài khoản thất bại: ' . $e->getMessage());
-            return response()->json(['message' => 'Gửi mail thất bại: ' . $e->getMessage()], 500);
+            return response()->json(['code' => 'notification_email_failed', 'message' => 'Không thể gửi email lúc này.'], 500);
         }
 
         return response()->json(['message' => 'Đã gửi mail thông báo khóa tài khoản đến ' . $user->email]);
@@ -203,7 +203,7 @@ class Admin_UserController extends Controller
             Mail::to($user->email)->send(new UserUnlockedMail($user, true));
         } catch (\Throwable $e) {
             Log::error('Gửi mail mở khóa tài khoản thất bại: ' . $e->getMessage());
-            return response()->json(['message' => 'Gửi mail thất bại: ' . $e->getMessage()], 500);
+            return response()->json(['code' => 'notification_email_failed', 'message' => 'Không thể gửi email lúc này.'], 500);
         }
 
         return response()->json(['message' => 'Đã gửi mail thông báo mở khóa tài khoản đến ' . $user->email]);

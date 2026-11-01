@@ -101,7 +101,7 @@ class RatingRecommendationTest extends TestCase
             ->assertStatus(503)
             ->assertExactJson([
                 'message' => 'Chưa thể gợi ý món ăn lúc này. Vui lòng thử lại.',
-                'code' => 'RECOMMENDATION_UNAVAILABLE',
+                'code' => 'recommendation_unavailable',
             ]);
     }
 }

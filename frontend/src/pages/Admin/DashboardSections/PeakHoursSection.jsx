@@ -1,3 +1,4 @@
+import i18n from '../../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
@@ -5,7 +6,6 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { RED, YEAR_OPTIONS, MONTH_OPTIONS, extractError } from './helpers';
-import { translatePageText } from '../../../pageTextTranslations';
 
 const HourTick = ({ x, y, payload }) => (
     <g transform={`translate(${x},${y})`}>
@@ -24,7 +24,7 @@ const HourChart = ({ data, height }) => (
             <Tooltip
                 formatter={(value) => [
                     `${value} ${document.documentElement.lang === 'en' ? 'orders' : 'đơn'}`,
-                    translatePageText('Số đơn hàng'),
+                    i18n.t('Số đơn hàng', { ns: 'legacy', keySeparator: false }),
                 ]}
                 labelFormatter={(h) => `${h}h`}
                 cursor={false}
@@ -53,7 +53,7 @@ const PeakBlock = ({ type, title }) => {
                 if (!cancelled) setData(res?.data?.data || null);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, translatePageText("Lỗi tải giờ cao điểm")));
+                    setError(extractError(err, i18n.t("Lỗi tải giờ cao điểm", { ns: 'legacy', keySeparator: false })));
                     setData(null);
                 }
             } finally {
@@ -72,21 +72,21 @@ const PeakBlock = ({ type, title }) => {
     } else if (mode === 'month') {
         body = Array.isArray(data) && data.length > 0
             ? <HourChart data={data} height={280} />
-            : <div className="h-full flex items-center justify-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>;
+            : <div className="h-full flex items-center justify-center text-gray-500">{i18n.t("Không có dữ liệu", { ns: 'legacy', keySeparator: false })}</div>;
     } else {
         body = data?.weekday ? (
             <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                    <p className="text-center font-semibold text-red-600 mb-2">{translatePageText("Ngày thường (T2 - T6)")}</p>
+                    <p className="text-center font-semibold text-red-600 mb-2">{i18n.t("Ngày thường (T2 - T6)", { ns: 'legacy', keySeparator: false })}</p>
                     <HourChart data={data.weekday} height={260} />
                 </div>
                 <div>
-                    <p className="text-center font-semibold text-red-600 mb-2">{translatePageText("Cuối tuần (T7 - CN)")}</p>
+                    <p className="text-center font-semibold text-red-600 mb-2">{i18n.t("Cuối tuần (T7 - CN)", { ns: 'legacy', keySeparator: false })}</p>
                     <HourChart data={data.weekend} height={260} />
                 </div>
             </div>
         ) : (
-            <div className="h-full flex items-center justify-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
+            <div className="h-full flex items-center justify-center text-gray-500">{i18n.t("Không có dữ liệu", { ns: 'legacy', keySeparator: false })}</div>
         );
     }
 
@@ -99,10 +99,10 @@ const PeakBlock = ({ type, title }) => {
                     {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={selectCls}>
-                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
+                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m}</option>)}
                 </select>
-                <button className={tabCls(mode === 'month')} onClick={() => setMode('month')}>{translatePageText("Theo tháng")}</button>
-                <button className={tabCls(mode === 'weekday_weekend')} onClick={() => setMode('weekday_weekend')}>{translatePageText("Ngày thường - Cuối tuần") + " "}</button>
+                <button className={tabCls(mode === 'month')} onClick={() => setMode('month')}>{i18n.t("Theo tháng", { ns: 'legacy', keySeparator: false })}</button>
+                <button className={tabCls(mode === 'weekday_weekend')} onClick={() => setMode('weekday_weekend')}>{i18n.t("Ngày thường - Cuối tuần", { ns: 'legacy', keySeparator: false }) + " "}</button>
             </div>
             <div className="min-h-[290px]">{body}</div>
         </div>
@@ -111,8 +111,8 @@ const PeakBlock = ({ type, title }) => {
 
 const PeakHoursSection = () => (
     <div>
-        <PeakBlock type="booking" title={translatePageText("Khung giờ cao điểm - Đặt bàn")} />
-        <PeakBlock type="delivery" title={translatePageText("Khung giờ cao điểm - Đặt ship")} />
+        <PeakBlock type="booking" title={i18n.t("Khung giờ cao điểm - Đặt bàn", { ns: 'legacy', keySeparator: false })} />
+        <PeakBlock type="delivery" title={i18n.t("Khung giờ cao điểm - Đặt ship", { ns: 'legacy', keySeparator: false })} />
     </div>
 );
 

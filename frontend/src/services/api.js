@@ -1,4 +1,5 @@
 import axios from 'axios';
+import i18n from '../i18n';
 
 import { API_URL } from '../apiConfig';
 
@@ -9,6 +10,23 @@ const axiosInstance = axios.create({
         'Accept': 'application/json',
     },
 });
+
+const API_ERROR_KEYS = {
+    server_error: 'apiErrors.serverError',
+    booking_conflict_check_failed: 'apiErrors.bookingConflictCheckFailed',
+    table_availability_check_failed: 'apiErrors.tableAvailabilityCheckFailed',
+    booking_request_failed: 'apiErrors.bookingRequestFailed',
+    delivery_request_failed: 'apiErrors.deliveryRequestFailed',
+    order_request_failed: 'apiErrors.orderRequestFailed',
+    notification_email_failed: 'apiErrors.notificationEmailFailed',
+    invalid_filter: 'apiErrors.invalidFilter',
+    table_occupied: 'apiErrors.tableOccupied',
+    stock_unavailable: 'apiErrors.stockUnavailable',
+    delivery_route_unavailable: 'apiErrors.deliveryRouteUnavailable',
+    recommendation_unavailable: 'menuRecommend.errorUnavailable',
+    translation_unavailable: 'adminDish.translationUnavailable',
+    dish_name_duplicate: 'adminDish.nameDuplicate',
+};
 
 // Add token to request if exists
 axiosInstance.interceptors.request.use((config) => {
@@ -26,6 +44,11 @@ axiosInstance.interceptors.response.use(
     (error) => {
         const url = error.config?.url || '';
         const isAuthForm = url.includes('/login') || url.includes('/register');
+        const errorCode = error.response?.data?.code;
+        const translationKey = API_ERROR_KEYS[errorCode];
+        if (translationKey && error.response?.data && typeof error.response.data === 'object') {
+            error.response.data.message = i18n.t(translationKey);
+        }
         if (error.response?.status === 401 && !isAuthForm && sessionStorage.getItem('auth_token')) {
             // Token đã bị thu hồi (đăng nhập/đăng xuất ở nơi khác): báo cho useAuth hiện modal
             window.dispatchEvent(new Event('session-kicked'));
@@ -50,6 +73,7 @@ export const userAPI = {
     // Dùng cho polling kiểm tra phiên còn sống (401 => interceptor phát 'session-kicked')
     checkAccountAlive: () => axiosInstance.get('/user'),
     updateProfile: (data) => axiosInstance.put('/user', data),
+    changePassword: (data) => axiosInstance.post('/user/change-password', data),
     uploadAvatar: (formData) =>
         axiosInstance.post('/user/avatar', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
@@ -201,6 +225,10 @@ export const adminAPI = {
                 ingredients,
                 language,
                 ...(dishId ? { dish_id: dishId } : {}),
+            }),
+        discardConfirmedIngredients: (ingredientIds) =>
+            axiosInstance.post('/admin/dishes/discard-confirmed-ingredients', {
+                ingredient_ids: ingredientIds,
             }),
         previewRecipe: (data) => axiosInstance.post('/admin/dishes/preview-recipe', data),
         create: (formData) =>

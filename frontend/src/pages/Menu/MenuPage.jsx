@@ -7,7 +7,6 @@ import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from './DishDetailPage';
 import { getCartKey } from '../../utils/cartStorage';
-import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
 import i18n from '../../i18n';
 
@@ -82,7 +81,10 @@ const MenuPage = () => {
             const response = await recommendationAPI.getRecommendations(name);
             setRecommendedDishes(response.data?.data || []);
         } catch (recommendError) {
-            setRecommendationError('menuRecommend.errorUnavailable');
+            const code = recommendError.response?.data?.code;
+            setRecommendationError(code === 'recommendation_unavailable'
+                ? 'menuRecommend.errorUnavailable'
+                : 'menuRecommend.errorGeneric');
             setRecommendedDishes([]);
         } finally {
             setRecommendLoading(false);
@@ -97,7 +99,7 @@ const MenuPage = () => {
             const items = response.data?.data || response.data || [];
             setDishes(items);
         } catch (err) {
-            setError(translatePageText("Lỗi tải danh sách món ăn"));
+            setError(i18n.t("Lỗi tải danh sách món ăn", { ns: 'legacy', keySeparator: false }));
             console.error(err);
         } finally {
             setLoading(false);
@@ -226,12 +228,12 @@ const MenuPage = () => {
         const maxQty = MAX_ORDER_QTY;
 
         if (isNaN(qty) || qty < 1) {
-            setErrorMessage(translatePageText("Vui lòng nhập số lượng hợp lệ!"));
+            setErrorMessage(i18n.t("Vui lòng nhập số lượng hợp lệ!", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
         if (qty > maxQty) {
-            setErrorMessage(translatePageText("Mỗi lần chỉ được đặt tối đa 50 phần cho một món."));
+            setErrorMessage(i18n.t("Mỗi lần chỉ được đặt tối đa 50 phần cho một món.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -300,7 +302,7 @@ const MenuPage = () => {
         <style>{numberInputNoSpinnerCSS}</style>
         <div className="min-h-screen bg-gray-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-                <h1 className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8 text-red-600">{translatePageText("Thực đơn")}</h1>
+                <h1 className="text-3xl sm:text-4xl font-bold mb-6 sm:mb-8 text-red-600">{i18n.t("Thực đơn", { ns: 'legacy', keySeparator: false })}</h1>
 
                 {error && <ErrorMessage message={error} />}
 
@@ -308,12 +310,12 @@ const MenuPage = () => {
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-6 mb-6 sm:mb-8">
                     <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-semibold mb-2">{translatePageText("Tìm kiếm")}</label>
+                            <label className="block text-sm font-semibold mb-2">{i18n.t("Tìm kiếm", { ns: 'legacy', keySeparator: false })}</label>
 
                             <div className="relative">
                                 <input
                                     type="text"
-                                    placeholder={translatePageText("Tìm kiếm món ăn...")}
+                                    placeholder={i18n.t("Tìm kiếm món ăn...", { ns: 'legacy', keySeparator: false })}
                                     value={search}
                                     onChange={handleSearchChange}
                                     onKeyDown={handleSearchSubmit}
@@ -358,18 +360,18 @@ const MenuPage = () => {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold mb-2">{translatePageText("Bộ lọc")}</label>
+                            <label className="block text-sm font-semibold mb-2">{i18n.t("Bộ lọc", { ns: 'legacy', keySeparator: false })}</label>
                             <select
                                 value={selectedType}
                                 onChange={(e) => setSelectedType(e.target.value)}
                                 className="w-full border border-gray-300 rounded px-4 py-2 focus:outline-none focus:border-red-600"
                             >
-                                <option value="">{translatePageText("Tất cả loại")}</option>
-                                <option value="bestseller">{translatePageText("⭐ Bestseller")}</option>
+                                <option value="">{i18n.t("Tất cả loại", { ns: 'legacy', keySeparator: false })}</option>
+                                <option value="bestseller">{i18n.t("⭐ Bestseller", { ns: 'legacy', keySeparator: false })}</option>
                                 <option value="recommended">{t('menuRecommend.optionLabel')}</option>
                                 {types.map(type => (
                                     <option key={type.type_id} value={type.type_id}>
-                                        {translatePageText(type.type_name)}
+                                        {i18n.t(type.type_name, { ns: 'legacy', keySeparator: false })}
                                     </option>
                                 ))}
                             </select>
@@ -408,10 +410,10 @@ const MenuPage = () => {
                                         <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={translateDishName(dish)} className="h-44 w-full cursor-pointer object-cover" />
                                         <div className="flex flex-grow flex-col p-4">
                                             <h3 className="mb-1 text-lg font-semibold text-gray-800">{translateDishName(dish)}</h3>
-                                            <p className="mb-3 text-xl font-bold text-red-600">{Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ")}</p>
+                                            <p className="mb-3 text-xl font-bold text-red-600">{Number(dish.price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</p>
                                             <div className="mt-auto flex gap-2">
-                                                <button onClick={() => handleAddToCart(dish, 'mang-ve')} className="flex-1 rounded border border-red-600 px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-600 hover:text-white">{translatePageText("Đặt Ship")}</button>
-                                                <button onClick={() => handleAddToCart(dish, 'dat-ban')} className="flex-1 rounded border border-red-600 px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-600 hover:text-white">{translatePageText("Đặt Bàn")}</button>
+                                                <button onClick={() => handleAddToCart(dish, 'mang-ve')} className="flex-1 rounded border border-red-600 px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-600 hover:text-white">{i18n.t("Đặt Ship", { ns: 'legacy', keySeparator: false })}</button>
+                                                <button onClick={() => handleAddToCart(dish, 'dat-ban')} className="flex-1 rounded border border-red-600 px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-600 hover:text-white">{i18n.t("Đặt Bàn", { ns: 'legacy', keySeparator: false })}</button>
                                             </div>
                                         </div>
                                     </div>
@@ -422,8 +424,8 @@ const MenuPage = () => {
                 ) : filteredDishes.length === 0 ? (
                     <EmptyState
                         icon="🔍"
-                        title={translatePageText("Không tìm thấy")}
-                        description={translatePageText("Không có món ăn phù hợp với tìm kiếm của bạn")}
+                        title={i18n.t("Không tìm thấy", { ns: 'legacy', keySeparator: false })}
+                        description={i18n.t("Không có món ăn phù hợp với tìm kiếm của bạn", { ns: 'legacy', keySeparator: false })}
                     />
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -438,25 +440,25 @@ const MenuPage = () => {
                                 <div className="p-4 flex flex-col flex-grow">
                                     <h3 className="font-semibold text-lg text-gray-800 mb-1">{translateDishName(dish)}</h3>
                                     <p className="text-red-600 font-bold text-xl mb-3">
-                                        {Number(dish.price).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
+                                        {Number(dish.price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</p>
                                     <div className="mb-3 flex items-center justify-between gap-3">
                                         <div className="min-w-0 flex flex-1 flex-col items-start gap-2">
                                             {dish.is_bestseller && (
-                                                <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-3 py-1 rounded-full">{translatePageText("⭐ Bán chạy") + " "}</span>
+                                                <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-3 py-1 rounded-full">{i18n.t("⭐ Bán chạy", { ns: 'legacy', keySeparator: false }) + " "}</span>
                                             )}
-                                            <span className="text-xs font-semibold text-green-700">{translatePageText("Tối đa 50 phần") + " "}</span>
+                                            <span className="text-xs font-semibold text-green-700">{i18n.t("Tối đa 50 phần", { ns: 'legacy', keySeparator: false }) + " "}</span>
                                         </div>
-                                        <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">{translatePageText("Xem chi tiết món") + " "}</button>
+                                        <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">{i18n.t("Xem chi tiết món", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     </div>
                                     <div className="mt-auto grid grid-cols-2 gap-2">
                                         <button
                                             onClick={() => handleAddToCart(dish, 'mang-ve')}
                                             className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                        >{translatePageText("Đặt Ship") + " "}</button>
+                                        >{i18n.t("Đặt Ship", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                         <button
                                             onClick={() => handleAddToCart(dish, 'dat-ban')}
                                             className="w-full py-2 px-2 rounded border border-red-600 text-red-600 font-semibold bg-white hover:bg-red-600 hover:text-white transition-colors duration-300 text-sm"
-                                        >{translatePageText("Đặt Bàn") + " "}</button>
+                                        >{i18n.t("Đặt Bàn", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     </div>
                                 </div>
                             </div>
@@ -468,27 +470,27 @@ const MenuPage = () => {
             {/* Order Modal */}
             <Modal
                 isOpen={isModalOpen}
-                title={selectedDish ? `${translatePageText("Đặt món")}: ${translateDishName(selectedDish)}` : translatePageText("Đặt món")}
+                title={selectedDish ? `${i18n.t("Đặt món", { ns: 'legacy', keySeparator: false })}: ${translateDishName(selectedDish)}` : i18n.t("Đặt món", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setIsModalOpen(false)}
                 onConfirm={confirmAddToCart}
                 confirmText="Xác nhận thêm vào giỏ hàng"
             >
                 <div className="flex flex-col gap-4">
                     <div>
-                        <span className="text-sm font-semibold text-green-700">{translatePageText("Tối đa 50 phần mỗi món")}</span>
+                        <span className="text-sm font-semibold text-green-700">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-2 text-gray-700">{translatePageText("Chọn công thức thay thế")}</label>
+                        <label className="block font-semibold mb-2 text-gray-700">{i18n.t("Chọn công thức thay thế", { ns: 'legacy', keySeparator: false })}</label>
                         <div className="flex flex-col items-start gap-2">
                             <button
                                 type="button"
                                 onClick={() => setSelectedCustomization(null)}
                                 className={`rounded border px-3 py-2 text-left ${!selectedCustomization ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
-                            >{translatePageText("Món gốc") + " "}</button>
+                            >{i18n.t("Món gốc", { ns: 'legacy', keySeparator: false }) + " "}</button>
 
                             {selectedRecipeOptions.length === 0 ? (
-                                <p className="text-sm text-gray-500">{translatePageText("Bạn chưa lưu công thức thay thế nào cho món này.")}</p>
+                                <p className="text-sm text-gray-500">{i18n.t("Bạn chưa lưu công thức thay thế nào cho món này.", { ns: 'legacy', keySeparator: false })}</p>
                             ) : selectedRecipeOptions.map((recipe) => (
                                 <button
                                     key={recipe.dish_customization_id}
@@ -496,14 +498,14 @@ const MenuPage = () => {
                                     onClick={() => setSelectedCustomization(recipe)}
                                     className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
                                 >
-                                    {translatePageText(recipe.recipe_name)}
+                                    {i18n.t(recipe.recipe_name, { ns: 'legacy', keySeparator: false })}
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-1 text-gray-700">{translatePageText("Nhập số lượng")}</label>
+                        <label className="block font-semibold mb-1 text-gray-700">{i18n.t("Nhập số lượng", { ns: 'legacy', keySeparator: false })}</label>
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <button
                                 type="button"
@@ -560,7 +562,7 @@ const MenuPage = () => {
 
             <Modal
                 isOpen={Boolean(successMessage)}
-                title={translatePageText("Đặt món thành công")}
+                title={i18n.t("Đặt món thành công", { ns: 'legacy', keySeparator: false })}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setSuccessMessage('')}
@@ -580,7 +582,7 @@ const MenuPage = () => {
             {/* Thông báo lỗi chung - dùng chung component Modal */}
             <Modal
                 isOpen={!!errorMessage}
-                title={translatePageText("Thông báo")}
+                title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setErrorMessage(null)}
                 cancelText="Đóng"
             >

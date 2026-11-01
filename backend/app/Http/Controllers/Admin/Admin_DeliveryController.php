@@ -59,7 +59,7 @@ class Admin_DeliveryController extends Controller
         try {
             $query = $this->baseQuery($request, true);
         } catch (\InvalidArgumentException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            return response()->json(['code' => 'invalid_filter', 'message' => $e->getMessage()], 422);
         }
 
         $deliveries = $query
@@ -90,7 +90,7 @@ class Admin_DeliveryController extends Controller
         try {
             $query = $this->baseQuery($request, false);
         } catch (\InvalidArgumentException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            return response()->json(['code' => 'invalid_filter', 'message' => $e->getMessage()], 422);
         }
 
         $counts = $query

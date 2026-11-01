@@ -168,6 +168,7 @@ class DishCustomizationService
                 return;
             }
 
+            $createdIngredientIds = [];
             foreach ($ingredientNames as $index => $name) {
                 $ingredient = Ingredient::firstOrCreate(
                     ['ingredient_key' => IngredientStock::keyFor($name)],
@@ -176,7 +177,7 @@ class DishCustomizationService
                         'ingredient_group' => 'other',
                         'ingredient_name_vi' => $vietnameseIngredients[$index] ?? null,
                         'is_add_on' => false,
-                        'is_active' => true,
+                        'is_active' => false,
                     ]
                 );
 
@@ -192,7 +193,10 @@ class DishCustomizationService
                     'slot_key' => 'auto_' . $dish->dish_id . '_' . $index,
                     'sort_order' => $index,
                 ]);
+                $createdIngredientIds[] = (int) $ingredient->ingredient_id;
             }
+
+            app(DishIngredientAvailabilityService::class)->syncForIngredientIds($createdIngredientIds);
         });
     }
 

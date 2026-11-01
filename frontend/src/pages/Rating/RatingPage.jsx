@@ -1,7 +1,8 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ratingAPI } from '../../services/api';
 import { Loading, ErrorMessage, EmptyState, Modal } from '../../components/Shared';
-import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
 
 // Nhãn chữ hiển thị theo số sao đang chọn (chỉ để hiển thị, không gửi lên server)
@@ -14,9 +15,9 @@ const STAR_LABELS = {
 };
 
 const FILTERS = [
-    { id: 'unrated', get label() { return translatePageText("Chưa đánh giá"); } },
-    { id: 'rated', get label() { return translatePageText("Đã đánh giá"); } },
-    { id: 'all', get label() { return translatePageText("Tất cả"); } },
+    { id: 'unrated', get label() { return i18n.t("Chưa đánh giá", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'rated', get label() { return i18n.t("Đã đánh giá", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'all', get label() { return i18n.t("Tất cả", { ns: 'legacy', keySeparator: false }); } },
 ];
 
 const ORDERS_PER_PAGE = 10;
@@ -40,20 +41,21 @@ const StarPicker = ({ value, onChange }) => {
                         onClick={() => onChange(star)}
                         onMouseEnter={() => setHoverValue(star)}
                         className={`text-3xl leading-none transition ${star <= displayValue ? 'text-yellow-400' : 'text-gray-300'} hover:scale-110`}
-                        aria-label={`${star} sao`}
+                        aria-label={t('rating.starAria', { count: star })}
                     >
                         ★
                     </button>
                 ))}
             </div>
             <span className={`text-sm font-semibold ${displayValue ? 'text-gray-700' : 'text-gray-400'}`}>
-                {displayValue ? translatePageText(STAR_LABELS[displayValue]) : translatePageText("Bấm vào sao để đánh giá")}
+                {displayValue ? i18n.t(STAR_LABELS[displayValue], { ns: 'legacy', keySeparator: false }) : i18n.t("Bấm vào sao để đánh giá", { ns: 'legacy', keySeparator: false })}
             </span>
         </div>
     );
 };
 
 const RatingPage = () => {
+    const { t } = useTranslation();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -91,7 +93,7 @@ const RatingPage = () => {
             const items = response.data?.data || [];
             setModerationBlocked(Boolean(response.data?.moderation?.blocked));
             if (response.data?.moderation?.blocked) {
-                setModerationMessage(translatePageText("Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay."));
+                setModerationMessage(i18n.t("Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.", { ns: 'legacy', keySeparator: false }));
             }
             setOrders(items);
 
@@ -136,7 +138,7 @@ const RatingPage = () => {
     const handleSubmit = async (orderItemId) => {
         const draft = drafts[orderItemId];
         if (!draft || !draft.rating) {
-            setErrorMessage(translatePageText("Vui lòng chọn số sao trước khi gửi đánh giá."));
+            setErrorMessage(i18n.t("Vui lòng chọn số sao trước khi gửi đánh giá.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -165,7 +167,7 @@ const RatingPage = () => {
                 setModerationMessage(data.message);
                 setModerationBlocked(Boolean(data.blocked));
             } else {
-                setErrorMessage(translatePageText("Lỗi khi gửi đánh giá, vui lòng thử lại."));
+                setErrorMessage(i18n.t("Lỗi khi gửi đánh giá, vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
                 console.error(err);
             }
         } finally {
@@ -238,8 +240,8 @@ const RatingPage = () => {
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
                         <EmptyState
                             icon="⭐"
-                            title={translatePageText("Chưa có món để đánh giá")}
-                            description={translatePageText("Bạn cần đặt và thanh toán ít nhất 1 đơn hàng trước khi có thể đánh giá.")}
+                            title={i18n.t("Chưa có món để đánh giá", { ns: 'legacy', keySeparator: false })}
+                            description={i18n.t("Bạn cần đặt và thanh toán ít nhất 1 đơn hàng trước khi có thể đánh giá.", { ns: 'legacy', keySeparator: false })}
                         />
                     </div>
                 ) : (
@@ -247,15 +249,15 @@ const RatingPage = () => {
                         {/* Bộ lọc mã hóa đơn + ngày */}
                         <div className="flex items-center justify-end mb-5 flex-wrap gap-3">
                             <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-                                <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{translatePageText("Tìm theo mã hóa đơn")}</span>
+                                <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{i18n.t("Tìm theo mã hóa đơn", { ns: 'legacy', keySeparator: false })}</span>
                                 <input
                                     type="text"
                                     value={searchBillId}
                                     onChange={e => setSearchBillId(e.target.value)}
-                                    placeholder={translatePageText("Nhập mã hóa đơn...")}
+                                    placeholder={i18n.t("Nhập mã hóa đơn...", { ns: 'legacy', keySeparator: false })}
                                     className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                                 />
-                                <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="rating-date-filter">{translatePageText("Ngày:") + " "}</label>
+                                <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="rating-date-filter">{t('common.dateLabel')} </label>
                                 <input
                                     id="rating-date-filter"
                                     type="date"
@@ -269,7 +271,7 @@ const RatingPage = () => {
                         {/* Thẻ tóm tắt tiến độ + bộ lọc */}
                         <div className="mb-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
                             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-                                <p className="font-semibold text-gray-800">{translatePageText("Bạn đã đánh giá") + " "}<span className="text-red-600">{ratedTotal}/{totalCount}</span>{" " + translatePageText("món") + " "}</p>
+                                <p className="font-semibold text-gray-800">{i18n.t("Bạn đã đánh giá", { ns: 'legacy', keySeparator: false }) + " "}<span className="text-red-600">{ratedTotal}/{totalCount}</span>{" " + i18n.t("món", { ns: 'legacy', keySeparator: false }) + " "}</p>
                                 <div className="grid grid-cols-3 w-full sm:w-auto sm:inline-flex gap-2">
                                     {FILTERS.map((f) => (
                                         <button
@@ -298,8 +300,8 @@ const RatingPage = () => {
                             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
                                 <EmptyState
                                     icon="🧾"
-                                    title={translatePageText("Không có đơn hàng")}
-                                    description={translatePageText("Không tìm thấy đơn hàng phù hợp với bộ lọc.")}
+                                    title={i18n.t("Không có đơn hàng", { ns: 'legacy', keySeparator: false })}
+                                    description={i18n.t("Không tìm thấy đơn hàng phù hợp với bộ lọc.", { ns: 'legacy', keySeparator: false })}
                                 />
                             </div>
                         ) : visibleOrders.length === 0 ? (
@@ -307,14 +309,14 @@ const RatingPage = () => {
                                 {filter === 'unrated' ? (
                                     <EmptyState
                                         icon="🎉"
-                                        title={translatePageText("Bạn đã đánh giá hết các món")}
-                                        description={translatePageText("Cảm ơn bạn đã góp ý cho nhà hàng.")}
+                                        title={i18n.t("Bạn đã đánh giá hết các món", { ns: 'legacy', keySeparator: false })}
+                                        description={i18n.t("Cảm ơn bạn đã góp ý cho nhà hàng.", { ns: 'legacy', keySeparator: false })}
                                     />
                                 ) : (
                                     <EmptyState
                                         icon="⭐"
-                                        title={translatePageText("Chưa có món nào được đánh giá")}
-                                        description={translatePageText("Chọn số sao ở các món trong mục \"Chưa đánh giá\" để bắt đầu.")}
+                                        title={i18n.t("Chưa có món nào được đánh giá", { ns: 'legacy', keySeparator: false })}
+                                        description={i18n.t("Chọn số sao ở các món trong mục \"Chưa đánh giá\" để bắt đầu.", { ns: 'legacy', keySeparator: false })}
                                     />
                                 )}
                             </div>
@@ -332,15 +334,15 @@ const RatingPage = () => {
                                                 onClick={() => toggleOrder(order.order_id, isOpen)}
                                                 className={`w-full text-left flex flex-wrap items-center gap-x-3 gap-y-2 px-4 sm:px-6 py-3 sm:py-4 bg-red-50 hover:bg-red-100 transition ${isOpen ? 'border-b border-red-100' : ''}`}
                                             >
-                                                <span className="text-lg font-bold text-gray-800">{translatePageText("Đơn hàng") + " "}{order.order_stt || order.order_id}
+                                                <span className="text-lg font-bold text-gray-800">{i18n.t("Đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}{order.order_stt || order.order_id}
                                                 </span>
                                                 <span className="rounded-full bg-white border border-gray-200 px-3 py-0.5 text-xs font-semibold text-gray-600">
                                                     {formatDateOnly(order.created_at)}
                                                 </span>
-                                                <span className="rounded-full bg-white border border-gray-200 px-3 py-0.5 text-xs font-semibold text-gray-600">{translatePageText("Mã hóa đơn:") + " "}{order.bill_id}
+                                                <span className="rounded-full bg-white border border-gray-200 px-3 py-0.5 text-xs font-semibold text-gray-600">{i18n.t("Mã hóa đơn:", { ns: 'legacy', keySeparator: false }) + " "}{order.bill_id}
                                                 </span>
                                                 <span className="ml-auto text-xs sm:text-sm font-semibold text-gray-600">
-                                                    {ratedCount}/{order.items.length}{" " + translatePageText("món đã đánh giá") + " "}</span>
+                                                    {ratedCount}/{order.items.length}{" " + i18n.t("món đã đánh giá", { ns: 'legacy', keySeparator: false }) + " "}</span>
                                                 <span className={`text-gray-500 text-sm transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true">▼</span>
                                             </button>
 
@@ -366,9 +368,9 @@ const RatingPage = () => {
                                                                             x{item.quantity}
                                                                         </span>
                                                                         {isRated ? (
-                                                                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">{translatePageText("✓ Đã đánh giá") + " "}</span>
+                                                                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">{i18n.t("✓ Đã đánh giá", { ns: 'legacy', keySeparator: false }) + " "}</span>
                                                                         ) : (
-                                                                            <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600">{translatePageText("Chưa đánh giá") + " "}</span>
+                                                                            <span className="rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600">{i18n.t("Chưa đánh giá", { ns: 'legacy', keySeparator: false }) + " "}</span>
                                                                         )}
                                                                     </div>
                                                                 </div>
@@ -383,7 +385,7 @@ const RatingPage = () => {
                                                                 <textarea
                                                                     value={draft.comment}
                                                                     onChange={(e) => updateDraft(item.order_item_id, 'comment', e.target.value)}
-                                                                    placeholder={translatePageText("Viết vài dòng nhận xét (không bắt buộc)...")}
+                                                                    placeholder={i18n.t("Viết vài dòng nhận xét (không bắt buộc)...", { ns: 'legacy', keySeparator: false })}
                                                                     rows={2}
                                                                     className="w-full mt-3 border border-gray-200 rounded-lg bg-white px-3 py-2 text-sm focus:outline-none focus:border-red-600 focus:ring-2 focus:ring-red-100 resize-none"
                                                                 />
@@ -395,17 +397,17 @@ const RatingPage = () => {
                                                                         className="w-full sm:w-auto px-5 py-2 text-sm font-bold rounded-full bg-red-600 text-white hover:bg-red-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
                                                                     >
                                                                         {submittingId === item.order_item_id
-                                                                            ? translatePageText("Đang gửi...")
-                                                                            : isRated ? translatePageText("Cập nhật đánh giá") : translatePageText("Gửi đánh giá")}
+                                                                            ? i18n.t("Đang gửi...", { ns: 'legacy', keySeparator: false })
+                                                                            : isRated ? i18n.t("Cập nhật đánh giá", { ns: 'legacy', keySeparator: false }) : i18n.t("Gửi đánh giá", { ns: 'legacy', keySeparator: false })}
                                                                     </button>
                                                                     {savedIds[item.order_item_id] && (
-                                                                        <span className="text-green-600 text-sm font-semibold">{translatePageText("✓ Đã lưu!")}</span>
+                                                                        <span className="text-green-600 text-sm font-semibold">{i18n.t("✓ Đã lưu!", { ns: 'legacy', keySeparator: false })}</span>
                                                                     )}
                                                                 </div>
 
                                                                 {aiResponses[item.order_item_id]?.[document.documentElement.lang === 'en' ? 'en' : 'vi'] && (
                                                                     <div className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2">
-                                                                        <p className="text-xs font-semibold text-red-600">{translatePageText("Phản hồi từ nhà hàng")}</p>
+                                                                        <p className="text-xs font-semibold text-red-600">{i18n.t("Phản hồi từ nhà hàng", { ns: 'legacy', keySeparator: false })}</p>
                                                                         <p className="mt-0.5 text-sm text-gray-700">{aiResponses[item.order_item_id][document.documentElement.lang === 'en' ? 'en' : 'vi']}</p>
                                                                     </div>
                                                                 )}
@@ -424,7 +426,7 @@ const RatingPage = () => {
                                         type="button"
                                         onClick={() => setVisibleCount((c) => c + ORDERS_PER_PAGE)}
                                         className="w-full py-3 rounded-2xl border border-gray-300 bg-white text-sm font-semibold text-gray-700 hover:border-red-600 hover:text-red-600 transition"
-                                    >{translatePageText("Xem thêm (")}{visibleOrders.length - visibleCount}{" " + translatePageText("đơn)") + " "}</button>
+                                    >{i18n.t("Xem thêm (", { ns: 'legacy', keySeparator: false })}{visibleOrders.length - visibleCount}{" " + i18n.t("đơn)", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                 )}
                             </div>
                         )}
@@ -434,7 +436,7 @@ const RatingPage = () => {
 
             <Modal
                 isOpen={!!errorMessage}
-                title={translatePageText("Thông báo")}
+                title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setErrorMessage(null)}
                 cancelText="Đóng"
             >

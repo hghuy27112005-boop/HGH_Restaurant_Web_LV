@@ -1,4 +1,6 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { adminAPI } from '../../services/api';
 import { Loading, ErrorMessage } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
@@ -10,9 +12,9 @@ import PeakHoursSection from './DashboardSections/PeakHoursSection';
 import TopUsersSection from './DashboardSections/TopUsersSection';
 import HolidaysSection from './DashboardSections/HolidaysSection';
 import { fmtMoney, extractError } from './DashboardSections/helpers';
-import { translatePageText } from '../../pageTextTranslations';
 
 const AdminDashboardPage = () => {
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [summary, setSummary] = useState(null);
@@ -23,7 +25,7 @@ const AdminDashboardPage = () => {
                 const res = await adminAPI.dashboard.summary();
                 setSummary(res?.data?.data || null);
             } catch (err) {
-                setError(extractError(err, translatePageText("Lỗi tải dashboard")));
+                setError(extractError(err, i18n.t("Lỗi tải dashboard", { ns: 'legacy', keySeparator: false })));
             } finally {
                 setLoading(false);
             }
@@ -34,7 +36,7 @@ const AdminDashboardPage = () => {
 
     return (
         <AdminPageShell
-            title="Dashboard"
+            title={t('navigation.dashboard')}
         >
             {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
@@ -45,35 +47,35 @@ const AdminDashboardPage = () => {
                 <StatCard label="Doanh thu đặt ship" value={fmtMoney(summary?.ship_revenue)} icon="fa-motorcycle" tone="yellow" />
             </StatGrid>
 
-            <CollapsibleSection title={translatePageText("Doanh thu")} icon="fa-chart-line">
+            <CollapsibleSection title={i18n.t("Doanh thu", { ns: 'legacy', keySeparator: false })} icon="fa-chart-line">
                 <MetricSection metric="revenue" />
             </CollapsibleSection>
 
-            <CollapsibleSection title={translatePageText("Số đơn hàng")} icon="fa-receipt">
+            <CollapsibleSection title={i18n.t("Số đơn hàng", { ns: 'legacy', keySeparator: false })} icon="fa-receipt">
                 <MetricSection metric="orders" />
             </CollapsibleSection>
 
-            <CollapsibleSection title={translatePageText("Xu hướng món ăn")} icon="fa-arrow-trend-up">
+            <CollapsibleSection title={i18n.t("Xu hướng món ăn", { ns: 'legacy', keySeparator: false })} icon="fa-arrow-trend-up">
                 <DishTrendSection kind="sales" />
             </CollapsibleSection>
 
-            <CollapsibleSection title={translatePageText("Món ăn được yêu thích")} icon="fa-heart">
+            <CollapsibleSection title={i18n.t("Món ăn được yêu thích", { ns: 'legacy', keySeparator: false })} icon="fa-heart">
                 <DishTrendSection kind="rating" />
             </CollapsibleSection>
 
-            <CollapsibleSection title={translatePageText("Thống kê theo thực đơn")} icon="fa-utensils">
+            <CollapsibleSection title={i18n.t("Thống kê theo thực đơn", { ns: 'legacy', keySeparator: false })} icon="fa-utensils">
                 <DishRankingSection />
             </CollapsibleSection>
 
-            <CollapsibleSection title={translatePageText("Khung giờ cao điểm")} icon="fa-clock">
+            <CollapsibleSection title={i18n.t("Khung giờ cao điểm", { ns: 'legacy', keySeparator: false })} icon="fa-clock">
                 <PeakHoursSection />
             </CollapsibleSection>
 
-            <CollapsibleSection title={translatePageText("Xếp hạng người dùng")} icon="fa-ranking-star">
+            <CollapsibleSection title={i18n.t("Xếp hạng người dùng", { ns: 'legacy', keySeparator: false })} icon="fa-ranking-star">
                 <TopUsersSection />
             </CollapsibleSection>
 
-            <CollapsibleSection title={translatePageText("Ngày nghỉ lễ")} icon="fa-calendar-days">
+            <CollapsibleSection title={i18n.t("Ngày nghỉ lễ", { ns: 'legacy', keySeparator: false })} icon="fa-calendar-days">
                 <HolidaysSection />
             </CollapsibleSection>
         </AdminPageShell>

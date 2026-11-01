@@ -1,25 +1,18 @@
+import i18n from '../../i18n.js';
 import { useState, useRef, useEffect, useCallback } from "react";
 import Cropper from "react-easy-crop"; // npm install react-easy-crop
 import { useNavigate } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
-import { translatePageText } from '../../pageTextTranslations';
 
-import { API_URL as API_BASE } from "../../apiConfig";
-
-function getToken() {
-  return sessionStorage.getItem("auth_token") || "";
-}
-
-function authHeaders(extra = {}) {
-  return {
-    Accept: "application/json",
-    Authorization: `Bearer ${getToken()}`,
-    ...extra,
-  };
-}
+import { userAPI } from "../../services/api";
 
 // ── Giới hạn file ảnh upload ────────────────────────────────────────────────
 const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const EMPTY_PASSWORD_FORM = {
+  current_password: "",
+  new_password: "",
+  new_password_confirmation: "",
+};
 // ── Toast ───────────────────────────────────────────────────────────────────
 function useToast() {
   const [toast, setToast] = useState(null);
@@ -41,7 +34,7 @@ function Toast({ toast }) {
   };
   const c = colors[toast.type] || colors.success;
   return (
-    <div className={`profile-avatar-frame ${displayAvatarUrl ? "has-image" : ""}`} style={{
+    <div style={{
       position: "fixed", top: 24, right: 24, zIndex: 9999,
       background: c.bg, border: `1px solid ${c.border}`, color: c.text,
       padding: "14px 22px", borderRadius: 8,
@@ -169,7 +162,7 @@ function CropperModal({ show, imageUrl, onClose, onCrop }) {
         width: "90%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto",
         boxShadow: "0 8px 40px rgba(0,0,0,0.3)",
       }}>
-        <h3 style={{ margin: "0 0 16px", textAlign: "center", color: "#333", fontSize: 20 }}>{translatePageText("Cắt ảnh đại diện") + " "}</h3>
+        <h3 style={{ margin: "0 0 16px", textAlign: "center", color: "#333", fontSize: 20 }}>{i18n.t("Cắt ảnh đại diện", { ns: 'legacy', keySeparator: false }) + " "}</h3>
 
         {/* Vùng crop: phải set position:relative + chiều cao cố định,
             react-easy-crop tự fill 100% vùng này bằng ResizeObserver,
@@ -203,12 +196,12 @@ function CropperModal({ show, imageUrl, onClose, onCrop }) {
           <span style={{ fontSize: 18, color: "#888", userSelect: "none" }}>+</span>
         </div>
 
-        <p style={{ textAlign: "center", color: "#999", fontSize: 13, margin: "8px 0 4px" }}>{translatePageText("Kéo ảnh để di chuyển · Dùng thanh trượt để zoom") + " "}</p>
+        <p style={{ textAlign: "center", color: "#999", fontSize: 13, margin: "8px 0 4px" }}>{i18n.t("Kéo ảnh để di chuyển · Dùng thanh trượt để zoom", { ns: 'legacy', keySeparator: false }) + " "}</p>
 
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
-          <button className="profile-outline-button" onClick={onClose} style={btnStyle("outline")}>{translatePageText("Huỷ")}</button>
+          <button className="profile-outline-button" onClick={onClose} style={btnStyle("outline")}>{i18n.t("Huỷ", { ns: 'legacy', keySeparator: false })}</button>
           <button onClick={handleConfirm} disabled={busy} style={btnStyle("primary", busy)}>
-            {busy ? translatePageText("Đang xử lý...") : translatePageText("✂️ Xác nhận cắt")}
+            {busy ? i18n.t("Đang xử lý...", { ns: 'legacy', keySeparator: false }) : i18n.t("✂️ Xác nhận cắt", { ns: 'legacy', keySeparator: false })}
           </button>
         </div>
       </div>
@@ -271,7 +264,17 @@ export default function ProfilePage() {
 
   // Password modal
   const [pwModal, setPwModal] = useState(false);
-  const [pwForm, setPwForm] = useState({ current_password: "", new_password: "", new_password_confirmation: "" });
+  const [pwForm, setPwForm] = useState(EMPTY_PASSWORD_FORM);
+
+  function openPasswordModal() {
+    setPwForm({ ...EMPTY_PASSWORD_FORM });
+    setPwModal(true);
+  }
+
+  function closePasswordModal() {
+    setPwModal(false);
+    setPwForm({ ...EMPTY_PASSWORD_FORM });
+  }
 
   // Busy
   const [busy, setBusy] = useState(null);
@@ -280,19 +283,13 @@ export default function ProfilePage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/user`, { headers: authHeaders() });
-        if (res.status === 401) {
-          // Token bị thu hồi: báo cho useAuth hiện modal, không hiện toast lỗi
-          window.dispatchEvent(new Event('session-kicked'));
-          return;
-        }
-        if (!res.ok) throw new Error("Unauthorized");
-        const json = await res.json();
-        const u = json.data;
+        const res = await userAPI.getProfile();
+        const u = res.data.data;
         setUser(u);
         setForm({ username: u.username, email: u.email, tele_number: u.tele_number ?? "" });
-      } catch {
-        showToast(translatePageText("Không thể tải thông tin tài khoản. Vui lòng đăng nhập lại."), "error");
+      } catch (error) {
+        if (error.response?.status === 401) return;
+        showToast(i18n.t("Không thể tải thông tin tài khoản. Vui lòng đăng nhập lại.", { ns: 'legacy', keySeparator: false }), "error");
       } finally {
         setLoading(false);
       }
@@ -313,12 +310,12 @@ export default function ProfilePage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      showToast(translatePageText("Vui lòng chọn một file ảnh hợp lệ!"), "warning");
+      showToast(i18n.t("Vui lòng chọn một file ảnh hợp lệ!", { ns: 'legacy', keySeparator: false }), "warning");
       e.target.value = "";
       return;
     }
     if (file.size > MAX_AVATAR_FILE_SIZE) {
-      showToast(translatePageText("Ảnh quá lớn, vui lòng chọn ảnh dưới 5MB!"), "warning");
+      showToast(i18n.t("Ảnh quá lớn, vui lòng chọn ảnh dưới 5MB!", { ns: 'legacy', keySeparator: false }), "warning");
       e.target.value = "";
       return;
     }
@@ -344,28 +341,24 @@ export default function ProfilePage() {
 
   // ── Lưu avatar ─────────────────────────────────────────────────────────
   async function handleSaveAvatar() {
-    if (!croppedBlob) return showToast(translatePageText("Vui lòng chọn và cắt ảnh trước!"), "warning");
+    if (!croppedBlob) return showToast(i18n.t("Vui lòng chọn và cắt ảnh trước!", { ns: 'legacy', keySeparator: false }), "warning");
     setBusy("avatar");
     try {
       const fd = new FormData();
       fd.append("avatar", croppedBlob, "avatar.jpg");
-      const res = await fetch(`${API_BASE}/user/avatar`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: fd,
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
+      const res = await userAPI.uploadAvatar(fd);
+      const json = res.data;
+      if (json.success) {
         await showToast(json.message, "success");
         setUser((u) => ({ ...u, avatar_url: json.avatar_url }));
         updateUser({ avatar_url: json.avatar_url });
         setPreviewAvatarUrl(null);
         setCroppedBlob(null);
-      } else {
-        showToast(json.message || "Cập nhật thất bại", "error");
       }
-    } catch {
-      showToast(translatePageText("Không thể kết nối máy chủ!"), "error");
+    } catch (error) {
+      const message = error.response?.data?.message;
+      if (message) showToast(message, "error");
+      else showToast(i18n.t("Không thể kết nối máy chủ!", { ns: 'legacy', keySeparator: false }), "error");
     } finally {
       setBusy(null);
     }
@@ -375,24 +368,19 @@ export default function ProfilePage() {
   async function handleSaveProfile() {
     setBusy("profile");
     try {
-      const res = await fetch(`${API_BASE}/user`, {
-        method: "PUT",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(form),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
+      const res = await userAPI.updateProfile(form);
+      const json = res.data;
+      if (json.success) {
         await showToast(json.message, "success");
         setUser((u) => ({ ...u, ...json.data }));
         updateUser(json.data);
         setEditMode(false);
-      } else {
-        const msg = json.message || "Cập nhật thất bại";
-        const detail = json.errors ? " — " + Object.values(json.errors).flat().join(", ") : "";
-        showToast(msg + detail, "error");
       }
-    } catch {
-      showToast(translatePageText("Không thể kết nối máy chủ!"), "error");
+    } catch (error) {
+      const json = error.response?.data || {};
+      const msg = json.message || i18n.t("Cập nhật thất bại", { ns: 'legacy', keySeparator: false });
+      const detail = json.errors ? " — " + Object.values(json.errors).flat().join(", ") : "";
+      showToast(msg + detail, "error");
     } finally {
       setBusy(null);
     }
@@ -402,23 +390,17 @@ export default function ProfilePage() {
   async function handleChangePassword(e) {
     e.preventDefault();
     if (pwForm.new_password !== pwForm.new_password_confirmation)
-      return showToast(translatePageText("Xác nhận mật khẩu không khớp!"), "warning");
+      return showToast(i18n.t("Xác nhận mật khẩu không khớp!", { ns: 'legacy', keySeparator: false }), "warning");
     try {
-      const res = await fetch(`${API_BASE}/user/change-password`, {
-        method: "POST",
-        headers: authHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify(pwForm),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        await showToast(json.message, "success");
-        setPwModal(false);
-        setPwForm({ current_password: "", new_password: "", new_password_confirmation: "" });
-      } else {
-        showToast(json.message || "Đổi mật khẩu thất bại", "error");
+      const res = await userAPI.changePassword(pwForm);
+      const json = res.data;
+      if (json.success) {
+        await showToast(i18n.t(json.message, { ns: 'legacy', keySeparator: false }), "success");
+        closePasswordModal();
       }
-    } catch {
-      showToast(translatePageText("Không thể kết nối máy chủ!"), "error");
+    } catch (error) {
+      const message = error.response?.data?.message || "Đổi mật khẩu thất bại";
+      showToast(i18n.t(message, { ns: 'legacy', keySeparator: false }), "error");
     }
   }
 
@@ -436,7 +418,7 @@ export default function ProfilePage() {
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
         <div style={{ textAlign: "center", color: "#888" }}>
           <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
-          <p>{translatePageText("Đang tải thông tin...")}</p>
+          <p>{i18n.t("Đang tải thông tin...", { ns: 'legacy', keySeparator: false })}</p>
         </div>
       </div>
     );
@@ -476,29 +458,29 @@ export default function ProfilePage() {
       />
 
       {/* ── Change Password Modal ── */}
-      <Modal show={pwModal} onClose={() => setPwModal(false)} title={translatePageText("Đổi mật khẩu")}>
+      <Modal show={pwModal} onClose={closePasswordModal} title={i18n.t("Đổi mật khẩu", { ns: 'legacy', keySeparator: false })}>
         <form onSubmit={handleChangePassword}>
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>{translatePageText("Mật khẩu hiện tại (*):")}</label>
+            <label style={labelStyle}>{i18n.t("Mật khẩu hiện tại (*):", { ns: 'legacy', keySeparator: false })}</label>
             <input className="pw-input" type="password" required
-              placeholder={translatePageText("Nhập mật khẩu hiện tại")} value={pwForm.current_password}
+              placeholder={i18n.t("Nhập mật khẩu hiện tại", { ns: 'legacy', keySeparator: false })} value={pwForm.current_password}
               onChange={(e) => setPwForm((f) => ({ ...f, current_password: e.target.value }))} />
           </div>
           <div style={{ marginBottom: 18 }}>
-            <label style={labelStyle}>{translatePageText("Mật khẩu mới (*):")}</label>
+            <label style={labelStyle}>{i18n.t("Mật khẩu mới (*):", { ns: 'legacy', keySeparator: false })}</label>
             <input className="pw-input" type="password" required minLength={6}
-              placeholder={translatePageText("Nhập mật khẩu mới")} value={pwForm.new_password}
+              placeholder={i18n.t("Nhập mật khẩu mới", { ns: 'legacy', keySeparator: false })} value={pwForm.new_password}
               onChange={(e) => setPwForm((f) => ({ ...f, new_password: e.target.value }))} />
           </div>
           <div style={{ marginBottom: 6 }}>
-            <label style={labelStyle}>{translatePageText("Xác nhận mật khẩu mới (*):")}</label>
+            <label style={labelStyle}>{i18n.t("Xác nhận mật khẩu mới (*):", { ns: 'legacy', keySeparator: false })}</label>
             <input className="pw-input" type="password" required minLength={6}
-              placeholder={translatePageText("Nhập lại mật khẩu mới")} value={pwForm.new_password_confirmation}
+              placeholder={i18n.t("Nhập lại mật khẩu mới", { ns: 'legacy', keySeparator: false })} value={pwForm.new_password_confirmation}
               onChange={(e) => setPwForm((f) => ({ ...f, new_password_confirmation: e.target.value }))} />
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 24 }}>
-            <Btn type="button" onClick={() => setPwModal(false)} style={{ width: "auto", padding: "9px 22px" }}>{translatePageText("Huỷ")}</Btn>
-            <Btn type="submit" variant="primary" style={{ width: "auto", padding: "9px 22px" }}>{translatePageText("Xác nhận")}</Btn>
+            <Btn type="button" onClick={closePasswordModal} style={{ width: "auto", padding: "9px 22px" }}>{i18n.t("Huỷ", { ns: 'legacy', keySeparator: false })}</Btn>
+            <Btn type="submit" variant="primary" style={{ width: "auto", padding: "9px 22px" }}>{i18n.t("Xác nhận", { ns: 'legacy', keySeparator: false })}</Btn>
           </div>
         </form>
       </Modal>
@@ -526,31 +508,31 @@ export default function ProfilePage() {
             </div>
 
             <h3 style={{ margin: "0 0 8px", color: "#333" }}>{user?.username}</h3>
-            <p style={{ color: "#C0392B", fontWeight: 700, margin: "0 0 8px", fontSize: 15 }}>{translatePageText("Vai trò:") + " "}{user?.role}
+            <p style={{ color: "#C0392B", fontWeight: 700, margin: "0 0 8px", fontSize: 15 }}>{i18n.t("Vai trò:", { ns: 'legacy', keySeparator: false }) + " "}{user?.role}
             </p>
             {user?.role !== 'admin' && (
               <>
-                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{translatePageText("Cấp bậc thành viên:") + " "}<strong style={{ color: "#333" }}>{user?.membership}</strong>
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{i18n.t("Cấp bậc thành viên:", { ns: 'legacy', keySeparator: false }) + " "}<strong style={{ color: "#333" }}>{user?.membership}</strong>
                 </p>
-                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{translatePageText("Điểm tích lũy:") + " "}<strong style={{ color: "#C0392B" }}>{user?.points ?? 0}</strong>
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{i18n.t("Điểm tích lũy:", { ns: 'legacy', keySeparator: false }) + " "}<strong style={{ color: "#C0392B" }}>{user?.points ?? 0}</strong>
                 </p>
-                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{translatePageText("Lượt hủy đơn:")}{" "}
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{i18n.t("Lượt hủy đơn:", { ns: 'legacy', keySeparator: false })}{" "}
                   <strong style={{ color: (user?.cancel_attempts_left ?? 0) === 0 ? "#C0392B" : "#333" }}>
                     {user?.cancel_attempts_left ?? 0}/2
                   </strong>
                 </p>
-                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{translatePageText("Lượt chỉnh sửa đơn:")}{" "}
+                <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{i18n.t("Lượt chỉnh sửa đơn:", { ns: 'legacy', keySeparator: false })}{" "}
                   <strong style={{ color: (user?.modify_attempts_left ?? 0) === 0 ? "#C0392B" : "#333" }}>
                     {user?.modify_attempts_left ?? 0}/2
                   </strong>
                 </p>
-                <p style={{ color: "#999", margin: "0 0 16px", fontSize: 12 }}>{translatePageText("Lượt được làm mới vào thứ Hai hàng tuần, tính chung đặt bàn và đặt ship.") + " "}</p>
+                <p style={{ color: "#999", margin: "0 0 16px", fontSize: 12 }}>{i18n.t("Lượt được làm mới vào thứ Hai hàng tuần, tính chung đặt bàn và đặt ship.", { ns: 'legacy', keySeparator: false }) + " "}</p>
               </>
             )}
 
             {/* Upload avatar */}
             <div style={{ textAlign: "left" }}>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5, color: "#555" }}>{translatePageText("Đổi ảnh đại diện (Tuỳ chọn)") + " "}</label>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5, color: "#555" }}>{i18n.t("Đổi ảnh đại diện (Tuỳ chọn)", { ns: 'legacy', keySeparator: false }) + " "}</label>
               <input type="file" ref={fileInputRef} accept="image/*"
                 disabled={busy === "profile" || editMode}
                 onChange={handleFileChange}
@@ -563,7 +545,7 @@ export default function ProfilePage() {
               {croppedBlob && (
                 <Btn variant="primary" onClick={handleSaveAvatar} disabled={busy === "avatar"}
                   style={{ marginTop: 10, padding: "7px 12px", fontSize: 13 }}>
-                  {busy === "avatar" ? translatePageText("Đang lưu...") : translatePageText("💾 Lưu ảnh đại diện")}
+                  {busy === "avatar" ? i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false }) : i18n.t("💾 Lưu ảnh đại diện", { ns: 'legacy', keySeparator: false })}
                 </Btn>
               )}
             </div>
@@ -574,10 +556,10 @@ export default function ProfilePage() {
             <h2 style={{
               margin: "0 0 24px", color: "#333", fontSize: 22,
               borderBottom: "2px solid #f0f0f0", paddingBottom: 10
-            }}>{translatePageText("Thông tin cá nhân") + " "}</h2>
+            }}>{i18n.t("Thông tin cá nhân", { ns: 'legacy', keySeparator: false }) + " "}</h2>
 
             <div>
-              <Field label={translatePageText("Tên người dùng (*):")}>
+              <Field label={i18n.t("Tên người dùng (*):", { ns: 'legacy', keySeparator: false })}>
                 <input className="profile-input" value={form.username}
                   readOnly={!editMode} maxLength={50}
                   onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
@@ -587,7 +569,7 @@ export default function ProfilePage() {
                   readOnly={!editMode} maxLength={255}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
               </Field>
-              <Field label={translatePageText("Số điện thoại:")}>
+              <Field label={i18n.t("Số điện thoại:", { ns: 'legacy', keySeparator: false })}>
                 <input className="profile-input" value={form.tele_number}
                   readOnly={!editMode} maxLength={20}
                   onChange={(e) => setForm((f) => ({ ...f, tele_number: e.target.value }))} />
@@ -596,20 +578,20 @@ export default function ProfilePage() {
 
             <div style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 12 }}>
               {!editMode ? (
-                <Btn onClick={() => setEditMode(true)} disabled={busy === "avatar"}>{translatePageText("Thay đổi thông tin cá nhân") + " "}</Btn>
+                <Btn onClick={() => setEditMode(true)} disabled={busy === "avatar"}>{i18n.t("Thay đổi thông tin cá nhân", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
               ) : (
                 <>
                   <Btn variant="primary" onClick={handleSaveProfile} disabled={busy === "profile"}>
-                    {busy === "profile" ? translatePageText("Đang lưu...") : translatePageText("Lưu sửa đổi")}
+                    {busy === "profile" ? i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false }) : i18n.t("Lưu sửa đổi", { ns: 'legacy', keySeparator: false })}
                   </Btn>
                   <Btn onClick={() => {
                     setForm({ username: user.username, email: user.email, tele_number: user.tele_number ?? "" });
                     setEditMode(false);
-                  }} disabled={busy === "profile"}>{translatePageText("Huỷ") + " "}</Btn>
+                  }} disabled={busy === "profile"}>{i18n.t("Huỷ", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
                 </>
               )}
-              <Btn onClick={() => setPwModal(true)} disabled={editMode || busy === "avatar"}>{translatePageText("Đổi mật khẩu") + " "}</Btn>
-              <Btn variant="danger" onClick={handleLogout} disabled={editMode || busy === "avatar"}>{translatePageText("Đăng xuất") + " "}</Btn>
+              <Btn onClick={openPasswordModal} disabled={editMode || busy === "avatar"}>{i18n.t("Đổi mật khẩu", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
+              <Btn variant="danger" onClick={handleLogout} disabled={editMode || busy === "avatar"}>{i18n.t("Đăng xuất", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
             </div>
           </div>
         </div>

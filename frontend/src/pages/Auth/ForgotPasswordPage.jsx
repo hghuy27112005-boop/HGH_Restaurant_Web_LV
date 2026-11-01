@@ -1,8 +1,9 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { authAPI } from '../../services/api';
 import { ErrorMessage, SuccessMessage } from '../../components/Shared';
-import { translatePageText } from '../../pageTextTranslations';
 
 import { API_BASE_URL } from '../../apiConfig';
 
@@ -88,7 +89,7 @@ const OtpInput = ({ value, onChange, disabled }) => {
                         if (i > value.length) focusAt(value.length);
                         else e.target.select();
                     }}
-                    aria-label={`Chữ số thứ ${i + 1}`}
+                    aria-label={t('auth.otpDigitAria', { count: i + 1 })}
                     className="h-12 min-w-0 flex-1 rounded-lg border border-white/30 bg-white/95 text-center text-xl font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-60"
                 />
             ))}
@@ -97,6 +98,7 @@ const OtpInput = ({ value, onChange, disabled }) => {
 };
 
 const ForgotPasswordPage = () => {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const [step, setStep] = useState(1);
     const [email, setEmail] = useState('');
@@ -133,7 +135,7 @@ const ForgotPasswordPage = () => {
         }
         // 429 do giới hạn IP của Laravel (không có code)
         if (err.response?.status === 429 && !data?.code) {
-            setError(translatePageText("Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút."));
+            setError(i18n.t("Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.", { ns: 'legacy', keySeparator: false }));
             return;
         }
         setError(data?.message || fallback);
@@ -144,7 +146,7 @@ const ForgotPasswordPage = () => {
         clearMessages();
         const trimmed = email.trim();
         if (!trimmed) {
-            setError(translatePageText("Vui lòng nhập địa chỉ Email."));
+            setError(i18n.t("Vui lòng nhập địa chỉ Email.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -160,7 +162,7 @@ const ForgotPasswordPage = () => {
             setSuccess(res.data.message);
             setStep(2);
         } catch (err) {
-            showError(err, translatePageText("Không gửi được mã. Vui lòng thử lại."));
+            showError(err, i18n.t("Không gửi được mã. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
         } finally {
             setLoading(false);
         }
@@ -175,7 +177,7 @@ const ForgotPasswordPage = () => {
             setStep(3);
         } catch (err) {
             setOtp('');
-            showError(err, translatePageText("Xác thực thất bại. Vui lòng thử lại."));
+            showError(err, i18n.t("Xác thực thất bại. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
         } finally {
             setLoading(false);
         }
@@ -184,11 +186,11 @@ const ForgotPasswordPage = () => {
     const submitNewPassword = async () => {
         clearMessages();
         if (password.length < 6) {
-            setError(translatePageText("Mật khẩu phải có ít nhất 6 ký tự."));
+            setError(i18n.t("Mật khẩu phải có ít nhất 6 ký tự.", { ns: 'legacy', keySeparator: false }));
             return;
         }
         if (password !== passwordConfirm) {
-            setError(translatePageText("Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại!"));
+            setError(i18n.t("Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại!", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -211,7 +213,7 @@ const ForgotPasswordPage = () => {
                 setPasswordConfirm('');
                 setResetToken('');
             }
-            showError(err, translatePageText("Đặt lại mật khẩu thất bại. Vui lòng thử lại."));
+            showError(err, i18n.t("Đặt lại mật khẩu thất bại. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
         } finally {
             setLoading(false);
         }
@@ -249,14 +251,14 @@ const ForgotPasswordPage = () => {
 
             <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-7xl items-center justify-center gap-10 px-4 sm:px-6 pb-10 lg:justify-between">
                 <div className="hidden lg:block max-w-lg text-white drop-shadow-lg">
-                    <h1 className="text-5xl font-bold leading-tight">{translatePageText("NHÀ HÀNG HGH")}</h1>
-                    <p className="mt-4 text-2xl text-white/90">{translatePageText("Hương vị cơm gia đình thuần túy")}</p>
+                    <h1 className="text-5xl font-bold leading-tight">{i18n.t("NHÀ HÀNG HGH", { ns: 'legacy', keySeparator: false })}</h1>
+                    <p className="mt-4 text-2xl text-white/90">{i18n.t("Hương vị cơm gia đình thuần túy", { ns: 'legacy', keySeparator: false })}</p>
                 </div>
 
                 <div className="w-full max-w-[440px] rounded-2xl border border-white/20 bg-black/40 p-5 shadow-2xl backdrop-blur-md">
                     <div className="mb-3 flex items-center justify-between">
-                        <h2 className="text-lg font-bold text-white">{translatePageText("Quên mật khẩu")}</h2>
-                        <span className="text-xs font-semibold text-white/70">{translatePageText("Bước") + " "}{step}/3</span>
+                        <h2 className="text-lg font-bold text-white">{i18n.t("Quên mật khẩu", { ns: 'legacy', keySeparator: false })}</h2>
+                        <span className="text-xs font-semibold text-white/70">{i18n.t("Bước", { ns: 'legacy', keySeparator: false }) + " "}{step}/3</span>
                     </div>
                     <p className="mb-3 text-sm text-white/80 break-words">{stepHint}</p>
 
@@ -277,12 +279,12 @@ const ForgotPasswordPage = () => {
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
                                     maxLength="50"
-                                    placeholder={translatePageText("Nhập email đã đăng ký")}
+                                    placeholder={i18n.t("Nhập email đã đăng ký", { ns: 'legacy', keySeparator: false })}
                                     className={inputClass}
                                 />
                             </div>
                             <button type="submit" disabled={loading || resendLeft > 0} className={primaryBtnClass}>
-                                {loading ? translatePageText("Đang xử lý...") : resendLeft > 0 ? `Gửi mã (đợi ${resendLeft}s)` : translatePageText("Gửi mã")}
+                                {loading ? i18n.t("Đang xử lý...", { ns: 'legacy', keySeparator: false }) : resendLeft > 0 ? `Gửi mã (đợi ${resendLeft}s)` : i18n.t("Gửi mã", { ns: 'legacy', keySeparator: false })}
                             </button>
                         </form>
                     )}
@@ -290,16 +292,16 @@ const ForgotPasswordPage = () => {
                     {step === 2 && (
                         <form onSubmit={handleSubmit(verifyOtp)} className="space-y-2">
                             <div>
-                                <label className={labelClass}>{translatePageText("Mã OTP (*):")}</label>
+                                <label className={labelClass}>{i18n.t("Mã OTP (*):", { ns: 'legacy', keySeparator: false })}</label>
                                 <OtpInput value={otp} onChange={setOtp} disabled={loading} />
                             </div>
 
                             <p className={`text-sm ${otpExpired ? 'text-red-300' : 'text-white/80'}`}>
-                                {otpExpired ? translatePageText("Mã đã hết hạn. Vui lòng gửi lại mã.") : `Mã còn hiệu lực: ${formatTime(otpLeft)}`}
+                                {otpExpired ? i18n.t("Mã đã hết hạn. Vui lòng gửi lại mã.", { ns: 'legacy', keySeparator: false }) : `Mã còn hiệu lực: ${formatTime(otpLeft)}`}
                             </p>
 
                             <button type="submit" disabled={loading || otp.length !== 6 || otpExpired} className={primaryBtnClass}>
-                                {loading ? translatePageText("Đang xử lý...") : translatePageText("Xác nhận")}
+                                {loading ? i18n.t("Đang xử lý...", { ns: 'legacy', keySeparator: false }) : i18n.t("Xác nhận", { ns: 'legacy', keySeparator: false })}
                             </button>
 
                             <div className="flex items-center justify-between pt-1">
@@ -307,47 +309,47 @@ const ForgotPasswordPage = () => {
                                     type="button"
                                     onClick={backToStep1}
                                     className="text-sm text-white/80 underline underline-offset-2 hover:text-white"
-                                >{translatePageText("Đổi email") + " "}</button>
+                                >{i18n.t("Đổi email", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                 <button
                                     type="button"
                                     onClick={sendOtp}
                                     disabled={loading || resendLeft > 0}
                                     className="text-sm font-semibold text-red-300 hover:text-red-200 disabled:cursor-not-allowed disabled:text-white/40"
                                 >
-                                    {resendLeft > 0 ? `Gửi lại mã (${resendLeft}s)` : translatePageText("Gửi lại mã")}
+                                    {resendLeft > 0 ? `Gửi lại mã (${resendLeft}s)` : i18n.t("Gửi lại mã", { ns: 'legacy', keySeparator: false })}
                                 </button>
                             </div>
 
-                            <p className="pt-1 text-xs text-white/60">{translatePageText("Lưu ý: nhập sai OTP 2 lần sẽ bị khóa tạm thời chức năng quên mật khẩu.") + " "}</p>
+                            <p className="pt-1 text-xs text-white/60">{i18n.t("Lưu ý: nhập sai OTP 2 lần sẽ bị khóa tạm thời chức năng quên mật khẩu.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                         </form>
                     )}
 
                     {step === 3 && (
                         <form onSubmit={handleSubmit(submitNewPassword)} className="space-y-2">
                             <div>
-                                <label className={labelClass}>{translatePageText("Mật khẩu mới (*):")}</label>
+                                <label className={labelClass}>{i18n.t("Mật khẩu mới (*):", { ns: 'legacy', keySeparator: false })}</label>
                                 <input
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    placeholder={translatePageText("Tối thiểu 6 ký tự")}
+                                    placeholder={i18n.t("Tối thiểu 6 ký tự", { ns: 'legacy', keySeparator: false })}
                                     className={inputClass}
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>{translatePageText("Xác nhận mật khẩu mới (*):")}</label>
+                                <label className={labelClass}>{i18n.t("Xác nhận mật khẩu mới (*):", { ns: 'legacy', keySeparator: false })}</label>
                                 <input
                                     type="password"
                                     value={passwordConfirm}
                                     onChange={(e) => setPasswordConfirm(e.target.value)}
                                     required
-                                    placeholder={translatePageText("Nhập lại mật khẩu mới")}
+                                    placeholder={i18n.t("Nhập lại mật khẩu mới", { ns: 'legacy', keySeparator: false })}
                                     className={inputClass}
                                 />
                             </div>
                             <button type="submit" disabled={loading || !!success} className={primaryBtnClass}>
-                                {loading ? translatePageText("Đang xử lý...") : translatePageText("Đặt lại mật khẩu")}
+                                {loading ? i18n.t("Đang xử lý...", { ns: 'legacy', keySeparator: false }) : i18n.t("Đặt lại mật khẩu", { ns: 'legacy', keySeparator: false })}
                             </button>
                         </form>
                     )}
@@ -357,7 +359,7 @@ const ForgotPasswordPage = () => {
                             type="button"
                             className="font-semibold text-white underline underline-offset-2"
                             onClick={() => navigate('/login')}
-                        >{translatePageText("Quay lại đăng nhập") + " "}</button>
+                        >{i18n.t("Quay lại đăng nhập", { ns: 'legacy', keySeparator: false }) + " "}</button>
                     </p>
                 </div>
             </div>

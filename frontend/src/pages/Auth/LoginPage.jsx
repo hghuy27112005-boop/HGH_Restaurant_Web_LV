@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthContext } from '../../context/AuthContext';
 import { ErrorMessage, SuccessMessage, Modal } from '../../components/Shared';
-import { translatePageText } from '../../pageTextTranslations';
+import i18n from '../../i18n';
 
 import { API_BASE_URL } from '../../apiConfig';
 
@@ -45,20 +45,22 @@ const LoginPage = () => {
         const err = params.get('error');
 
         if (err === 'google_auth_failed') {
-            setLocalError(translatePageText("Đăng nhập bằng Google thất bại. Vui lòng thử lại."));
+            setLocalError(i18n.t("Đăng nhập bằng Google thất bại. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
             window.history.replaceState({}, '', window.location.pathname);
         } else if (err === 'facebook_auth_failed') {
-            setLocalError(translatePageText("Đăng nhập bằng Facebook thất bại. Vui lòng thử lại."));
+            setLocalError(i18n.t("Đăng nhập bằng Facebook thất bại. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
             window.history.replaceState({}, '', window.location.pathname);
         } else if (err === 'facebook_email_required') {
-            setLocalError(translatePageText("Vui lòng cấp quyền email khi đăng nhập bằng Facebook."));
+            setLocalError(i18n.t("Vui lòng cấp quyền email khi đăng nhập bằng Facebook.", { ns: 'legacy', keySeparator: false }));
             window.history.replaceState({}, '', window.location.pathname);
         } else if (err === 'account_locked') {
             const until = params.get('until');
             const untilText = until
-                ? new Date(until).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
+                ? new Date(until).toLocaleString(i18n.resolvedLanguage === 'en' ? 'en-US' : 'vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' })
                 : '';
-            setLockedMessage(`Tài khoản của bạn đã bị khóa${untilText ? ` đến ${untilText}` : ''}. Lý do: vi phạm chính sách nội quy Nhà hàng.`);
+            setLockedMessage(untilText
+                ? i18n.t('auth.accountLockedUntil', { until: untilText })
+                : i18n.t('auth.accountLocked'));
             window.history.replaceState({}, '', window.location.pathname);
         }
     }, []);
@@ -93,7 +95,7 @@ const LoginPage = () => {
         setSuccessMessage(null);
 
         if (!loginData.username || !loginData.password) {
-            setLocalError(translatePageText("Vui lòng điền đầy đủ thông tin đăng nhập"));
+            setLocalError(i18n.t("Vui lòng điền đầy đủ thông tin đăng nhập", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -111,14 +113,14 @@ const LoginPage = () => {
         setSuccessMessage(null);
 
         if (regData.password !== regData.password_confirmation) {
-            setLocalError(translatePageText("Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại!"));
+            setLocalError(i18n.t("Mật khẩu xác nhận không khớp. Vui lòng kiểm tra lại!", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
         const result = await register(regData);
 
         if (result?.success) {
-            setSuccessMessage(translatePageText("Đăng ký thành công! Chuyển hướng về trang chủ..."));
+            setSuccessMessage(i18n.t("Đăng ký thành công! Chuyển hướng về trang chủ...", { ns: 'legacy', keySeparator: false }));
             setTimeout(() => {
                 window.location.href = '/';
             }, 1500);
@@ -142,17 +144,17 @@ const LoginPage = () => {
 
                 {/* Bên trái: chỉ hiện từ màn hình lớn */}
                 <div className="hidden lg:block max-w-lg text-white drop-shadow-lg">
-                    <h1 className="text-5xl font-bold leading-tight">{translatePageText("NHÀ HÀNG HGH")}</h1>
-                    <p className="mt-4 text-2xl text-white/90">{translatePageText("Hương vị cơm gia đình thuần túy")}</p>
+                    <h1 className="text-5xl font-bold leading-tight">{i18n.t("NHÀ HÀNG HGH", { ns: 'legacy', keySeparator: false })}</h1>
+                    <p className="mt-4 text-2xl text-white/90">{i18n.t("Hương vị cơm gia đình thuần túy", { ns: 'legacy', keySeparator: false })}</p>
                 </div>
 
                 {/* Bên phải: tấm kính mờ chứa form */}
                 <div className="w-full max-w-[440px] rounded-2xl border border-white/20 bg-black/40 p-5 shadow-2xl backdrop-blur-md">
                     <div className="mb-3 flex gap-1 rounded-xl bg-white/10 p-1">
                         <button type="button" className={tabClass(activeTab === 'login')} onClick={() => switchTab('login')}>
-                            <i className="fas fa-sign-in-alt"></i>{" " + translatePageText("Đăng nhập") + " "}</button>
+                            <i className="fas fa-sign-in-alt"></i>{" " + i18n.t("Đăng nhập", { ns: 'legacy', keySeparator: false }) + " "}</button>
                         <button type="button" className={tabClass(activeTab === 'register')} onClick={() => switchTab('register')}>
-                            <i className="fas fa-user-plus"></i>{" " + translatePageText("Đăng ký") + " "}</button>
+                            <i className="fas fa-user-plus"></i>{" " + i18n.t("Đăng ký", { ns: 'legacy', keySeparator: false }) + " "}</button>
                     </div>
 
                     {(successMessage || error || localError) && (
@@ -167,27 +169,27 @@ const LoginPage = () => {
                         <>
                             <form onSubmit={handleLoginSubmit} className="space-y-2">
                                 <div>
-                                    <label className={labelClass}>{translatePageText("Tên người dùng / Email (*):")}</label>
+                                    <label className={labelClass}>{i18n.t("Tên người dùng / Email (*):", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="text"
                                         name="username"
                                         value={loginData.username}
                                         onChange={handleLoginChange}
                                         required
-                                        placeholder={translatePageText("Nhập tên người dùng hoặc email")}
+                                        placeholder={i18n.t("Nhập tên người dùng hoặc email", { ns: 'legacy', keySeparator: false })}
                                         className={loginInputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>{translatePageText("Mật khẩu (*):")}</label>
+                                    <label className={labelClass}>{i18n.t("Mật khẩu (*):", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="password"
                                         name="password"
                                         value={loginData.password}
                                         onChange={handleLoginChange}
                                         required
-                                        placeholder={translatePageText("Nhập mật khẩu")}
+                                        placeholder={i18n.t("Nhập mật khẩu", { ns: 'legacy', keySeparator: false })}
                                         className={loginInputClass}
                                     />
                                 </div>
@@ -197,7 +199,7 @@ const LoginPage = () => {
                                         type="button"
                                         className="text-sm text-red-300 hover:text-red-200"
                                         onClick={() => window.location.href = '/forgot-password'}
-                                    >{translatePageText("Quên mật khẩu?") + " "}</button>
+                                    >{i18n.t("Quên mật khẩu?", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                 </div>
 
                                 <button
@@ -205,19 +207,19 @@ const LoginPage = () => {
                                     disabled={loading}
                                     className="h-11 w-full rounded-lg bg-red-600 font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    {loading ? translatePageText("Đang xử lý...") : translatePageText("Đăng nhập")}
+                                    {loading ? i18n.t("Đang xử lý...", { ns: 'legacy', keySeparator: false }) : i18n.t("Đăng nhập", { ns: 'legacy', keySeparator: false })}
                                 </button>
                             </form>
 
                             <div className="mt-4 flex items-center gap-3 text-xs text-white/70">
-                                <span className="h-px flex-1 bg-white/25"></span>{translatePageText("Hoặc đăng nhập với") + " "}<span className="h-px flex-1 bg-white/25"></span>
+                                <span className="h-px flex-1 bg-white/25"></span>{i18n.t("Hoặc đăng nhập với", { ns: 'legacy', keySeparator: false }) + " "}<span className="h-px flex-1 bg-white/25"></span>
                             </div>
 
                             <div className="mt-3 flex justify-center gap-4">
                                 <button
                                     type="button"
-                                    aria-label={translatePageText("Đăng nhập bằng Facebook")}
-                                    title={translatePageText("Đăng nhập bằng Facebook")}
+                                    aria-label={i18n.t("Đăng nhập bằng Facebook", { ns: 'legacy', keySeparator: false })}
+                                    title={i18n.t("Đăng nhập bằng Facebook", { ns: 'legacy', keySeparator: false })}
                                     onClick={() => { window.location.href = '/auth/facebook/redirect'; }}
                                     className="flex h-11 w-11 items-center justify-center rounded-full bg-[#1877f2] text-lg text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                                 >
@@ -225,8 +227,8 @@ const LoginPage = () => {
                                 </button>
                                 <button
                                     type="button"
-                                    aria-label={translatePageText("Đăng nhập bằng Google")}
-                                    title={translatePageText("Đăng nhập bằng Google")}
+                                    aria-label={i18n.t("Đăng nhập bằng Google", { ns: 'legacy', keySeparator: false })}
+                                    title={i18n.t("Đăng nhập bằng Google", { ns: 'legacy', keySeparator: false })}
                                     onClick={() => { window.location.href = '/auth/google/redirect'; }}
                                     className="flex h-11 w-11 items-center justify-center rounded-full bg-[#db4437] text-lg text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                                 >
@@ -234,15 +236,15 @@ const LoginPage = () => {
                                 </button>
                             </div>
 
-                            <p className="mt-4 text-center text-sm text-white/80">{translatePageText("Chưa có tài khoản?")}{' '}
-                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('register')}>{translatePageText("Đăng ký ngay!") + " "}</button>
+                            <p className="mt-4 text-center text-sm text-white/80">{i18n.t("Chưa có tài khoản?", { ns: 'legacy', keySeparator: false })}{' '}
+                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('register')}>{i18n.t("Đăng ký ngay!", { ns: 'legacy', keySeparator: false }) + " "}</button>
                             </p>
                         </>
                     ) : (
                         <>
                             <form onSubmit={handleRegSubmit} className="space-y-2">
                                 <div>
-                                    <label className={labelClass}>{translatePageText("Tên người dùng (*):")}</label>
+                                    <label className={labelClass}>{i18n.t("Tên người dùng (*):", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="text"
                                         name="username"
@@ -250,7 +252,7 @@ const LoginPage = () => {
                                         onChange={handleRegChange}
                                         required
                                         maxLength="20"
-                                        placeholder={translatePageText("Nhập tên người dùng (tối đa 20 ký tự)")}
+                                        placeholder={i18n.t("Nhập tên người dùng (tối đa 20 ký tự)", { ns: 'legacy', keySeparator: false })}
                                         className={regInputClass}
                                     />
                                 </div>
@@ -264,13 +266,13 @@ const LoginPage = () => {
                                         onChange={handleRegChange}
                                         required
                                         maxLength="50"
-                                        placeholder={translatePageText("ví dụ: a@gmail.com (tối đa 50 ký tự)")}
+                                        placeholder={i18n.t("ví dụ: a@gmail.com (tối đa 50 ký tự)", { ns: 'legacy', keySeparator: false })}
                                         className={regInputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>{translatePageText("Số điện thoại (*):")}</label>
+                                    <label className={labelClass}>{i18n.t("Số điện thoại (*):", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="text"
                                         name="phone"
@@ -279,33 +281,33 @@ const LoginPage = () => {
                                         required
                                         inputMode="numeric"
                                         maxLength="10"
-                                        placeholder={translatePageText("Nhập số điện thoại (10 số)")}
+                                        placeholder={i18n.t("Nhập số điện thoại (10 số)", { ns: 'legacy', keySeparator: false })}
                                         className={regInputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>{translatePageText("Mật khẩu (*):")}</label>
+                                    <label className={labelClass}>{i18n.t("Mật khẩu (*):", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="password"
                                         name="password"
                                         value={regData.password}
                                         onChange={handleRegChange}
                                         required
-                                        placeholder={translatePageText("Tối thiểu 6 ký tự")}
+                                        placeholder={i18n.t("Tối thiểu 6 ký tự", { ns: 'legacy', keySeparator: false })}
                                         className={regInputClass}
                                     />
                                 </div>
 
                                 <div>
-                                    <label className={labelClass}>{translatePageText("Xác nhận mật khẩu (*):")}</label>
+                                    <label className={labelClass}>{i18n.t("Xác nhận mật khẩu (*):", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="password"
                                         name="password_confirmation"
                                         value={regData.password_confirmation}
                                         onChange={handleRegChange}
                                         required
-                                        placeholder={translatePageText("Nhập lại mật khẩu")}
+                                        placeholder={i18n.t("Nhập lại mật khẩu", { ns: 'legacy', keySeparator: false })}
                                         className={regInputClass}
                                     />
                                 </div>
@@ -315,12 +317,12 @@ const LoginPage = () => {
                                     disabled={loading}
                                     className="mt-1 h-10 w-full rounded-lg bg-red-600 font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    {loading ? translatePageText("Đang xử lý...") : translatePageText("Đăng ký")}
+                                    {loading ? i18n.t("Đang xử lý...", { ns: 'legacy', keySeparator: false }) : i18n.t("Đăng ký", { ns: 'legacy', keySeparator: false })}
                                 </button>
                             </form>
 
-                            <p className="mt-3 text-center text-sm text-white/80">{translatePageText("Đã có tài khoản?")}{' '}
-                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('login')}>{translatePageText("Đăng nhập ngay!") + " "}</button>
+                            <p className="mt-3 text-center text-sm text-white/80">{i18n.t("Đã có tài khoản?", { ns: 'legacy', keySeparator: false })}{' '}
+                                <button type="button" className="font-semibold text-white underline underline-offset-2" onClick={() => switchTab('login')}>{i18n.t("Đăng nhập ngay!", { ns: 'legacy', keySeparator: false }) + " "}</button>
                             </p>
                         </>
                     )}
@@ -329,7 +331,7 @@ const LoginPage = () => {
 
             <Modal
                 isOpen={!!lockedMessage}
-                title={translatePageText("Tài khoản bị khóa")}
+                title={i18n.t("Tài khoản bị khóa", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setLockedMessage(null)}
                 cancelText="Đóng"
             >

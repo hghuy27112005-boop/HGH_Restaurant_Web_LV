@@ -16,6 +16,7 @@ class GeminiChatbotService
     private string $model = 'gemini-3.5-flash-lite';
 
     private const UNCLEAR_FALLBACK = 'Xin lỗi, tôi chưa hiểu rõ ý bạn lắm. Bạn có thể chọn 1 trong các lựa chọn bên dưới, hoặc nói rõ hơn giúp tôi nhé.';
+    private const UNCLEAR_FALLBACK_EN = 'Sorry, I did not quite understand. Please choose one of the options below or tell me a little more.';
     private const RATING_FALLBACK_PRAISE = 'Cảm ơn quý khách đã ủng hộ nhà hàng chúng tôi. Chúng tôi rất vui khi món ăn đã làm quý khách hài lòng.';
     private const RATING_FALLBACK_FEEDBACK = 'Cảm ơn quý khách đã góp ý cho nhà hàng chúng tôi. Chúng tôi sẽ tiếp thu và cải thiện món ăn tốt hơn.';
 
@@ -26,9 +27,8 @@ class GeminiChatbotService
 
     public function generateReply(string $targetIntentSummary, ?string $userInput = null, ?string $lang = null): string
     {
-        $languageRule = $userInput !== null && trim($userInput) !== ''
-            ? '- NGÔN NGỮ ĐẦU RA (ưu tiên cao nhất, cao hơn mọi quy tắc khác): khách vừa gõ "' . str_replace('"', "'", $userInput) . '". Nếu câu đó viết bằng tiếng Anh thì phải dịch nội dung gốc và viết câu trả lời HOÀN TOÀN bằng tiếng Anh (vẫn giữ giới hạn độ dài). Nếu viết bằng tiếng Việt hoặc ngôn ngữ khác thì viết bằng tiếng Việt.'
-            : '- Viết bằng tiếng Việt.';
+        $outputLanguage = $lang === 'en' ? 'English' : 'Vietnamese';
+        $languageRule = "- OUTPUT LANGUAGE (highest priority): write the entire reply in {$outputLanguage}, regardless of the language used in the source intent or user input.";
         $prompt = <<<PROMPT
 Bạn là trợ lý chatbot của một nhà hàng. Bạn tự xưng "Tôi", gọi khách hàng là "Bạn".
 Văn phong thân thiện, ngắn gọn, tự nhiên như người thật, không máy móc, không dùng markdown.
@@ -55,18 +55,25 @@ PROMPT;
                 : 'Xin lỗi, hiện tại tôi đang gặp chút trục trặc. Bạn vui lòng thử lại sau một lát nhé.';
         }
 
-        return $this->compactChatReply($response);
+        return $this->compactChatReply($response, $lang);
     }
 
-    private function compactChatReply(string $text): string
+    private function compactChatReply(string $text, ?string $language = null): string
     {
         $text = trim((string) preg_replace('/\s+/u', ' ', strip_tags($text)));
         if ($text === '') {
-            return self::UNCLEAR_FALLBACK;
+            return $this->unclearFallback($language);
         }
 
         $sentences = preg_split('/(?<=[.!?。！？])\s+/u', $text, 2);
         $text = trim($sentences[0] ?? $text);
+
+        if ($language === 'en') {
+            $words = preg_split('/\s+/u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            if (count($words) > 18) {
+                $text = implode(' ', array_slice($words, 0, 18));
+            }
+        }
 
         if (mb_strlen($text, 'UTF-8') <= 140) {
             return $text;
@@ -76,6 +83,11 @@ PROMPT;
         $lastSpace = mb_strrpos($text, ' ', 0, 'UTF-8');
 
         return rtrim(mb_substr($text, 0, $lastSpace ?: 137, 'UTF-8'), ' ,;:') . '...';
+    }
+
+    private function unclearFallback(?string $language): string
+    {
+        return $language === 'en' ? self::UNCLEAR_FALLBACK_EN : self::UNCLEAR_FALLBACK;
     }
 
     public function generateRatingResponse(int $rating, ?string $comment, string $language = 'vi'): string
@@ -166,7 +178,7 @@ PROMPT;
 
         // Không để AI tự soạn câu fallback cho case unclear — dùng câu cố định để tránh bịa nội dung
         if ($matchedId === 'unclear' || empty($matchedId)) {
-            return ['matched_id' => 'unclear', 'reply' => self::UNCLEAR_FALLBACK];
+            return ['matched_id' => 'unclear', 'reply' => $this->unclearFallback($lang)];
         }
 
         $matchedOption = collect($candidateOptions)->firstWhere('id', $matchedId);
@@ -257,11 +269,7 @@ PROMPT;
         }
         $translatedInstructions = $translation['recipe_instructions'] ?? null;
         if (!is_string($translatedInstructions) || trim($translatedInstructions) === '') {
-            $translatedInstructions = $this->translateRecipeInstructions(
-                $instructions,
-                $sourceLanguage,
-                $sourceLanguage === 'en' ? 'vi' : 'en'
-            );
+            throw new RuntimeException('Gemini returned incomplete translated recipe instructions.');
         }
 
         $ingredientNames = array_values(array_filter(
@@ -280,10 +288,7 @@ PROMPT;
             || trim($translatedIngredients) === ''
             || count($translatedIngredientNames) !== count($ingredientNames)
         ) {
-            if ($ingredientNames === []) {
-                throw new RuntimeException('The dish has no ingredients to translate.');
-            }
-            $translatedIngredients = implode(', ', $this->translateIngredientNames($ingredientNames, $sourceLanguage));
+            throw new RuntimeException('Gemini returned an incomplete translated ingredient list.');
         }
 
         return [
@@ -534,6 +539,13 @@ Then decide whether the photo actually depicts an edible prepared dish or clearl
 Finally, compare the photo with the named dish. They must refer to nearly the same food. Allow normal visual variation and signature ingredients that are hidden or not visible (for example, crab in crab soup), but reject a materially different food or a photo that does not support the dish name.
 Be conservative: if the image or name is ambiguous, unsafe, not food, or the match is materially uncertain, reject the input.
 
+Ingredient-source priority (follow this order):
+1. Treat the exact dish name as the source of truth for the dish's identity. Build the minimum/core ingredient set from the established recipe for that named dish before inspecting the image for extra ingredients.
+2. Preserve defining ingredients implied by the name even when they are hidden or visually similar to another ingredient. For example, "Hủ tiếu Nam Vang" calls for hủ tiếu/rice noodles; do not replace them with glass noodles (miến) because the strands look similar in a photo. Sủi cảo are dumplings; do not call their wrapper "vỏ hoành thánh" unless the catalog entry is genuinely the same wrapper used for this recipe.
+3. Use the photo to confirm the named dish and to find additional ingredients that are clearly visible. The photo may add candidates; it must not override or replace a name-defined staple, wrapper, or signature component.
+4. Classify the name-based core as required_fixed or required_replaceable according to the role definitions below. An ingredient inferred only as an extra from the photo may be optional only when it is truly removable without changing the dish's identity or basic preparation. Omit uncertain visual guesses.
+In this application, "optional" means customers may remove that ingredient from the prepared dish; it does not mean "possibly present" or "the maximum ingredient list". Do not put a core ingredient in optional merely because the photo cannot show it.
+
 Return JSON only in this exact shape:
 {"source_language":"vi","name_valid":true,"is_valid":true,"ingredients":[{"name":"ingredient name in the required language","ingredient_id":1,"role":"required_replaceable"}]}
 For any rejected input return:
@@ -611,6 +623,16 @@ PROMPT;
             throw new RuntimeException('Gemini returned an invalid dish ingredient list.');
         }
 
+        $ingredients = $this->enforceNameDefinedCoreIngredients(
+            $dishName,
+            $ingredients,
+            $sourceLanguage,
+            $pantryIngredients
+        );
+        if ($ingredients === [] || count($ingredients) > 40) {
+            throw new RuntimeException('Gemini returned an invalid constrained ingredient list.');
+        }
+
         $ingredientNameField = $sourceLanguage === 'en' ? 'name_en' : 'name_vi';
         foreach ($ingredients as &$ingredient) {
             if (
@@ -651,6 +673,161 @@ PROMPT;
                 ];
             }, $ingredients)),
         ];
+    }
+
+    /**
+     * Keep a few name-defining Vietnamese staples deterministic when their visual
+     * appearance is commonly confused with another catalog ingredient by Gemini.
+     * Photo-derived extras remain suggestions and still require admin review.
+     */
+    private function enforceNameDefinedCoreIngredients(
+        string $dishName,
+        array $ingredients,
+        string $language,
+        array $pantryIngredients
+    ): array {
+        $normalizedDishName = $this->normalizeIngredientMatchText($dishName);
+        $rules = [];
+
+        if (str_contains($normalizedDishName, 'hu tieu') && !str_contains($normalizedDishName, 'mien')) {
+            $rules[] = [
+                'match_terms' => ['hu tieu'],
+                'blocked_terms' => ['mien', 'glass noodles', 'banh pho', 'pho rice noodles', 'rice vermicelli'],
+                'name_vi' => 'hủ tiếu',
+                'name_en' => 'Hu Tieu noodles',
+            ];
+        }
+
+        if (str_contains($normalizedDishName, 'sui cao') && !str_contains($normalizedDishName, 'hoanh thanh')) {
+            $rules[] = [
+                'match_terms' => ['vo sui cao', 'sui cao wrapper', 'dumpling wrapper'],
+                'blocked_terms' => ['vo hoanh thanh', 'wonton wrapper'],
+                'name_vi' => 'vỏ sủi cảo',
+                'name_en' => 'Sui cao dumpling wrappers',
+            ];
+        }
+
+        $candidateNames = function (array $ingredient) use ($pantryIngredients): array {
+            $names = array_filter([
+                $ingredient['name'] ?? null,
+                $ingredient['name_vi'] ?? null,
+                $ingredient['name_en'] ?? null,
+            ], fn ($name): bool => is_string($name) && trim($name) !== '');
+
+            $ingredientId = filter_var($ingredient['ingredient_id'] ?? null, FILTER_VALIDATE_INT);
+            if ($ingredientId !== false && $ingredientId !== null) {
+                foreach ($pantryIngredients as $pantryIngredient) {
+                    if ((int) ($pantryIngredient['ingredient_id'] ?? 0) === $ingredientId) {
+                        $names = [
+                            ...$names,
+                            $pantryIngredient['name_vi'] ?? null,
+                            $pantryIngredient['name_en'] ?? null,
+                            ...($pantryIngredient['aliases'] ?? []),
+                        ];
+                        break;
+                    }
+                }
+            }
+
+            return array_values(array_filter($names, 'is_string'));
+        };
+
+        foreach ($rules as $rule) {
+            $ingredients = array_values(array_filter($ingredients, function ($ingredient) use ($rule, $candidateNames): bool {
+                if (!is_array($ingredient)) {
+                    return false;
+                }
+
+                $normalizedNames = array_map(
+                    fn ($name): string => $this->normalizeIngredientMatchText((string) $name),
+                    $candidateNames($ingredient)
+                );
+
+                foreach ($rule['blocked_terms'] as $blockedTerm) {
+                    foreach ($normalizedNames as $normalizedName) {
+                        if (str_contains($normalizedName, $blockedTerm)) {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }));
+
+            $coreIndex = null;
+            foreach ($ingredients as $index => $ingredient) {
+                $normalizedNames = array_map(
+                    fn ($name): string => $this->normalizeIngredientMatchText((string) $name),
+                    $candidateNames($ingredient)
+                );
+                foreach ($rule['match_terms'] as $term) {
+                    if (collect($normalizedNames)->contains(fn (string $name): bool => str_contains($name, $term))) {
+                        $coreIndex = $index;
+                        break 2;
+                    }
+                }
+            }
+
+            $core = null;
+            foreach ($pantryIngredients as $pantryIngredient) {
+                $pantryNames = array_filter([
+                    $pantryIngredient['name_vi'] ?? null,
+                    $pantryIngredient['name_en'] ?? null,
+                    ...($pantryIngredient['aliases'] ?? []),
+                ], fn ($name): bool => is_string($name) && trim($name) !== '');
+                $normalizedPantryNames = array_map(
+                    fn ($name): string => $this->normalizeIngredientMatchText((string) $name),
+                    array_filter($pantryNames, 'is_string')
+                );
+                foreach ($rule['match_terms'] as $term) {
+                    if (collect($normalizedPantryNames)->contains(fn (string $name): bool => str_contains($name, $term))) {
+                        $core = [
+                            'ingredient_id' => (int) $pantryIngredient['ingredient_id'],
+                            'name' => $language === 'en'
+                                ? (($pantryIngredient['name_en'] ?? null) ?: ($pantryIngredient['name_vi'] ?? null))
+                                : (($pantryIngredient['name_vi'] ?? null) ?: ($pantryIngredient['name_en'] ?? null)),
+                            'role' => 'required_fixed',
+                        ];
+                        break 2;
+                    }
+                }
+            }
+
+            if ($core === null) {
+                $core = [
+                    'ingredient_id' => null,
+                    'name' => $language === 'en' ? $rule['name_en'] : $rule['name_vi'],
+                    'role' => 'required_fixed',
+                ];
+            }
+
+            if ($coreIndex !== null) {
+                $ingredients[$coreIndex] = $core;
+            } else {
+                if (count($ingredients) >= 40) {
+                    $optionalIndex = null;
+                    foreach (array_reverse(array_keys($ingredients)) as $index) {
+                        if (($ingredients[$index]['role'] ?? null) === 'optional') {
+                            $optionalIndex = $index;
+                            break;
+                        }
+                    }
+                    unset($ingredients[$optionalIndex ?? array_key_last($ingredients)]);
+                    $ingredients = array_values($ingredients);
+                }
+                array_unshift($ingredients, $core);
+            }
+        }
+
+        return array_values($ingredients);
+    }
+
+    private function normalizeIngredientMatchText(string $value): string
+    {
+        $value = Str::ascii(Str::lower(trim($value)));
+        $value = preg_replace('/[^a-z0-9]+/u', ' ', $value);
+
+        return trim((string) preg_replace('/\s+/u', ' ', $value));
     }
 
     public function recommendDishesByName(string $requestedName, array $dishes): array
@@ -774,13 +951,16 @@ PROMPT;
     private function postWithRetry(string $url, array $payload, int $timeout, string $operation): Response
     {
         $retryableStatuses = [429, 500, 502, 503, 504];
-        $retryDelays = config('services.gemini.retry_delays', [1, 2]);
-        $maxAttempts = 3;
+        // Keep a single Gemini operation comfortably below PHP's default 60s
+        // request execution limit, including one retry and its backoff.
+        $retryDelays = config('services.gemini.retry_delays', [1]);
+        $maxAttempts = 2;
+        $requestTimeout = min($timeout, 20);
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
                 $response = Http::withHeaders(['x-goog-api-key' => $this->apiKey])
-                    ->timeout($timeout)
+                    ->timeout($requestTimeout)
                     ->post($url, $payload);
             } catch (ConnectionException $exception) {
                 if ($attempt < $maxAttempts) {
@@ -881,6 +1061,7 @@ PROMPT;
 - Trang cá nhân (xem/sửa thông tin cá nhân, đổi mật khẩu, xem điểm tích lũy, xem bậc thành viên): /profile
 ROUTES;
 
+        $outputLanguage = $lang === 'en' ? 'English' : 'Vietnamese';
         $prompt = <<<PROMPT
 Bạn là trợ lý chatbot của nhà hàng HGH. Bạn tự xưng "Tôi", gọi khách hàng là "Bạn".
 Văn phong thân thiện, ngắn gọn, tự nhiên như người thật, không máy móc, không dùng markdown.
@@ -903,7 +1084,7 @@ QUY TẮC BẮT BUỘC:
 - Nếu câu hỏi không liên quan gì tới nhà hàng, hãy lịch sự nói rằng bạn chưa thể hỗ trợ việc đó và gợi ý khách liên hệ nhà hàng trực tiếp.
 - Nếu câu trả lời liên quan trực tiếp tới 1 trang cụ thể trong danh sách trên (khách muốn xem/thực hiện điều gì đó ở trang đó), hãy đề xuất route tương ứng. Nếu không liên quan tới trang nào cụ thể, để suggested_route là null.
 - Trả lời ngắn gọn, đúng trọng tâm câu hỏi.
-- NGÔN NGỮ ĐẦU RA (ưu tiên cao nhất): nếu câu hỏi của khách viết bằng tiếng Anh (kể cả sai chính tả) thì phải viết trường "reply" HOÀN TOÀN bằng tiếng Anh, dịch thông tin từ tài liệu sang tiếng Anh. Nếu viết bằng tiếng Việt hoặc ngôn ngữ khác thì viết bằng tiếng Việt.
+- OUTPUT LANGUAGE (highest priority): write the "reply" field entirely in {$outputLanguage}. The client has already selected the response language; do not infer a different language from the user text.
 
 Trả về CHÍNH XÁC định dạng JSON sau, không thêm gì khác:
 {"reply": "<câu trả lời, viết bằng ngôn ngữ của câu hỏi>", "suggested_route": "<route hoặc null>", "suggested_label": "<nhãn ngắn dạng 'Tới trang ...' hoặc null>"}

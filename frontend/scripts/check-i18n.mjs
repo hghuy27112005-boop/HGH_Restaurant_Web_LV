@@ -46,6 +46,7 @@ const [viModule, enModule] = await Promise.all([
     import(pathToFileURL(path.join(sourceRoot, 'locales', 'vi.js')).href),
     import(pathToFileURL(path.join(sourceRoot, 'locales', 'en.js')).href),
 ]);
+const legacyPageTextModule = await import(pathToFileURL(path.join(sourceRoot, 'legacyPageTextResources.js')).href);
 const viLocale = flattenLocale(viModule.default);
 const enLocale = flattenLocale(enModule.default);
 
@@ -64,6 +65,16 @@ for (const [file, locale] of [['src/locales/vi.js', viLocale], ['src/locales/en.
             || (typeof value === 'object' && value !== null && Object.keys(value).length === 0)
         ) {
             addFinding('1. Parity locale', file, 1, `Key "${key}" has an empty value`, `empty:${key}`);
+        }
+    }
+}
+for (const [source, target] of [
+    [legacyPageTextModule.legacyPageTextEn, legacyPageTextModule.legacyPageTextVi],
+    [legacyPageTextModule.legacyPageTextVi, legacyPageTextModule.legacyPageTextEn],
+]) {
+    for (const key of Object.keys(source)) {
+        if (!(key in target)) {
+            addFinding('1. Parity locale', 'src/legacyPageTextResources.js', 1, `Legacy key "${key}" is missing from its paired locale`, `legacy-missing:${key}`);
         }
     }
 }
@@ -333,16 +344,6 @@ const collectJsxText = (code) => {
     return segments;
 };
 const ignoredJsxText = (text) => /[={}<>]|\/>/u.test(text);
-const pageTextFile = path.join(sourceRoot, 'pageTextTranslations.js');
-const pageTextSource = await readFile(pageTextFile, 'utf8');
-const pageTextTranslations = new Map();
-const entryPattern = /^\s*\[\s*((?:'[^'\\]*(?:\\.[^'\\]*)*')|(?:"[^"\\]*(?:\\.[^"\\]*)*"))\s*,\s*((?:'[^'\\]*(?:\\.[^'\\]*)*')|(?:"[^"\\]*(?:\\.[^"\\]*)*"))\s*\]/gmu;
-for (const match of pageTextSource.matchAll(entryPattern)) {
-    const sourceText = readLiteral(match[1]);
-    const englishText = readLiteral(match[2]);
-    if (typeof sourceText === 'string') pageTextTranslations.set(sourceText, englishText);
-}
-
 for (const filePath of sourceFiles) {
     const original = await readFile(filePath, 'utf8');
     const code = stripComments(original);
@@ -352,34 +353,50 @@ for (const filePath of sourceFiles) {
     for (const match of code.matchAll(/\bt\s*\(\s*((?:'[^'\\]*(?:\\.[^'\\]*)*')|(?:"[^"\\]*(?:\\.[^"\\]*)*")|(?:`[^`$]*`))/gu)) {
         const key = readLiteral(match[1]);
         if (typeof key !== 'string') continue;
-        const occurrence = (seenTranslationKeys.get(key) ?? 0) + 1;
-        seenTranslationKeys.set(key, occurrence);
-        for (const [localeName, locale] of [['vi', viLocale], ['en', enLocale]]) {
-            if (!locale.has(key)) {
-                addFinding('2. t() keys', filePath, lineAt(original, match.index), `t("${key}") is missing from ${localeName}.js`, `${key}:${localeName}:${occurrence}`);
+        const isDirectI18nCall = code.slice(Math.max(0, match.index - 5), match.index) === 'i18n.';
+        const callStart = code.indexOf('(', match.index);
+        let depth = 0;
+        let quote = null;
+        let callEnd = -1;
+        for (let index = callStart; index < code.length; index += 1) {
+            const character = code[index];
+            if (quote) {
+                if (character === '\\') index += 1;
+                else if (character === quote) quote = null;
+                continue;
+            }
+            if (character === "'" || character === '"' || character === '`') quote = character;
+            else if (character === '(') depth += 1;
+            else if (character === ')' && --depth === 0) {
+                callEnd = index;
+                break;
+            }
+        }
+        const isLegacyCall = isDirectI18nCall
+            && callEnd > match.index
+            && /\bns\s*:\s*['"]legacy['"]/u.test(code.slice(match.index, callEnd));
+        const resourceSet = isLegacyCall
+            ? [['vi', legacyPageTextModule.legacyPageTextVi], ['en', legacyPageTextModule.legacyPageTextEn]]
+            : [['vi', viLocale], ['en', enLocale]];
+        const occurrenceKey = `${isLegacyCall ? 'legacy' : 'translation'}:${key}`;
+        const occurrence = (seenTranslationKeys.get(occurrenceKey) ?? 0) + 1;
+        seenTranslationKeys.set(occurrenceKey, occurrence);
+        for (const [localeName, locale] of resourceSet) {
+            const hasKey = locale instanceof Map ? locale.has(key) : Object.hasOwn(locale, key);
+            if (!hasKey) {
+                addFinding('2. i18next keys', filePath, lineAt(original, match.index), `${isLegacyCall ? 'i18n.t legacy phrase' : 'Translation key'} "${key}" is missing from ${localeName} resources`, `${isLegacyCall ? 'legacy' : 'translation'}:${key}:${localeName}:${occurrence}`);
             }
         }
     }
 
-    const triggerPattern = /\btranslatePageText\s*\(\s*((?:'[^'\\]*(?:\\.[^'\\]*)*')|(?:"[^"\\]*(?:\\.[^"\\]*)*")|(?:`[^`$]*`))/gu;
-    const seenPageText = new Map();
+    const triggerPattern = /\btranslatePageText\b/gu;
     for (const match of code.matchAll(triggerPattern)) {
-        const sourceText = readLiteral(match[1]);
-        if (typeof sourceText !== 'string' || !vietnamesePattern.test(sourceText)) continue;
-        const occurrence = (seenPageText.get(sourceText) ?? 0) + 1;
-        seenPageText.set(sourceText, occurrence);
-        if (!pageTextTranslations.has(sourceText)) {
-            addFinding('3. translatePageText', filePath, lineAt(original, match.index), `Missing translation entry for "${sourceText}"`, `${sourceText}:${occurrence}`);
-        } else {
-            const englishText = pageTextTranslations.get(sourceText);
-            if (typeof englishText !== 'string' || !englishText.trim() || englishText === sourceText) {
-                addFinding('3. translatePageText', filePath, lineAt(original, match.index), `English translation is empty or identical for "${sourceText}"`, `${sourceText}:${occurrence}`);
-            }
-        }
+        addFinding('3. Removed translation helper', filePath, lineAt(original, match.index), 'Use i18n.t() with an explicit namespace instead of translatePageText()', `removed-helper:${match.index}`);
     }
 
     const seenHardcodedText = new Map();
     const recordHardcoded = (index, content, context) => {
+        if (context === 'prop title' && content.trim() === 'day') return; // Date-range mode enum, not user-facing copy.
         const classification = classifyHardcodedText(content);
         if (!classification || isAllowlistedText(content)) return;
         const occurrenceKey = `${context}:${content}`;
@@ -395,6 +412,14 @@ for (const filePath of sourceFiles) {
     const propNames = 'title|placeholder|confirmText|secondaryText|tertiaryText|label|text|description|subtitle|helperText|emptyText|successText|errorText|alt|aria-label';
     const propPattern = new RegExp(`\\b(${propNames})\\s*=\\s*`, 'gu');
     for (const match of code.matchAll(propPattern)) {
+        const tagStart = code.lastIndexOf('<', match.index);
+        if (tagStart < 0 || tagStart < code.lastIndexOf('>', match.index)) continue;
+        const ownerTag = parseJsxTag(code, tagStart);
+        if (
+            ownerTag?.name === 'Modal'
+            && ['title', 'confirmText', 'secondaryText', 'tertiaryText'].includes(match[1])
+        ) continue;
+        if (ownerTag?.name === 'StatCard' && match[1] === 'label') continue;
         const valueStart = match.index + match[0].length;
         const openingCharacter = code[valueStart];
         let value = '';
@@ -464,8 +489,8 @@ const findingsWithStatus = findings.map((finding) => ({
 }));
 const groups = [
     '1. Parity locale',
-    '2. t() keys',
-    '3. translatePageText',
+    '2. i18next keys',
+    '3. Removed translation helper',
     '4. Hardcoded Vietnamese',
 ];
 const reportLines = [

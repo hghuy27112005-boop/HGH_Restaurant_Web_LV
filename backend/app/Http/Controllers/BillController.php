@@ -259,10 +259,12 @@ class BillController extends Controller
                     'message' => 'Bàn bạn chọn đã bị chiếm dụng. Vui lòng đặt lại.',
                 ], 422);
             }
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'server_error', 'message' => 'Có lỗi xảy ra. Vui lòng thử lại.'], 500);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'server_error', 'message' => 'Có lỗi xảy ra. Vui lòng thử lại.'], 500);
         }
     }
 
@@ -494,7 +496,8 @@ class BillController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'server_error', 'message' => 'Có lỗi xảy ra. Vui lòng thử lại.'], 500);
         }
     }
 }

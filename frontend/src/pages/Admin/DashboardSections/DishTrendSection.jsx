@@ -1,3 +1,4 @@
+import i18n from '../../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
@@ -5,7 +6,6 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { RED, DISH_COLORS, YEAR_OPTIONS, MONTH_OPTIONS, extractError } from './helpers';
-import { translatePageText } from '../../../pageTextTranslations';
 import { translateDishName } from '../../../dishTranslations';
 
 const MAX_DISHES = 5;
@@ -64,7 +64,7 @@ const DishTrendSection = ({ kind }) => {
                 const res = await adminAPI.dishes.getAll();
                 setAllDishes(res?.data?.data || res?.data || []);
             } catch (err) {
-                setError(extractError(err, translatePageText("Lỗi tải danh sách món")));
+                setError(extractError(err, i18n.t("Lỗi tải danh sách món", { ns: 'legacy', keySeparator: false })));
             }
         })();
     }, []);
@@ -94,7 +94,7 @@ const DishTrendSection = ({ kind }) => {
                 year: Number(year), a: Number(monthA), b: Number(monthB),
             });
         } catch (err) {
-            setError(extractError(err, translatePageText("Lỗi tải dữ liệu biểu đồ")));
+            setError(extractError(err, i18n.t("Lỗi tải dữ liệu biểu đồ", { ns: 'legacy', keySeparator: false })));
         } finally {
             setLoading(false);
         }
@@ -116,7 +116,7 @@ const DishTrendSection = ({ kind }) => {
             {error && <ErrorMessage message={error} onClose={() => setError(null)} />}
 
             {/* Chọn món */}
-            <p className="text-sm text-gray-600 mb-2">{translatePageText("Chọn món (")}{selected.length}/{MAX_DISHES})
+            <p className="text-sm text-gray-600 mb-2">{i18n.t("Chọn món (", { ns: 'legacy', keySeparator: false })}{selected.length}/{MAX_DISHES})
             </p>
             <div className="border rounded p-3 max-h-40 overflow-y-auto flex flex-wrap gap-2 bg-gray-50 mb-3">
                 {allDishes.map((d) => {
@@ -144,7 +144,7 @@ const DishTrendSection = ({ kind }) => {
             {/* Chọn thời gian */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
                 <select value={year} onChange={(e) => setYear(e.target.value)} className={selectCls}>
-                    <option value="">{translatePageText("-- Năm --")}</option>
+                    <option value="">{i18n.t("-- Năm --", { ns: 'legacy', keySeparator: false })}</option>
                     {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select
@@ -152,8 +152,8 @@ const DishTrendSection = ({ kind }) => {
                     onChange={(e) => { setMonthA(e.target.value); setMonthB(''); }}
                     className={selectCls}
                 >
-                    <option value="">{translatePageText("-- Từ tháng --")}</option>
-                    {MONTH_OPTIONS.slice(0, 11).map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
+                    <option value="">{i18n.t("-- Từ tháng --", { ns: 'legacy', keySeparator: false })}</option>
+                    {MONTH_OPTIONS.slice(0, 11).map((m) => <option key={m} value={m}>{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m}</option>)}
                 </select>
                 <select
                     value={monthB}
@@ -161,14 +161,14 @@ const DishTrendSection = ({ kind }) => {
                     onChange={(e) => setMonthB(e.target.value)}
                     className={`${selectCls} disabled:bg-gray-100`}
                 >
-                    <option value="">{translatePageText("-- Đến tháng --")}</option>
-                    {endOptions.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
+                    <option value="">{i18n.t("-- Đến tháng --", { ns: 'legacy', keySeparator: false })}</option>
+                    {endOptions.map((m) => <option key={m} value={m}>{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m}</option>)}
                 </select>
                 <button
                     onClick={handleCreate}
                     disabled={!valid || loading}
                     className="px-4 py-1 rounded bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-300"
-                >{translatePageText("Tạo biểu đồ") + " "}</button>
+                >{i18n.t("Tạo biểu đồ", { ns: 'legacy', keySeparator: false }) + " "}</button>
             </div>
 
             {/* Biểu đồ (khung cao cố định) */}
@@ -236,7 +236,7 @@ const DishTrendSection = ({ kind }) => {
                         </LineChart>
                     </ResponsiveContainer>
                 ) : (
-                    <div className="h-full flex items-center justify-center text-gray-500 text-center px-4">{translatePageText("Chọn món và khoảng thời gian rồi bấm \"Tạo biểu đồ\"") + " "}</div>
+                    <div className="h-full flex items-center justify-center text-gray-500 text-center px-4">{i18n.t("Chọn món và khoảng thời gian rồi bấm \"Tạo biểu đồ\"", { ns: 'legacy', keySeparator: false }) + " "}</div>
                 )}
             </div>
         </div>

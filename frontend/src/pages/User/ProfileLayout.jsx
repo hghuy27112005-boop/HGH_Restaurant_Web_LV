@@ -1,12 +1,12 @@
+import i18n from '../../i18n.js';
 import React from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuthContext } from '../../context/AuthContext';
-import { translatePageText } from '../../pageTextTranslations';
 
 const TABS = [
-    { get label() { return translatePageText("Thông tin"); }, get title() { return translatePageText("Trang cá nhân"); }, path: '/profile', end: true },
-    { get label() { return translatePageText("Lịch sử giao dịch"); }, get title() { return translatePageText("Lịch sử giao dịch"); }, path: '/profile/orders', end: false },
-    { get label() { return translatePageText("Đánh giá dịch vụ"); }, get title() { return translatePageText("Đánh giá dịch vụ"); }, path: '/profile/ratings', end: false },
+    { get label() { return i18n.t("Thông tin", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Trang cá nhân", { ns: 'legacy', keySeparator: false }); }, path: '/profile', end: true },
+    { get label() { return i18n.t("Lịch sử giao dịch", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Lịch sử giao dịch", { ns: 'legacy', keySeparator: false }); }, path: '/profile/orders', end: false },
+    { get label() { return i18n.t("Đánh giá dịch vụ", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Đánh giá dịch vụ", { ns: 'legacy', keySeparator: false }); }, path: '/profile/ratings', end: false },
 ];
 
 // Khung chung của Trang cá nhân: tiêu đề + thanh tab, bên dưới là trang con.

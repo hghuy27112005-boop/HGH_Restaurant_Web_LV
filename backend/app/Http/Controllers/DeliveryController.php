@@ -33,6 +33,7 @@ class DeliveryController extends Controller
             ]);
         } catch (\RuntimeException $e) {
             return response()->json([
+                'code' => 'delivery_route_unavailable',
                 'message' => $e->getMessage(),
             ], 422);
         }
@@ -66,6 +67,7 @@ class DeliveryController extends Controller
             ]);
         } catch (\RuntimeException $e) {
             return response()->json([
+                'code' => 'delivery_route_unavailable',
                 'message' => $e->getMessage(),
             ], 422);
         }
@@ -121,7 +123,7 @@ class DeliveryController extends Controller
                 PreferredLanguage::fromRequest($request)
             );
         } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            return response()->json(['code' => 'delivery_route_unavailable', 'message' => $e->getMessage()], 422);
         }
 
         $result['schedule'] = Delivery::previewEditSchedule(
@@ -165,7 +167,7 @@ class DeliveryController extends Controller
                 PreferredLanguage::fromRequest($request)
             );
         } catch (\RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
+            return response()->json(['code' => 'delivery_route_unavailable', 'message' => $e->getMessage()], 422);
         }
 
         $preferredTime = $validated['preferred_delivery_time'] ?? null;
@@ -244,7 +246,8 @@ class DeliveryController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'delivery_request_failed', 'message' => 'Không thể xử lý yêu cầu giao hàng lúc này.'], 500);
         }
     }
 
@@ -375,7 +378,8 @@ class DeliveryController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'delivery_request_failed', 'message' => 'Không thể xử lý yêu cầu giao hàng lúc này.'], 500);
         }
     }
 }

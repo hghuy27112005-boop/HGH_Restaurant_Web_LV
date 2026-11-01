@@ -146,6 +146,7 @@ class OrderController extends Controller
                 } catch (\RuntimeException $e) {
                     DB::rollBack();
                     return response()->json([
+                        'code' => 'stock_unavailable',
                         'message' => $e->getMessage(),
                     ], 422);
                 }
@@ -221,7 +222,8 @@ class OrderController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'order_request_failed', 'message' => 'Không thể xử lý đơn hàng lúc này.'], 500);
         }
     }
 
@@ -274,7 +276,8 @@ class OrderController extends Controller
             $order->delete();
             return response()->json(['message' => 'Đã xóa đơn hàng thành công'], 200);
         } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'order_request_failed', 'message' => 'Không thể xử lý đơn hàng lúc này.'], 500);
         }
     }
 

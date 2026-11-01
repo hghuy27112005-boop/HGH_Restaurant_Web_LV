@@ -1,7 +1,7 @@
+import i18n from '../../i18n.js';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { billService } from '../../services/api';
-import { translatePageText } from '../../pageTextTranslations';
 
 const RefundResultPage = () => {
     const [searchParams] = useSearchParams();
@@ -47,20 +47,20 @@ const RefundResultPage = () => {
                         // Báo lỗi nếu không tìm thấy
                         setResult({
                             success: false,
-                            error: translatePageText('Không tìm thấy thông tin đơn hàng.')
+                            error: i18n.t('Không tìm thấy thông tin đơn hàng.', { ns: 'legacy', keySeparator: false })
                         });
                     }
                 } catch (err) {
                     console.error('Lỗi khi lấy thông tin hoàn tiền VNPay:', err);
                     setResult({
                         success: false,
-                        error: translatePageText('Lỗi kết nối khi lấy thông tin hoàn tiền.')
+                        error: i18n.t('Lỗi kết nối khi lấy thông tin hoàn tiền.', { ns: 'legacy', keySeparator: false })
                     });
                 }
             } else if (status === 'failed') {
                 setResult({
                     success: false,
-                    error: translatePageText('Giao dịch hoàn tiền không thành công.')
+                    error: i18n.t('Giao dịch hoàn tiền không thành công.', { ns: 'legacy', keySeparator: false })
                 });
             }
         };
@@ -73,7 +73,7 @@ const RefundResultPage = () => {
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
                     <i className="fas fa-spinner fa-spin text-4xl text-red-600 mb-4"></i>
-                    <p className="text-gray-600">{translatePageText("Đang xử lý thông tin hoàn tiền...")}</p>
+                    <p className="text-gray-600">{i18n.t("Đang xử lý thông tin hoàn tiền...", { ns: 'legacy', keySeparator: false })}</p>
                 </div>
             </div>
         );
@@ -85,23 +85,23 @@ const RefundResultPage = () => {
                 {result.success ? (
                     <>
                         <i className="fas fa-check-circle text-6xl text-green-600 mb-4"></i>
-                        <h1 className="text-2xl font-bold text-green-600 mb-2">{translatePageText("Hủy đơn thành công!")}</h1>
+                        <h1 className="text-2xl font-bold text-green-600 mb-2">{i18n.t("Hủy đơn thành công!", { ns: 'legacy', keySeparator: false })}</h1>
 
                         <p className="text-gray-600 mb-4 text-lg">
                             {result.type === 'points'
-                                ? <>{translatePageText("Đã hoàn") + " "}<span className="font-bold text-red-600">{result.amount}</span>{" " + translatePageText("điểm về tài khoản của bạn.")}</>
-                                : <>{translatePageText("Đã hoàn") + " "}<span className="font-bold text-red-600">{result.amount}{translatePageText("đ")}</span>{" " + translatePageText("về tài khoản của bạn.")}</>
+                                ? <>{i18n.t("Đã hoàn", { ns: 'legacy', keySeparator: false }) + " "}<span className="font-bold text-red-600">{result.amount}</span>{" " + i18n.t("điểm về tài khoản của bạn.", { ns: 'legacy', keySeparator: false })}</>
+                                : <>{i18n.t("Đã hoàn", { ns: 'legacy', keySeparator: false }) + " "}<span className="font-bold text-red-600">{result.amount}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>{" " + i18n.t("về tài khoản của bạn.", { ns: 'legacy', keySeparator: false })}</>
                             }
                         </p>
 
-                        <p className="text-gray-500 text-sm mb-6">{translatePageText("Đơn hàng") + " "}<span className="font-semibold">{result.orderId}</span>{" " + translatePageText("đã được hủy theo yêu cầu.") + " "}</p>
+                        <p className="text-gray-500 text-sm mb-6">{i18n.t("Đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}<span className="font-semibold">{result.orderId}</span>{" " + i18n.t("đã được hủy theo yêu cầu.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                     </>
                 ) : (
                     <>
                         <i className="fas fa-times-circle text-6xl text-red-600 mb-4"></i>
-                        <h1 className="text-2xl font-bold text-red-600 mb-2">{translatePageText("Hủy đơn thất bại")}</h1>
+                        <h1 className="text-2xl font-bold text-red-600 mb-2">{i18n.t("Hủy đơn thất bại", { ns: 'legacy', keySeparator: false })}</h1>
                         <p className="text-gray-600 mb-6">
-                            {result.error || translatePageText("Có lỗi xảy ra trong quá trình hủy đơn hàng.")}
+                            {result.error || i18n.t("Có lỗi xảy ra trong quá trình hủy đơn hàng.", { ns: 'legacy', keySeparator: false })}
                         </p>
                     </>
                 )}
@@ -110,11 +110,11 @@ const RefundResultPage = () => {
                     <Link
                         to="/"
                         className="px-5 py-2 rounded border-2 border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition"
-                    >{translatePageText("Về trang chủ") + " "}</Link>
+                    >{i18n.t("Về trang chủ", { ns: 'legacy', keySeparator: false }) + " "}</Link>
                     <Link
                         to={(result.orderType || searchParams.get('order_type')) === 'booking_table' ? '/cart/bookings' : '/cart/deliveries'}
                         className="px-5 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition"
-                    >{translatePageText("Xem đơn hàng") + " "}</Link>
+                    >{i18n.t("Xem đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}</Link>
                 </div>
             </div>
         </div>

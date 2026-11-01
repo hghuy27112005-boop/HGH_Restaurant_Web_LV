@@ -115,6 +115,15 @@ function App() {
 // Mount App to #app
 const container = document.getElementById('app');
 if (container) {
-  const root = createRoot(container);
+  // Vite can re-evaluate this entry during HMR while the DOM container remains
+  // mounted. Reuse the existing React root so HMR does not try to mount a
+  // second root over the same container.
+  const root = import.meta.hot?.data?.root ?? createRoot(container);
   root.render(<App />);
+
+  if (import.meta.hot) {
+    import.meta.hot.dispose((data) => {
+      data.root = root;
+    });
+  }
 }

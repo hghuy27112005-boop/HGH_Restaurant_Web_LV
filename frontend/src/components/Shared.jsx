@@ -1,5 +1,5 @@
+import i18n from '../i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
-import { translatePageText } from '../pageTextTranslations';
 
 export const Loading = () => (
     <div className="flex justify-center items-center min-h-screen">
@@ -20,14 +20,14 @@ export const ErrorMessage = ({ message, onClose }) => {
     return (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4">
             <div className="flex items-start justify-between gap-4">
-                <span className="block flex-1">{typeof message === 'string' ? translatePageText(message) : String(message)}</span>
+                <span className="block flex-1">{typeof message === 'string' ? i18n.t(message, { ns: 'legacy', keySeparator: false }) : String(message)}</span>
                 <div className="flex items-center gap-2">
                     {isJsonLike && (
                         <button
                             onClick={() => setShowDetails(s => !s)}
                             className="text-sm px-3 py-1 border rounded bg-white"
                         >
-                            {showDetails ? translatePageText("Ẩn chi tiết") : translatePageText("Chi tiết")}
+                            {showDetails ? i18n.t("Ẩn chi tiết", { ns: 'legacy', keySeparator: false }) : i18n.t("Chi tiết", { ns: 'legacy', keySeparator: false })}
                         </button>
                     )}
                     {onClose && (
@@ -48,7 +48,7 @@ export const ErrorMessage = ({ message, onClose }) => {
 
 export const SuccessMessage = ({ message, onClose }) => (
     <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4">
-        <span className="block">{typeof message === 'string' ? translatePageText(message) : message}</span>
+        <span className="block">{typeof message === 'string' ? i18n.t(message, { ns: 'legacy', keySeparator: false }) : message}</span>
         {onClose && (
             <button onClick={onClose} className="absolute top-0 bottom-0 right-0 px-4 py-3">
                 ✕
@@ -59,7 +59,7 @@ export const SuccessMessage = ({ message, onClose }) => (
 
 export const WarningMessage = ({ message, onClose }) => (
     <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-4">
-        <span className="block">{typeof message === 'string' ? translatePageText(message) : message}</span>
+        <span className="block">{typeof message === 'string' ? i18n.t(message, { ns: 'legacy', keySeparator: false }) : message}</span>
         {onClose && (
             <button onClick={onClose} className="absolute top-0 bottom-0 right-0 px-4 py-3">
                 ✕
@@ -71,7 +71,7 @@ export const WarningMessage = ({ message, onClose }) => (
 let modalOpenCount = 0;
 
 const translateModalContent = (node) => {
-    if (typeof node === 'string') return translatePageText(node);
+    if (typeof node === 'string') return i18n.t(node, { ns: 'legacy', keySeparator: false });
     if (Array.isArray(node)) return React.Children.map(node, translateModalContent);
     if (React.isValidElement(node) && node.props.children !== undefined) {
         return React.cloneElement(node, undefined, translateModalContent(node.props.children));
@@ -116,9 +116,9 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
         >
             <div className={`bg-white rounded-lg shadow-lg p-6 w-full mx-4 flex flex-col max-h-[90dvh] ${className || 'max-w-md'}`}>
                 <h2 className={`-mx-6 -mt-6 mb-4 flex shrink-0 items-center justify-between gap-4 rounded-t-lg bg-red-600 px-6 py-4 text-xl font-bold ${titleClassName} text-white`}>
-                    <span>{translatePageText(title)}</span>
+                    <span>{i18n.t(title, { ns: 'legacy', keySeparator: false })}</span>
                     {showHeaderClose && (
-                        <button type="button" onClick={onClose} aria-label={translatePageText("Đóng")} className="text-2xl leading-none text-white hover:text-red-100">
+                        <button type="button" onClick={onClose} aria-label={i18n.t("Đóng", { ns: 'legacy', keySeparator: false })} className="text-2xl leading-none text-white hover:text-red-100">
                             ×
                         </button>
                     )}
@@ -130,7 +130,7 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                             onClick={onSecondary}
                             className={`px-4 py-2 rounded border border-gray-300 hover:bg-gray-100 ${secondaryClassName}`}
                         >
-                            {translatePageText(secondaryText)}
+                            {i18n.t(secondaryText, { ns: 'legacy', keySeparator: false })}
                         </button>
                     )}
                     {onTertiary && (
@@ -138,7 +138,7 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                             onClick={onTertiary}
                             className={`px-4 py-2 rounded border border-gray-300 hover:bg-gray-100 ${tertiaryClassName}`}
                         >
-                            {translatePageText(tertiaryText)}
+                            {i18n.t(tertiaryText, { ns: 'legacy', keySeparator: false })}
                         </button>
                     )}
                     {showFooterClose && (
@@ -146,7 +146,7 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                             onClick={onClose}
                             className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
                         >
-                            {translatePageText(cancelText)}
+                            {i18n.t(cancelText, { ns: 'legacy', keySeparator: false })}
                         </button>
                     )}
                     {onConfirm && (
@@ -155,7 +155,7 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                             disabled={confirmDisabled}
                             className="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-600"
                         >
-                            {translatePageText(confirmText)}
+                            {i18n.t(confirmText, { ns: 'legacy', keySeparator: false })}
                         </button>
                     )}
                 </div>
@@ -230,7 +230,7 @@ export const CountdownTimer = ({ targetTime }) => {
     }, [targetTime]);
 
     if (remaining <= 0) {
-        return <span className="text-sm font-semibold text-green-600">{translatePageText("Sắp hoàn tất...")}</span>;
+        return <span className="text-sm font-semibold text-green-600">{i18n.t("Sắp hoàn tất...", { ns: 'legacy', keySeparator: false })}</span>;
     }
 
     const minutes = Math.floor(remaining / 60);
@@ -269,7 +269,7 @@ export const ShippingProgressBar = ({ startTime, endTime }) => {
                 {/* Xe chạy trần ngay phía trên thanh, không có nền tròn */}
                 <img
                     src="/delivery_icon.ico"
-                    alt={translatePageText("Đang giao")}
+                    alt={i18n.t("Đang giao", { ns: 'legacy', keySeparator: false })}
                     className="absolute -top-6 w-6 h-6 transition-all duration-1000 ease-linear"
                     style={{ left: `calc(${percent}% * 0.92)`, transform: 'translateX(-50%)' }}
                 />

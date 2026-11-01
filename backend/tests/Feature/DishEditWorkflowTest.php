@@ -569,7 +569,7 @@ class DishEditWorkflowTest extends TestCase
                     'image' => UploadedFile::fake()->create('replacement.jpg', 20, 'image/jpeg'),
                 ])
                 ->assertUnprocessable()
-                ->assertJsonPath('code', 'DISH_NAME_DUPLICATE');
+                ->assertJsonPath('code', 'dish_name_duplicate');
 
             $this->assertDatabaseHas('dishes', [
                 'dish_id' => $dish->dish_id,
@@ -638,7 +638,7 @@ class DishEditWorkflowTest extends TestCase
                     'image' => UploadedFile::fake()->create('replacement.jpg', 20, 'image/jpeg'),
                 ])
                 ->assertUnprocessable()
-                ->assertJsonPath('code', 'DISH_NAME_DUPLICATE');
+                ->assertJsonPath('code', 'dish_name_duplicate');
 
             $this->assertDatabaseHas('dishes', [
                 'dish_id' => $dish->dish_id,
@@ -985,7 +985,7 @@ class DishEditWorkflowTest extends TestCase
                 'image' => UploadedFile::fake()->create('beef-pho.jpg', 20, 'image/jpeg'),
             ])
             ->assertUnprocessable()
-            ->assertJsonPath('code', 'DISH_NAME_DUPLICATE');
+            ->assertJsonPath('code', 'dish_name_duplicate');
 
         $this->assertDatabaseCount('dishes', 2);
         $this->assertFileDoesNotExist($imagePath);

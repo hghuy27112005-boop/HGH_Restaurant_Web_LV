@@ -1,8 +1,8 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { adminSaleOffAPI, extractListData, serverTimeAPI } from '../../services/api';
 import { TableLoading, EmptyState, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
-import { translatePageText, translateSeededEventName } from '../../pageTextTranslations';
 
 const PERCENTAGE_OPTIONS = [10, 20, 30, 40, 50];
 
@@ -18,18 +18,18 @@ const emptyForm = {
 };
 
 const STATUS_INFO = {
-    ongoing: { get label() { return translatePageText("Đang diễn ra"); }, badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
-    upcoming: { get label() { return translatePageText("Sắp diễn ra"); }, badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' },
-    ended: { get label() { return translatePageText("Đã kết thúc"); }, badge: 'bg-gray-200 text-gray-600', bar: 'bg-gray-400' },
+    ongoing: { get label() { return i18n.t("Đang diễn ra", { ns: 'legacy', keySeparator: false }); }, badge: 'bg-green-100 text-green-700', bar: 'bg-green-500' },
+    upcoming: { get label() { return i18n.t("Sắp diễn ra", { ns: 'legacy', keySeparator: false }); }, badge: 'bg-blue-100 text-blue-700', bar: 'bg-blue-500' },
+    ended: { get label() { return i18n.t("Đã kết thúc", { ns: 'legacy', keySeparator: false }); }, badge: 'bg-gray-200 text-gray-600', bar: 'bg-gray-400' },
 };
 
 const STATUS_ORDER = { ongoing: 0, upcoming: 1, ended: 2 };
 
 const STATUS_FILTERS = [
-    { id: 'all', get label() { return translatePageText("Tất cả"); } },
-    { id: 'ongoing', get label() { return translatePageText("Đang diễn ra"); } },
-    { id: 'upcoming', get label() { return translatePageText("Sắp diễn ra"); } },
-    { id: 'ended', get label() { return translatePageText("Đã kết thúc"); } },
+    { id: 'all', get label() { return i18n.t("Tất cả", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'ongoing', get label() { return i18n.t("Đang diễn ra", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'upcoming', get label() { return i18n.t("Sắp diễn ra", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'ended', get label() { return i18n.t("Đã kết thúc", { ns: 'legacy', keySeparator: false }); } },
 ];
 
 // Chấp nhận cả "YYYY-MM-DD HH:mm:ss" lẫn ISO "...T...Z"
@@ -75,9 +75,9 @@ const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
                 className="flex items-center gap-2 border border-gray-300 rounded px-3 py-2 bg-white text-sm hover:border-red-600"
             >
                 <i className="far fa-calendar text-red-600"></i>
-                <span className="text-gray-500">{translatePageText("Thời gian:")}</span>
+                <span className="text-gray-500">{i18n.t("Thời gian:", { ns: 'legacy', keySeparator: false })}</span>
                 <span className="font-semibold text-gray-800">
-                    {value ? `${translatePageText("Tháng")} ${value}` : translatePageText("Tất cả")}
+                    {value ? `${i18n.t("Tháng", { ns: 'legacy', keySeparator: false })} ${value}` : i18n.t("Tất cả", { ns: 'legacy', keySeparator: false })}
                 </span>
             </button>
 
@@ -92,7 +92,7 @@ const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
                         >
                             ‹
                         </button>
-                        <span className="font-semibold text-gray-800">{translatePageText("Năm") + " "}{viewYear}</span>
+                        <span className="font-semibold text-gray-800">{i18n.t("Năm", { ns: 'legacy', keySeparator: false }) + " "}{viewYear}</span>
                         <button
                             type="button"
                             onClick={() => setViewYear((y) => y + 1)}
@@ -112,7 +112,7 @@ const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
                                     type="button"
                                     onClick={() => pickMonth(m)}
                                     className={`py-2 rounded text-sm ${selected ? 'bg-red-600 text-white font-bold' : 'hover:bg-red-50 text-gray-700 border border-gray-200'}`}
-                                >{translatePageText("Tháng") + " "}{m + 1}
+                                >{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m + 1}
                                 </button>
                             );
                         })}
@@ -123,13 +123,13 @@ const MonthFilter = ({ value, onChange, minYear, maxYear }) => {
                             type="button"
                             onClick={() => onChange('')}
                             className="text-gray-500 hover:text-red-600 font-semibold"
-                        >{translatePageText("Xóa chọn") + " "}</button>
+                        >{i18n.t("Xóa chọn", { ns: 'legacy', keySeparator: false }) + " "}</button>
                         <button
                             type="button"
                             onClick={() => setOpen(false)}
                             className="px-3 py-1 rounded bg-red-600 text-white font-semibold hover:bg-red-700"
                         >
-                            {translatePageText("Xong")}
+                            {i18n.t("Xong", { ns: 'legacy', keySeparator: false })}
                         </button>
                     </div>
                 </div>
@@ -210,7 +210,7 @@ const AdminSaleOffPage = () => {
         const end = splitDateTime(event.end_time);
         setEditingEvent(event);
         setForm({
-            name: translateSeededEventName(event.name || ''),
+            name: i18n.t(event.name || '', { ns: 'legacy', keySeparator: false }),
             sale_off_percentage: String(Number(event.sale_off_percentage) ?? ''),
             start_date: start.date,
             startH: start.h,
@@ -236,23 +236,23 @@ const AdminSaleOffPage = () => {
         setFormError(null);
 
         if (!form.name.trim()) {
-            setFormError(translatePageText("Vui lòng nhập tên sự kiện."));
+            setFormError(i18n.t("Vui lòng nhập tên sự kiện.", { ns: 'legacy', keySeparator: false }));
             return;
         }
         const percentage = Number(form.sale_off_percentage);
         if (!PERCENTAGE_OPTIONS.includes(percentage)) {
-            setFormError(translatePageText("Vui lòng chọn phần trăm giảm giá."));
+            setFormError(i18n.t("Vui lòng chọn phần trăm giảm giá.", { ns: 'legacy', keySeparator: false }));
             return;
         }
         if (!form.start_date || !form.startH || !form.startM || !form.end_date || !form.endH || !form.endM) {
-            setFormError(translatePageText("Vui lòng nhập đầy đủ ngày giờ bắt đầu và kết thúc."));
+            setFormError(i18n.t("Vui lòng nhập đầy đủ ngày giờ bắt đầu và kết thúc.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
         const hrRegex = /^([0-1]?[0-9]|2[0-3])$/;
         const minRegex = /^[0-5]?[0-9]$/;
         if (!hrRegex.test(form.startH) || !minRegex.test(form.startM) || !hrRegex.test(form.endH) || !minRegex.test(form.endM)) {
-            setFormError(translatePageText("Định dạng giờ không hợp lệ."));
+            setFormError(i18n.t("Định dạng giờ không hợp lệ.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -261,7 +261,7 @@ const AdminSaleOffPage = () => {
         const endTime = `${form.end_date} ${pad(form.endH)}:${pad(form.endM)}:00`;
 
         if (new Date(endTime) <= new Date(startTime)) {
-            setFormError(translatePageText("Thời gian kết thúc phải sau thời gian bắt đầu."));
+            setFormError(i18n.t("Thời gian kết thúc phải sau thời gian bắt đầu.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -342,13 +342,13 @@ const AdminSaleOffPage = () => {
 
     return (
         <AdminPageShell
-            title={translatePageText("Quản lý sự kiện")}
+            title={i18n.t("Quản lý sự kiện", { ns: 'legacy', keySeparator: false })}
             actions={
                 <button
                     onClick={openCreateForm}
                     className="bg-red-600 text-white font-bold px-4 py-2 rounded hover:bg-red-700 transition flex items-center gap-2"
                 >
-                    <i className="fas fa-plus"></i>{" " + translatePageText("Tạo sự kiện giảm giá") + " "}</button>
+                    <i className="fas fa-plus"></i>{" " + i18n.t("Tạo sự kiện giảm giá", { ns: 'legacy', keySeparator: false }) + " "}</button>
             }
         >
             <StatGrid>
@@ -378,14 +378,14 @@ const AdminSaleOffPage = () => {
             ) : events.length === 0 ? (
                 <EmptyState
                     icon="🏷️"
-                    title={translatePageText("Chưa có sự kiện giảm giá nào")}
-                    description={translatePageText("Bấm 'Tạo sự kiện giảm giá' để bắt đầu.")}
+                    title={i18n.t("Chưa có sự kiện giảm giá nào", { ns: 'legacy', keySeparator: false })}
+                    description={i18n.t("Bấm 'Tạo sự kiện giảm giá' để bắt đầu.", { ns: 'legacy', keySeparator: false })}
                 />
             ) : visible.length === 0 ? (
                 <EmptyState
                     icon="🔍"
-                    title={translatePageText("Không có sự kiện phù hợp")}
-                    description={translatePageText("Thử đổi tháng hoặc trạng thái khác.")}
+                    title={i18n.t("Không có sự kiện phù hợp", { ns: 'legacy', keySeparator: false })}
+                    description={i18n.t("Thử đổi tháng hoặc trạng thái khác.", { ns: 'legacy', keySeparator: false })}
                 />
             ) : (
                 <div className="space-y-3">
@@ -401,7 +401,7 @@ const AdminSaleOffPage = () => {
                                 <div className="flex-1 flex flex-wrap items-center justify-between gap-3 px-5 py-3">
                                     <div className="min-w-[200px] flex-1">
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <h3 className="text-lg font-bold text-gray-800">{translateSeededEventName(event.name)}</h3>
+                                            <h3 className="text-lg font-bold text-gray-800">{i18n.t(event.name, { ns: 'legacy', keySeparator: false })}</h3>
                                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${status.badge}`}>
                                                 {status.label}
                                             </span>
@@ -414,7 +414,7 @@ const AdminSaleOffPage = () => {
 
                                     <div className="flex items-center gap-3">
                                         <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-1.5 text-center">
-                                            <p className="text-xs text-gray-500 leading-none">{translatePageText("Giảm giá")}</p>
+                                            <p className="text-xs text-gray-500 leading-none">{i18n.t("Giảm giá", { ns: 'legacy', keySeparator: false })}</p>
                                             <p className="font-bold text-red-600 text-xl leading-tight">{Number(event.sale_off_percentage)}%</p>
                                         </div>
                                         <div className="flex gap-2">
@@ -422,13 +422,13 @@ const AdminSaleOffPage = () => {
                                                 <button
                                                     onClick={() => openEditForm(event)}
                                                     className="px-3 py-1.5 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
-                                                >{translatePageText("Sửa") + " "}</button>
+                                                >{i18n.t("Sửa", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                             )}
                                             {statusKey !== 'ongoing' && (
                                                 <button
                                                     onClick={() => setDeletingEvent(event)}
                                                     className="px-3 py-1.5 text-sm font-bold rounded bg-red-600 text-white hover:bg-red-700 transition"
-                                                >{translatePageText("Xóa") + " "}</button>
+                                                >{i18n.t("Xóa", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                             )}
                                         </div>
                                     </div>
@@ -445,23 +445,23 @@ const AdminSaleOffPage = () => {
                     <div className="bg-white rounded-lg shadow-2xl w-full max-w-lg overflow-hidden">
                         <div className="bg-red-600 text-white px-6 py-4">
                             <h2 className="text-lg font-bold">
-                                {editingEvent ? translatePageText("Sửa sự kiện giảm giá") : translatePageText("Tạo sự kiện giảm giá")}
+                                {editingEvent ? i18n.t("Sửa sự kiện giảm giá", { ns: 'legacy', keySeparator: false }) : i18n.t("Tạo sự kiện giảm giá", { ns: 'legacy', keySeparator: false })}
                             </h2>
                         </div>
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-semibold mb-1">{translatePageText("Tên sự kiện")}</label>
+                                <label className="block text-sm font-semibold mb-1">{i18n.t("Tên sự kiện", { ns: 'legacy', keySeparator: false })}</label>
                                 <input
                                     type="text"
                                     value={form.name}
                                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                                    placeholder={translatePageText("VD: Sự kiện cuối tuần")}
+                                    placeholder={i18n.t("VD: Sự kiện cuối tuần", { ns: 'legacy', keySeparator: false })}
                                     className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-semibold mb-1">{translatePageText("Phần trăm giảm giá (%)")}</label>
+                                <label className="block text-sm font-semibold mb-1">{i18n.t("Phần trăm giảm giá (%)", { ns: 'legacy', keySeparator: false })}</label>
                                 <div className="grid grid-cols-5 gap-2">
                                     {PERCENTAGE_OPTIONS.map((p) => (
                                         <button
@@ -481,7 +481,7 @@ const AdminSaleOffPage = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">{translatePageText("Ngày bắt đầu")}</label>
+                                    <label className="block text-sm font-semibold mb-1">{i18n.t("Ngày bắt đầu", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="date"
                                         value={form.start_date}
@@ -490,7 +490,7 @@ const AdminSaleOffPage = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">{translatePageText("Giờ bắt đầu")}</label>
+                                    <label className="block text-sm font-semibold mb-1">{i18n.t("Giờ bắt đầu", { ns: 'legacy', keySeparator: false })}</label>
                                     <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
                                         <input type="text" maxLength="2" placeholder="07" value={form.startH} onChange={e => setForm({ ...form, startH: e.target.value })} className="w-10 text-center outline-none bg-transparent" />
                                         <span className="font-bold text-gray-500">:</span>
@@ -501,7 +501,7 @@ const AdminSaleOffPage = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">{translatePageText("Ngày kết thúc")}</label>
+                                    <label className="block text-sm font-semibold mb-1">{i18n.t("Ngày kết thúc", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="date"
                                         value={form.end_date}
@@ -510,7 +510,7 @@ const AdminSaleOffPage = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">{translatePageText("Giờ kết thúc")}</label>
+                                    <label className="block text-sm font-semibold mb-1">{i18n.t("Giờ kết thúc", { ns: 'legacy', keySeparator: false })}</label>
                                     <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
                                         <input type="text" maxLength="2" placeholder="22" value={form.endH} onChange={e => setForm({ ...form, endH: e.target.value })} className="w-10 text-center outline-none bg-transparent" />
                                         <span className="font-bold text-gray-500">:</span>
@@ -525,13 +525,13 @@ const AdminSaleOffPage = () => {
                                     onClick={closeForm}
                                     disabled={saving}
                                     className="px-4 py-2 rounded border border-black text-black bg-white text-sm font-semibold disabled:opacity-50"
-                                >{translatePageText("Hủy") + " "}</button>
+                                >{i18n.t("Hủy", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                 <button
                                     type="submit"
                                     disabled={saving}
                                     className="px-5 py-2 rounded bg-red-600 text-white font-bold hover:bg-red-700 disabled:opacity-50"
                                 >
-                                    {saving ? translatePageText("Đang lưu...") : editingEvent ? translatePageText("Lưu thay đổi") : translatePageText("Tạo sự kiện")}
+                                    {saving ? i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false }) : editingEvent ? i18n.t("Lưu thay đổi", { ns: 'legacy', keySeparator: false }) : i18n.t("Tạo sự kiện", { ns: 'legacy', keySeparator: false })}
                                 </button>
                             </div>
                         </form>
@@ -543,18 +543,18 @@ const AdminSaleOffPage = () => {
             {deletingEvent && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
                     <div className="bg-white rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
-                        <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{translatePageText("Xóa sự kiện giảm giá") + " "}</div>
+                        <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{i18n.t("Xóa sự kiện giảm giá", { ns: 'legacy', keySeparator: false }) + " "}</div>
                         <div className="p-6">
-                            <p className="text-gray-700 text-center mb-6">{translatePageText("Bạn có chắc muốn xóa sự kiện") + " "}<strong>{deletingEvent.name}</strong>{" " + translatePageText("không?") + " "}</p>
+                            <p className="text-gray-700 text-center mb-6">{i18n.t("Bạn có chắc muốn xóa sự kiện", { ns: 'legacy', keySeparator: false }) + " "}<strong>{deletingEvent.name}</strong>{" " + i18n.t("không?", { ns: 'legacy', keySeparator: false }) + " "}</p>
                             <div className="flex gap-4">
                                 <button
                                     onClick={() => setDeletingEvent(null)}
                                     className="flex-1 bg-white border border-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-100"
-                                >{translatePageText("Đóng") + " "}</button>
+                                >{i18n.t("Đóng", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                 <button
                                     onClick={handleDelete}
                                     className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
-                                >{translatePageText("Xác nhận") + " "}</button>
+                                >{i18n.t("Xác nhận", { ns: 'legacy', keySeparator: false }) + " "}</button>
                             </div>
                         </div>
                     </div>
@@ -564,7 +564,7 @@ const AdminSaleOffPage = () => {
             {/* Modal lỗi trong form tạo/sửa */}
             <Modal
                 isOpen={!!formError}
-                title={translatePageText("Thông báo")}
+                title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setFormError(null)}
@@ -575,7 +575,7 @@ const AdminSaleOffPage = () => {
             {/* Modal lỗi chung (tải danh sách, xóa) */}
             <Modal
                 isOpen={!!errorMessage}
-                title={translatePageText("Thông báo")}
+                title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setErrorMessage(null)}

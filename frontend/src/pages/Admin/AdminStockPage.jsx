@@ -1,10 +1,10 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import axiosInstance from '../../services/api';
 import { TableLoading, Card, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
 import { translateIngredients } from '../Menu/DishDetailPage';
-import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
 
 const LOW_LIMIT = 15;
@@ -56,7 +56,7 @@ const AdminStockPage = () => {
             const res = await axiosInstance.get('/admin/stocks/ingredients/by-date', { params: { date: selectedDate } });
             setStocks(res.data?.data || []);
         } catch (err) {
-            setError('Lỗi tải kho hàng: ' + (err.response?.data?.message || err.message));
+            setError(t('adminStock.loadError', { details: err.response?.data?.message || err.message }));
             console.error(err);
         } finally {
             setLoading(false);
@@ -70,7 +70,7 @@ const AdminStockPage = () => {
             const res = await axiosInstance.get('/admin/stocks/ingredients/history', { params: { date: selectedDate } });
             setHistory(res.data?.data || []);
         } catch (err) {
-            setError('Lỗi tải lịch sử nguyên liệu: ' + (err.response?.data?.message || err.message));
+            setError(t('adminStock.historyError', { details: err.response?.data?.message || err.message }));
         } finally {
             setLoading(false);
         }
@@ -125,26 +125,26 @@ const AdminStockPage = () => {
 
     return (
         <AdminPageShell
-            title={translatePageText("Quản lý kho hàng")}
+            title={i18n.t("Quản lý kho hàng", { ns: 'legacy', keySeparator: false })}
             actions={
                 <>
-                    <button onClick={() => setView('stocks')} className={tabClass(view === 'stocks')}>{translatePageText("Kho hàng")}</button>
-                    <button onClick={() => setView('history')} className={tabClass(view === 'history')}>{translatePageText("Nhật ký kho")}</button>
+                    <button onClick={() => setView('stocks')} className={tabClass(view === 'stocks')}>{i18n.t("Kho hàng", { ns: 'legacy', keySeparator: false })}</button>
+                    <button onClick={() => setView('history')} className={tabClass(view === 'history')}>{i18n.t("Nhật ký kho", { ns: 'legacy', keySeparator: false })}</button>
                 </>
             }
         >
             {view === 'stocks' && (
                 <StatGrid>
-                    <StatCard label={translatePageText("Tổng nguyên liệu trong kho")} value={stocks.length} icon="fa-boxes-stacked" tone="red" />
-                    <StatCard label={translatePageText("Cần nhập thêm hàng")} value={lowStockCount} icon="fa-triangle-exclamation" tone="yellow" />
-                    <StatCard label={translatePageText("Hết hàng")} value={outOfStockCount} icon="fa-ban" tone="gray" />
+                    <StatCard label={i18n.t("Tổng nguyên liệu trong kho", { ns: 'legacy', keySeparator: false })} value={stocks.length} icon="fa-boxes-stacked" tone="red" />
+                    <StatCard label={i18n.t("Cần nhập thêm hàng", { ns: 'legacy', keySeparator: false })} value={lowStockCount} icon="fa-triangle-exclamation" tone="yellow" />
+                    <StatCard label={i18n.t("Hết hàng", { ns: 'legacy', keySeparator: false })} value={outOfStockCount} icon="fa-ban" tone="gray" />
                 </StatGrid>
             )}
 
             {/* Thanh công cụ */}
             <div className="mb-4 flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm p-3">
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-semibold text-gray-700">{translatePageText("Ngày:")}</label>
+                    <label className="text-sm font-semibold text-gray-700">{t('common.dateLabel')}</label>
                     <input
                         type="date"
                         value={selectedDate}
@@ -156,7 +156,7 @@ const AdminStockPage = () => {
                 {view === 'stocks' && (
                     <>
                         <div className="flex gap-2">
-                            {[['all', translatePageText("Tất cả")], ['low', `${t('adminStock.restockNeeded')} (${lowStockCount})`]].map(([key, label]) => (
+                            {[['all', i18n.t("Tất cả", { ns: 'legacy', keySeparator: false })], ['low', `${t('adminStock.restockNeeded')} (${lowStockCount})`]].map(([key, label]) => (
                                 <button key={key} onClick={() => setFilter(key)} className={chipClass(filter === key)}>
                                     {label}
                                 </button>
@@ -168,26 +168,26 @@ const AdminStockPage = () => {
                                 <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                                 <input
                                     type="text"
-                                    placeholder={translatePageText("Tìm nguyên liệu, nhấn Enter...")}
+                                    placeholder={i18n.t("Tìm nguyên liệu, nhấn Enter...", { ns: 'legacy', keySeparator: false })}
                                     value={search}
                                     onChange={e => setSearch(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter') setSearchTerm(search); }}
                                     className="pl-9 pr-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-red-600 w-56"
                                 />
                             </div>
-                            <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">{translatePageText("Sắp xếp theo:")}</span>
+                            <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">{i18n.t("Sắp xếp theo:", { ns: 'legacy', keySeparator: false })}</span>
                             <select
                                 value={sortBy}
                                 onChange={e => setSortBy(e.target.value)}
                                 className="px-3 py-1.5 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:border-red-600"
                             >
-                                <option value="code">{translatePageText("Mã kho")}</option>
-                                <option value="stock">{translatePageText("Tồn kho")}</option>
+                                <option value="code">{i18n.t("Mã kho", { ns: 'legacy', keySeparator: false })}</option>
+                                <option value="stock">{i18n.t("Tồn kho", { ns: 'legacy', keySeparator: false })}</option>
                             </select>
                             <button
                                 type="button"
                                 onClick={() => setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))}
-                                title={sortDir === 'asc' ? translatePageText("Đang tăng dần, bấm để giảm dần") : translatePageText("Đang giảm dần, bấm để tăng dần")}
+                                title={sortDir === 'asc' ? i18n.t("Đang tăng dần, bấm để giảm dần", { ns: 'legacy', keySeparator: false }) : i18n.t("Đang giảm dần, bấm để tăng dần", { ns: 'legacy', keySeparator: false })}
                                 className="flex items-center px-3 py-1.5 border border-gray-300 rounded bg-white hover:border-red-600 text-sm"
                             >
                                 <i className={`fas fa-arrow-up ${sortDir === 'asc' ? 'text-red-600' : 'text-gray-300'}`}></i>
@@ -200,12 +200,12 @@ const AdminStockPage = () => {
 
             {view === 'stocks' ? (
                 <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 border-b font-semibold text-gray-800">{translatePageText("Còn trong kho ngày") + " "}{selectedDate} ({filtered.length}{" " + translatePageText("nguyên liệu)") + " "}</div>
+                    <div className="px-4 py-3 border-b font-semibold text-gray-800">{i18n.t("Còn trong kho ngày", { ns: 'legacy', keySeparator: false }) + " "}{selectedDate} ({filtered.length}{" " + i18n.t("nguyên liệu)", { ns: 'legacy', keySeparator: false }) + " "}</div>
 
                     {loading ? (
                         <TableLoading />
                     ) : filtered.length === 0 ? (
-                        <p className="py-8 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</p>
+                        <p className="py-8 text-center text-gray-500">{i18n.t("Không có dữ liệu", { ns: 'legacy', keySeparator: false })}</p>
                     ) : (
                         <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                             {filtered.map(item => {
@@ -229,7 +229,7 @@ const AdminStockPage = () => {
                                                 {item.quantity_left} / {item.quantity_start}
                                             </p>
                                             <div className="mt-1 text-[11px] text-gray-500 leading-4">
-                                                <p>Refill: {item.refill_count ?? 0}{" " + translatePageText("· Giữ chỗ:") + " "}{item.reserved ?? 0}</p>
+                                                <p>Refill: {item.refill_count ?? 0}{" " + i18n.t("· Giữ chỗ:", { ns: 'legacy', keySeparator: false }) + " "}{item.reserved ?? 0}</p>
                                                 <p className="whitespace-nowrap">
                                                     {item.updated_at ? new Date(item.updated_at).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') : '-'}
                                                 </p>
@@ -244,18 +244,18 @@ const AdminStockPage = () => {
             ) : (
                 <div className="space-y-4">
                     {loading ? <TableLoading /> : history.length === 0 ? (
-                        <Card><p className="text-center py-8 text-gray-500">{translatePageText("Chưa có nhật ký kho trong ngày") + " "}{selectedDate}</p></Card>
+                        <Card><p className="text-center py-8 text-gray-500">{i18n.t("Chưa có nhật ký kho trong ngày", { ns: 'legacy', keySeparator: false }) + " "}{selectedDate}</p></Card>
                     ) : history.map((order) => (
                         <Card key={order.order_id} title={
                             <div className="flex items-baseline flex-wrap">
                                 <span className="text-red-600">{`Đơn hàng ${order.order_stt || order.order_id}`}</span>
-                                <span className="ml-[2.5cm] text-sm font-normal text-gray-500">{translatePageText("Mã hóa đơn:") + " "}{order.bill_id || '—'}</span>
+                                <span className="ml-[2.5cm] text-sm font-normal text-gray-500">{i18n.t("Mã hóa đơn:", { ns: 'legacy', keySeparator: false }) + " "}{order.bill_id || '—'}</span>
                             </div>
                         }>
                             <div className="space-y-4 text-sm">
-                                <p><span className="font-semibold">{translatePageText("Người đặt:")}</span> {order.user?.username || translatePageText("Không xác định")}{order.user?.email ? ` (${order.user.email})` : ''}</p>
+                                <p><span className="font-semibold">{i18n.t("Người đặt:", { ns: 'legacy', keySeparator: false })}</span> {order.user?.username || i18n.t("Không xác định", { ns: 'legacy', keySeparator: false })}{order.user?.email ? ` (${order.user.email})` : ''}</p>
                                 <div>
-                                    <p className="font-semibold mb-2">{translatePageText("Danh sách món:")}</p>
+                                    <p className="font-semibold mb-2">{i18n.t("Danh sách món:", { ns: 'legacy', keySeparator: false })}</p>
                                     <div className="flex flex-wrap gap-x-5 gap-y-1">
                                         {order.items.map((item) => (
                                             <span key={`${order.order_id}-${item.dish_id}-${item.customization_id ?? 'original'}`}>
@@ -268,7 +268,7 @@ const AdminStockPage = () => {
                                     <table className="w-full min-w-[720px] border-collapse border border-black text-sm">
                                         <thead className="bg-red-600 text-white">
                                             <tr>
-                                                <th className="border border-black px-3 py-2 text-left">{translatePageText("Trạng thái")}</th>
+                                                <th className="border border-black px-3 py-2 text-left">{i18n.t("Trạng thái", { ns: 'legacy', keySeparator: false })}</th>
                                                 {order.ingredients.map((item, index) => (
                                                     <th key={index} className="border border-black px-3 py-2 text-center">
                                                         {(isEnglish
@@ -281,15 +281,15 @@ const AdminStockPage = () => {
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng trước khi đặt")}</th>
+                                                <th className="border border-black px-3 py-2 text-left">{i18n.t("Số lượng trước khi đặt", { ns: 'legacy', keySeparator: false })}</th>
                                                 {order.ingredients.map((item, index) => <td key={`before-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_before}</td>)}
                                             </tr>
                                             <tr>
-                                                <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng đã trừ")}</th>
+                                                <th className="border border-black px-3 py-2 text-left">{i18n.t("Số lượng đã trừ", { ns: 'legacy', keySeparator: false })}</th>
                                                 {order.ingredients.map((item, index) => <td key={`deducted-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_deducted}</td>)}
                                             </tr>
                                             <tr>
-                                                <th className="border border-black px-3 py-2 text-left">{translatePageText("Số lượng còn lại")}</th>
+                                                <th className="border border-black px-3 py-2 text-left">{i18n.t("Số lượng còn lại", { ns: 'legacy', keySeparator: false })}</th>
                                                 {order.ingredients.map((item, index) => <td key={`after-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_after}</td>)}
                                             </tr>
                                         </tbody>
@@ -304,7 +304,7 @@ const AdminStockPage = () => {
             {/* Modal lỗi */}
             <Modal
                 isOpen={Boolean(error)}
-                title={translatePageText("Thông báo")}
+                title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setError(null)}

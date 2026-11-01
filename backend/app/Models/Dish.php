@@ -34,10 +34,18 @@ class Dish extends Model
     public function getImageUrlAttribute($value)
     {
         if (!$value)
-            return asset('dishes/00.jpg');
+            $value = '00.jpg';
         if (str_starts_with($value, 'http'))
             return $value;
-        return asset('dishes/' . $value);
+
+        $filename = basename($value);
+        if (!is_file(public_path('dishes/' . $filename))) {
+            $filename = '00.jpg';
+        }
+
+        // Cloudflared URLs are random and APP_URL can be stale; build static
+        // asset URLs from the current request host (trusted proxy headers apply).
+        return request()->getSchemeAndHttpHost() . '/dishes/' . rawurlencode($filename);
     }
 
     public function getDishNameAttribute($value)

@@ -1,10 +1,10 @@
+import i18n from '../../i18n.js';
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { myBillsAPI, orderService } from '../../services/api';
 import { domToPng } from 'modern-screenshot';
 import { Modal } from '../../components/Shared';
 import { getCartKey, getSessionKey } from '../../utils/cartStorage';
-import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
 
 const MAX_POLL_ATTEMPTS = 5;
@@ -160,7 +160,7 @@ const PaymentResultPage = () => {
             document.body.removeChild(link);
         } catch (err) {
             console.error('Lỗi khi lưu ảnh:', err);
-            setErrorMessage(translatePageText("Không thể lưu ảnh. Vui lòng thử chụp màn hình thủ công."));
+            setErrorMessage(i18n.t("Không thể lưu ảnh. Vui lòng thử chụp màn hình thủ công.", { ns: 'legacy', keySeparator: false }));
         } finally {
             setSaving(false);
         }
@@ -177,7 +177,7 @@ const PaymentResultPage = () => {
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
                     <i className="fas fa-spinner fa-spin text-4xl text-red-600 mb-4"></i>
-                    <p className="text-gray-600">{translatePageText("Đang xác nhận kết quả thanh toán...")}</p>
+                    <p className="text-gray-600">{i18n.t("Đang xác nhận kết quả thanh toán...", { ns: 'legacy', keySeparator: false })}</p>
                 </div>
             </div>
         );
@@ -190,22 +190,22 @@ const PaymentResultPage = () => {
                     {result.success ? (
                         <>
                             <CircleIcon success={true} />
-                            <h1 className="text-2xl font-bold text-green-600 mb-2">{translatePageText("Thanh toán thành công!")}</h1>
+                            <h1 className="text-2xl font-bold text-green-600 mb-2">{i18n.t("Thanh toán thành công!", { ns: 'legacy', keySeparator: false })}</h1>
                             <p className="text-gray-600 mb-2">
                                 {result.billId
-                                    ? <>{translatePageText("Đơn hàng") + " "}<span className="font-semibold">{result.billId}</span>{" " + translatePageText("đã được ghi nhận.")}</>
-                                    : <>{translatePageText("Đơn hàng đã được ghi nhận.")}</>}
+                                    ? <>{i18n.t("Đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}<span className="font-semibold">{result.billId}</span>{" " + i18n.t("đã được ghi nhận.", { ns: 'legacy', keySeparator: false })}</>
+                                    : <>{i18n.t("Đơn hàng đã được ghi nhận.", { ns: 'legacy', keySeparator: false })}</>}
                             </p>
 
                             <div className="mt-4 mb-4 text-left">
-                                <h2 className="font-semibold text-gray-800 mb-2">{translatePageText("Chi tiết đơn hàng")}</h2>
+                                <h2 className="font-semibold text-gray-800 mb-2">{i18n.t("Chi tiết đơn hàng", { ns: 'legacy', keySeparator: false })}</h2>
                                 {result.bill?.items?.length > 0 ? (
                                     <table className="w-full text-sm border border-gray-300">
                                         <thead>
                                             <tr className="bg-gray-50">
-                                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">{translatePageText("Món")}</th>
+                                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">{i18n.t("Món", { ns: 'legacy', keySeparator: false })}</th>
                                                 <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-gray-300">SL</th>
-                                                <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">{translatePageText("Thành tiền")}</th>
+                                                <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">{i18n.t("Thành tiền", { ns: 'legacy', keySeparator: false })}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -214,25 +214,25 @@ const PaymentResultPage = () => {
                                                     <td className="py-2 px-3 border border-gray-300">
                                                         <div>{translateDishName(item)}</div>
                                                         {item.customization_name && (
-                                                            <div className="mt-1 text-xs text-gray-500">{translatePageText("Công thức thay thế:") + " "}{item.customization_name}
+                                                            <div className="mt-1 text-xs text-gray-500">{i18n.t("Công thức thay thế:", { ns: 'legacy', keySeparator: false }) + " "}{item.customization_name}
                                                             </div>
                                                         )}
                                                     </td>
                                                     <td className="py-2 px-3 text-center border border-gray-300">{item.quantity}</td>
                                                     <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                        {(Number(item.unit_price) * Number(item.quantity)).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</td>
+                                                        {(Number(item.unit_price) * Number(item.quantity)).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                         <tfoot>
                                             <tr>
-                                                <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300">{translatePageText("Tổng cộng:")}</td>
+                                                <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300">{i18n.t("Tổng cộng:", { ns: 'legacy', keySeparator: false })}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                    {Number(result.bill.subtotal_price || result.bill.total_price || 0).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</td>
+                                                    {Number(result.bill.subtotal_price || result.bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
                                             </tr>
                                             {result.bill.sale_off_percentage != null && (
                                                 <tr>
-                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-orange-500">{translatePageText("Giảm giá sự kiện:")}</td>
+                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-orange-500">{i18n.t("Giảm giá sự kiện:", { ns: 'legacy', keySeparator: false })}</td>
                                                     <td className="py-2 px-3 text-right font-bold text-orange-500 border border-gray-300">
                                                         {Number(result.bill.sale_off_percentage)}%
                                                     </td>
@@ -240,45 +240,45 @@ const PaymentResultPage = () => {
                                             )}
                                             {result.bill.payment_method === 'vnpay' && result.bill.sale_off_percentage == null && Number(result.bill.subtotal_price || 0) > Number(result.bill.total_price) && (
                                                 <tr>
-                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-orange-500">{translatePageText("Giảm giá VNPay:")}</td>
+                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-orange-500">{i18n.t("Giảm giá VNPay:", { ns: 'legacy', keySeparator: false })}</td>
                                                     <td className="py-2 px-3 text-right font-bold text-orange-500 border border-gray-300">
-                                                        -{Number((result.bill.subtotal_price || 0) - (result.bill.total_price || 0)).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</td>
+                                                        -{Number((result.bill.subtotal_price || 0) - (result.bill.total_price || 0)).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
                                                 </tr>
                                             )}
                                             {result.bill.payment_method === 'Points' && (
                                                 <tr>
-                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-green-600">{translatePageText("Đã thanh toán bằng điểm:")}</td>
+                                                    <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-green-600">{i18n.t("Đã thanh toán bằng điểm:", { ns: 'legacy', keySeparator: false })}</td>
                                                     <td className="py-2 px-3 text-right font-bold text-green-600 border border-gray-300">
-                                                        -{Math.floor((result.bill.sale_off_total_price ?? result.bill.subtotal_price) / 100).toLocaleString('vi-VN')}{" " + translatePageText("điểm") + " "}</td>
+                                                        -{Math.floor((result.bill.sale_off_total_price ?? result.bill.subtotal_price) / 100).toLocaleString('vi-VN')}{" " + i18n.t("điểm", { ns: 'legacy', keySeparator: false }) + " "}</td>
                                                 </tr>
                                             )}
                                             <tr>
                                                 <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-red-600">
-                                                    {result.bill.payment_method === 'vnpay' ? translatePageText("Số tiền đã trả:") : translatePageText("Số tiền cần trả:")}
+                                                    {result.bill.payment_method === 'vnpay' ? i18n.t("Số tiền đã trả:", { ns: 'legacy', keySeparator: false }) : i18n.t("Số tiền cần trả:", { ns: 'legacy', keySeparator: false })}
                                                 </td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                    {Number(result.bill.total_price || 0).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</td>
+                                                    {Number(result.bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
                                             </tr>
                                         </tfoot>
                                     </table>
                                 ) : (
                                     <p className="text-sm text-gray-500">
-                                        {verifying ? translatePageText("Đang tải chi tiết món...") : translatePageText("Chưa có thông tin chi tiết món.")}
+                                        {verifying ? i18n.t("Đang tải chi tiết món...", { ns: 'legacy', keySeparator: false }) : i18n.t("Chưa có thông tin chi tiết món.", { ns: 'legacy', keySeparator: false })}
                                     </p>
                                 )}
                             </div>
 
                             {!result.confirmed && (
-                                <p className="text-yellow-600 text-sm mb-4">{translatePageText("Hệ thống đang xử lý xác nhận thanh toán, vui lòng kiểm tra lại đơn hàng sau ít phút.") + " "}</p>
+                                <p className="text-yellow-600 text-sm mb-4">{i18n.t("Hệ thống đang xử lý xác nhận thanh toán, vui lòng kiểm tra lại đơn hàng sau ít phút.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                             )}
                         </>
                     ) : (
                         <>
                             <CircleIcon success={false} />
-                            <h1 className="text-2xl font-bold text-red-600 mb-2">{translatePageText("Thanh toán thất bại")}</h1>
-                            <p className="text-gray-600 mb-2">{translatePageText("Mã lỗi:") + " "}<span className="font-mono font-bold">{result.code}</span>
+                            <h1 className="text-2xl font-bold text-red-600 mb-2">{i18n.t("Thanh toán thất bại", { ns: 'legacy', keySeparator: false })}</h1>
+                            <p className="text-gray-600 mb-2">{i18n.t("Mã lỗi:", { ns: 'legacy', keySeparator: false }) + " "}<span className="font-mono font-bold">{result.code}</span>
                             </p>
-                            <p className="text-gray-500 text-sm mb-4">{translatePageText("Giao dịch không thành công hoặc đã bị hủy. Vui lòng thử lại.") + " "}</p>
+                            <p className="text-gray-500 text-sm mb-4">{i18n.t("Giao dịch không thành công hoặc đã bị hủy. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                         </>
                     )}
                 </div>
@@ -290,9 +290,9 @@ const PaymentResultPage = () => {
                         className="mt-2 mb-4 w-full flex items-center justify-center gap-2 px-5 py-2 rounded border-2 border-green-600 text-green-600 font-semibold hover:bg-green-600 hover:text-white transition disabled:opacity-50"
                     >
                         {saving ? (
-                            <><i className="fas fa-spinner fa-spin"></i>{" " + translatePageText("Đang lưu...")}</>
+                            <><i className="fas fa-spinner fa-spin"></i>{" " + i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false })}</>
                         ) : (
-                            <><i className="fas fa-camera"></i>{" " + translatePageText("Lưu ảnh kết quả thanh toán")}</>
+                            <><i className="fas fa-camera"></i>{" " + i18n.t("Lưu ảnh kết quả thanh toán", { ns: 'legacy', keySeparator: false })}</>
                         )}
                     </button>
                 )}
@@ -301,17 +301,17 @@ const PaymentResultPage = () => {
                     <Link
                         to="/"
                         className="px-5 py-2 rounded border-2 border-red-600 text-red-600 font-semibold hover:bg-red-600 hover:text-white transition"
-                    >{translatePageText("Về trang chủ") + " "}</Link>
+                    >{i18n.t("Về trang chủ", { ns: 'legacy', keySeparator: false }) + " "}</Link>
                     <Link
                         to={orderType === 'booking_table' ? '/cart/bookings' : '/cart/deliveries'}
                         className="px-5 py-2 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition"
-                    >{translatePageText("Xem đơn hàng") + " "}</Link>
+                    >{i18n.t("Xem đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}</Link>
                 </div>
             </div>
 
             <Modal
                 isOpen={!!errorMessage}
-                title={translatePageText("Thông báo")}
+                title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setErrorMessage(null)}
                 cancelText="Đóng"
             >

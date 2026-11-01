@@ -1,11 +1,11 @@
+import i18n from '../../../i18n.js';
 import React from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { AdminPageShell } from '../../../components/AdminUI';
-import { translatePageText } from '../../../pageTextTranslations';
 
 const TABS = [
-    { get label() { return translatePageText("Đặt bàn"); }, path: '/admin/orders/bookings' },
-    { get label() { return translatePageText("Đặt ship"); }, path: '/admin/orders/deliveries' },
+    { get label() { return i18n.t("Đặt bàn", { ns: 'legacy', keySeparator: false }); }, path: '/admin/orders/bookings' },
+    { get label() { return i18n.t("Đặt ship", { ns: 'legacy', keySeparator: false }); }, path: '/admin/orders/deliveries' },
 ];
 
 // Khung chung của trang Quản lý đơn hàng: tiêu đề + nút chuyển tab, bên dưới là trang con.
@@ -14,7 +14,7 @@ const AdminOrdersLayout = () => {
 
     return (
         <AdminPageShell
-            title={translatePageText("Quản lý đơn hàng")}
+            title={i18n.t("Quản lý đơn hàng", { ns: 'legacy', keySeparator: false })}
             actions={
                 <div className="inline-flex rounded-lg border-2 border-red-600 overflow-hidden bg-white">
                     {TABS.map((tab) => {

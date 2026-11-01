@@ -1,6 +1,12 @@
-import i18n from './i18n';
-
 const englishPageText = new Map([
+    ['Mật khẩu hiện tại không đúng.', 'The current password is incorrect.'],
+    ['Mật khẩu mới phải khác mật khẩu hiện tại.', 'The new password must be different from the current password.'],
+    ['Mật khẩu mới phải có ít nhất 6 ký tự.', 'The new password must be at least 6 characters.'],
+    ['Xác nhận mật khẩu không khớp.', 'The password confirmation does not match.'],
+    ['Vui lòng nhập mật khẩu hiện tại.', 'Please enter your current password.'],
+    ['Vui lòng nhập mật khẩu mới.', 'Please enter a new password.'],
+    ['Đổi mật khẩu thành công!', 'Password changed successfully.'],
+    ['Đổi mật khẩu thất bại', 'Could not change the password.'],
     ['Nguyên liệu tối thiểu', 'Required ingredients'],
     ['Thay đổi', 'Change'],
     ['Mỗi nguyên liệu tối thiểu phải được giữ lại; quý khách chỉ có thể thay thế bằng nguyên liệu cùng loại.', 'Every required ingredient must remain; it can only be replaced with an ingredient of the same type.'],
@@ -47,6 +53,7 @@ const englishPageText = new Map([
     ['Loại món', 'Category'],
     ['Giá thành', 'Price'],
     ['Bestseller', 'Bestseller'],
+    ['Món bán chạy', 'Bestseller'],
     ['Mỗi bước nấu trên một dòng', 'Enter each cooking step on a new line'],
     ['Chưa có công thức nấu', 'No cooking instructions available'],
     ['Loại', 'Category'],
@@ -904,7 +911,6 @@ const englishPageText = new Map([
     ['Tết ông Công ông Táo', 'Kitchen Gods’ Day'],
 ]);
 
-// Seeded event titles are stored in English, so reverse only these known titles for Vietnamese views.
 const seededEventNameSources = new Set([
     'Tết Tây',
     'Ngày Truyền thống học sinh, sinh viên Việt Nam',
@@ -966,47 +972,14 @@ const seededEventNameSources = new Set([
     'Ngày lễ tất niên',
 ]);
 
-const seededEventNamesVi = new Map(
-    [...englishPageText]
-        .filter(([source]) => seededEventNameSources.has(source))
-        .map(([source, english]) => [english, source]),
+export const legacyPageTextEn = Object.fromEntries(englishPageText);
+export const legacyPageTextVi = Object.fromEntries(
+    [...englishPageText.keys()].map((sourceText) => [sourceText, sourceText]),
 );
 
-export const translatePageText = (text) => {
-    if (!i18n.resolvedLanguage?.startsWith('en')) return text;
-    return englishPageText.get(text) ?? text;
-};
-
-export const translateTableSelectionLimit = (quantity, tableType = null) => {
-    const isEnglish = i18n.resolvedLanguage?.startsWith('en');
-    const englishTableTypes = { type5: 'small', type10: 'medium', type15: 'large' };
-
-    if (isEnglish) {
-        const tableLabel = tableType ? `${englishTableTypes[tableType]} table` : 'table';
-        return `You can select up to ${quantity} ${tableLabel}${quantity === 1 ? '' : 's'}.`;
+for (const [sourceText, englishText] of englishPageText) {
+    if (seededEventNameSources.has(sourceText)) {
+        legacyPageTextEn[englishText] = englishText;
+        legacyPageTextVi[englishText] = sourceText;
     }
-
-    const tableTypeLabels = { type5: 'nhỏ', type10: 'vừa', type15: 'lớn' };
-    return tableType
-        ? `Bạn chỉ được chọn tối đa ${quantity} bàn loại ${tableTypeLabels[tableType]}.`
-        : `Bạn chỉ được chọn tối đa ${quantity} bàn.`;
-};
-
-export const translateModifySuccessMessage = (orderType, attemptsLeft) => {
-    const remaining = attemptsLeft ?? '—';
-    const isEnglish = i18n.resolvedLanguage?.startsWith('en');
-
-    if (isEnglish) {
-        const orderLabel = orderType === 'delivery' ? 'Delivery order' : 'Table booking';
-        const editLabel = Number(remaining) === 1 ? 'edit' : 'edits';
-        return `${orderLabel} updated successfully. You have ${remaining} ${editLabel} remaining this week.`;
-    }
-
-    const orderLabel = orderType === 'delivery' ? 'đơn giao hàng' : 'đơn đặt bàn';
-    return `Chỉnh sửa ${orderLabel} thành công. Bạn còn ${remaining} lượt chỉnh sửa trong tuần này.`;
-};
-
-export const translateSeededEventName = (name) => {
-    if (i18n.resolvedLanguage?.startsWith('en')) return englishPageText.get(name) ?? name;
-    return seededEventNamesVi.get(name) ?? name;
-};
+}

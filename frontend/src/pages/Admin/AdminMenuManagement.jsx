@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { adminAPI, dishAPI } from '../../services/api';
 import { TableLoading, Badge, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
-import { translatePageText } from '../../pageTextTranslations';
 import { translateDishName } from '../../dishTranslations';
 import i18n from '../../i18n';
 import { useTranslation } from 'react-i18next';
@@ -24,10 +23,10 @@ const getImageUrl = (imageUrl) => {
 };
 
 const STATUS_FILTERS = [
-    { id: 'all', get label() { return translatePageText("Tất cả"); } },
-    { id: 'active', get label() { return translatePageText("Đang bán"); } },
-    { id: 'hidden', get label() { return translatePageText("Đã ẩn"); } },
-    { id: 'bestseller', label: 'Bestseller' },
+    { id: 'all', get label() { return i18n.t("Tất cả", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'active', get label() { return i18n.t("Đang bán", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'hidden', get label() { return i18n.t("Đã ẩn", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'bestseller', get label() { return i18n.t("Món bán chạy", { ns: 'legacy', keySeparator: false }); } },
 ];
 
 const NO_SPIN = '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
@@ -93,7 +92,7 @@ const AdminMenuManagement = () => {
 
     // Thông báo / xác nhận dạng modal (thay cho alert / window.confirm)
     const [alertMessage, setAlertMessage] = useState('');
-    const [confirmState, setConfirmState] = useState(null); // { message, onConfirm } | null
+    const [confirmState, setConfirmState] = useState(null); // { key, values, onConfirm } | null
 
     // Form state
     const [formData, setFormData] = useState({
@@ -116,6 +115,16 @@ const AdminMenuManagement = () => {
     const fileInputRef = useRef(null);
     const currentLanguage = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi';
 
+    const discardNewlyCreatedIngredients = (ingredients = confirmedIngredients) => {
+        const ids = ingredients
+            .filter((ingredient) => ingredient.created_in_confirmation && ingredient.ingredient_id)
+            .map((ingredient) => ingredient.ingredient_id);
+        if (!ids.length) return Promise.resolve();
+        return adminAPI.dishes.discardConfirmedIngredients(ids).catch((error) => {
+            console.error('Could not discard unused confirmed ingredients:', error.response?.data || error.message);
+        });
+    };
+
     // Phân biệt "bấm ra ngoài để đóng" với "kéo chọn text trong modal rồi lỡ thả chuột ra ngoài"
     const mouseDownOnBackdrop = useRef(false);
 
@@ -137,7 +146,7 @@ const AdminMenuManagement = () => {
             (statsRes.data?.data || []).forEach((s) => { statsMap[s.dish_id] = s; });
             setRatingStats(statsMap);
         } catch (err) {
-            setAlertMessage(translatePageText("Lỗi tải danh sách thực đơn"));
+            setAlertMessage(i18n.t("Lỗi tải danh sách thực đơn", { ns: 'legacy', keySeparator: false }));
             console.error(err);
         } finally {
             setLoading(false);
@@ -155,7 +164,7 @@ const AdminMenuManagement = () => {
             setReviewPage(page);
             setReviewHasMore(Boolean(d.has_more));
         } catch (err) {
-            setAlertMessage(translatePageText("Lỗi tải đánh giá của món"));
+            setAlertMessage(i18n.t("Lỗi tải đánh giá của món", { ns: 'legacy', keySeparator: false }));
             console.error(err);
         } finally {
             setReviewLoading(false);
@@ -194,7 +203,7 @@ const AdminMenuManagement = () => {
     const getStt = (dish, index) => (isFiltered ? index + 1 : dish.dish_id);
 
     const getTypeName = (typeId) =>
-        translatePageText(dishTypes.find((t) => t.type_id === typeId)?.type_name || 'Khác');
+        i18n.t(dishTypes.find((t) => t.type_id === typeId)?.type_name || 'Khác', { ns: 'legacy', keySeparator: false });
 
     const getRecipeSteps = (instructions) => String(instructions || '')
         .split(/\r?\n/)
@@ -251,12 +260,14 @@ const AdminMenuManagement = () => {
         setIsModalOpen(true);
     };
 
-    const handleCloseModal = () => {
+    const handleCloseModal = async () => {
         if (busy || workflowBusy) return;
+        await discardNewlyCreatedIngredients();
         setIsModalOpen(false);
     };
 
-    const handleCancelEditing = () => {
+    const handleCancelEditing = async () => {
+        await discardNewlyCreatedIngredients();
         const dish = dishes.find((item) => item.dish_id === selectedDishId);
         if (dish) {
             const english = i18n.resolvedLanguage?.startsWith('en');
@@ -291,6 +302,7 @@ const AdminMenuManagement = () => {
             return;
         }
 
+        await discardNewlyCreatedIngredients();
         setSelectedImage(null);
         setDraftIngredients([]);
         setConfirmedIngredients([]);
@@ -390,8 +402,8 @@ const AdminMenuManagement = () => {
             const code = err.response?.data?.code;
             setAlertMessage(
                 code === 'dish_name_invalid' ? 'adminDish.nameInvalid'
-                : code === 'DISH_NAME_DUPLICATE' ? 'adminDish.nameDuplicate'
-                : code === 'TRANSLATION_UNAVAILABLE' ? 'adminDish.translationUnavailable'
+                : code === 'dish_name_duplicate' ? 'adminDish.nameDuplicate'
+                : code === 'translation_unavailable' ? 'adminDish.translationUnavailable'
                 : 'adminDish.saveFailed'
             );
         } finally {
@@ -405,6 +417,7 @@ const AdminMenuManagement = () => {
             setImageValidationError('adminDish.errNeedNameAndImage');
             return;
         }
+        await discardNewlyCreatedIngredients();
         if (editMode) setEditRequiresReconfirmation(true);
         setWorkflowBusy(true);
         setWorkflowAction('analyze');
@@ -475,6 +488,7 @@ const AdminMenuManagement = () => {
     };
 
     const updateDraftIngredient = (index, field, value) => {
+        void discardNewlyCreatedIngredients();
         setDraftIngredients((current) => current.map((ingredient, itemIndex) =>
             itemIndex === index
                 ? { ...ingredient, [field]: value, ...(field === 'name_vi' || field === 'name_en' ? { ingredient_id: null } : {}) }
@@ -487,18 +501,17 @@ const AdminMenuManagement = () => {
 
     const handleToggleStatus = (dish) => {
         setConfirmState({
-            message: document.documentElement.lang === 'en'
-                ? `Are you sure you want to ${dish.is_active ? 'hide' : 'show'} "${translateDishName(dish)}"?`
-                : `Bạn có chắc muốn ${dish.is_active ? 'ẩn' : 'hiện lại'} món "${dish.dish_name}" không?`,
+            key: dish.is_active ? 'adminDish.confirmHide' : 'adminDish.confirmShow',
+            dish,
             onConfirm: async () => {
                 setConfirmState(null);
                 try {
                     await adminAPI.dishes.toggleStatus(dish.dish_id);
-                    setAlertMessage(translatePageText(dish.is_active ? 'Đã ẩn món ăn.' : 'Đã hiện món ăn.'));
+                    setAlertMessage(dish.is_active ? 'adminDish.hidden' : 'adminDish.shown');
                     fetchData();
                 } catch (err) {
                     console.error('Toggle dish status error:', err.response?.data || err.message);
-                    setAlertMessage(translatePageText("Không thể cập nhật trạng thái món ăn. Vui lòng thử lại."));
+                    setAlertMessage('adminDish.statusUpdateFailed');
                 }
             },
         });
@@ -506,16 +519,23 @@ const AdminMenuManagement = () => {
 
     const handleDelete = (id) => {
         setConfirmState({
-            message: translatePageText("Xóa vĩnh viễn món này khỏi hệ thống?"),
+            key: 'adminDish.confirmDelete',
             onConfirm: async () => {
                 setConfirmState(null);
                 try {
                     await adminAPI.dishes.delete(id);
-                    setAlertMessage(translatePageText("Đã xóa món ăn thành công!"));
+                    setAlertMessage('adminDish.deleted');
                     fetchData();
                 } catch (err) {
                     console.error('Delete dish error:', err.response?.status, err.response?.data || err.message);
-                    setAlertMessage(translatePageText("Không thể xóa món ăn. Vui lòng thử lại."));
+                    const code = err.response?.data?.code;
+                    const errorKeys = {
+                        dish_not_found: 'adminDish.deleteNotFound',
+                        dish_has_orders: 'adminDish.deleteHasOrders',
+                        dish_referenced: 'adminDish.deleteReferenced',
+                        dish_delete_failed: 'adminDish.deleteFailed',
+                    };
+                    setAlertMessage(errorKeys[code] || 'adminDish.deleteFailed');
                 }
             },
         });
@@ -538,19 +558,19 @@ const AdminMenuManagement = () => {
             : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'}`;
 
     const statusBadge = (dish) => dish.is_active ? (
-        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">{translatePageText("Đang bán")}</span>
+        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">{i18n.t("Đang bán", { ns: 'legacy', keySeparator: false })}</span>
     ) : (
-        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-gray-200 text-gray-600">{translatePageText("Đã ẩn")}</span>
+        <span className="inline-block px-2 py-0.5 text-xs font-semibold rounded bg-gray-200 text-gray-600">{i18n.t("Đã ẩn", { ns: 'legacy', keySeparator: false })}</span>
     );
 
     return (
         <AdminPageShell
-            title={translatePageText("Quản lý thực đơn")}
+            title={i18n.t("Quản lý thực đơn", { ns: 'legacy', keySeparator: false })}
             actions={
                 <button
                     onClick={() => handleOpenModal()}
                     className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition-colors"
-                >{translatePageText("+ Thêm món ăn") + " "}</button>
+                >{i18n.t("+ Thêm món ăn", { ns: 'legacy', keySeparator: false }) + " "}</button>
             }
         >
             {/* Thống kê: một hàng */}
@@ -558,20 +578,20 @@ const AdminMenuManagement = () => {
                 <StatCard label="Tổng món" value={totalDishes} icon="fa-utensils" tone="red" />
                 <StatCard label="Đang bán" value={activeDishes} icon="fa-check" tone="green" />
                 <StatCard label="Đã ẩn" value={hiddenDishes} icon="fa-eye-slash" tone="gray" />
-                <StatCard label="Bestseller" value={bestsellerDishes} icon="fa-star" tone="yellow" />
+                <StatCard label={i18n.t("Món bán chạy", { ns: 'legacy', keySeparator: false })} value={bestsellerDishes} icon="fa-star" tone="yellow" />
             </StatGrid>
 
             {/* Thanh công cụ: chip loại món + tìm kiếm + trạng thái + chế độ xem */}
             <div className="mb-4 bg-white rounded-xl border border-gray-100 shadow-sm p-3 space-y-3">
                 <div className="flex gap-2 overflow-x-auto w-0 min-w-full">
-                    <button onClick={() => setTypeFilter('')} className={chipClass(typeFilter === '')}>{translatePageText("Tất cả loại") + " "}</button>
+                    <button onClick={() => setTypeFilter('')} className={chipClass(typeFilter === '')}>{i18n.t("Tất cả loại", { ns: 'legacy', keySeparator: false }) + " "}</button>
                     {dishTypes.map((type) => (
                         <button
                             key={type.type_id}
                             onClick={() => setTypeFilter(type.type_id)}
                             className={chipClass(String(typeFilter) === String(type.type_id))}
                         >
-                            {translatePageText(type.type_name)}
+                            {i18n.t(type.type_name, { ns: 'legacy', keySeparator: false })}
                         </button>
                     ))}
                 </div>
@@ -583,7 +603,7 @@ const AdminMenuManagement = () => {
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder={translatePageText("Tìm theo tên món...")}
+                            placeholder={i18n.t("Tìm theo tên món...", { ns: 'legacy', keySeparator: false })}
                             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:border-red-600"
                         />
                     </div>
@@ -597,7 +617,7 @@ const AdminMenuManagement = () => {
                         ))}
                     </select>
                     <div className="inline-flex rounded-lg border-2 border-red-600 overflow-hidden bg-white">
-                        {[['table', 'fa-table-list', translatePageText("Bảng")], ['grid', 'fa-table-cells-large', translatePageText("Lưới")], ['rating', 'fa-star', translatePageText("Đánh giá")]].map(([mode, icon, text]) => (
+                        {[['table', 'fa-table-list', i18n.t("Bảng", { ns: 'legacy', keySeparator: false })], ['grid', 'fa-table-cells-large', i18n.t("Lưới", { ns: 'legacy', keySeparator: false })], ['rating', 'fa-star', i18n.t("Đánh giá", { ns: 'legacy', keySeparator: false })]].map(([mode, icon, text]) => (
                             <button
                                 key={mode}
                                 onClick={() => setViewMode(mode)}
@@ -613,20 +633,20 @@ const AdminMenuManagement = () => {
             {/* Danh sách */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-gray-800">{translatePageText("Danh sách món ăn (")}{visibleDishes.length}{isFiltered ? ` / ${dishes.length}` : ''})
+                    <span className="font-semibold text-gray-800">{i18n.t("Danh sách món ăn (", { ns: 'legacy', keySeparator: false })}{visibleDishes.length}{isFiltered ? ` / ${dishes.length}` : ''})
                     </span>
                     {viewMode === 'rating' && (
                         <button
                             onClick={() => setIsPickerOpen(true)}
                             className="px-3 py-1.5 text-sm font-semibold rounded bg-red-600 text-white hover:bg-red-700 transition"
-                        >{translatePageText("Xem đánh giá của khách hàng") + " "}</button>
+                        >{i18n.t("Xem đánh giá của khách hàng", { ns: 'legacy', keySeparator: false }) + " "}</button>
                     )}
                 </div>
 
                 {loading ? (
                     <TableLoading />
                 ) : visibleDishes.length === 0 ? (
-                    <p className="py-8 text-center text-gray-500">{translatePageText("Không có món ăn nào phù hợp")}</p>
+                    <p className="py-8 text-center text-gray-500">{i18n.t("Không có món ăn nào phù hợp", { ns: 'legacy', keySeparator: false })}</p>
                 ) : viewMode === 'rating' ? (
                     <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                         {visibleDishes.map((dish) => {
@@ -647,10 +667,10 @@ const AdminMenuManagement = () => {
                                             <p className="mt-2 text-sm text-gray-700">
                                                 <span className="text-yellow-500">★</span>{' '}
                                                 <span className="font-bold">{Number(stat.avg_rating).toFixed(1)}</span>
-                                                <span className="text-gray-500"> / 5 ({stat.review_count}{" " + translatePageText("đánh giá)")}</span>
+                                                <span className="text-gray-500"> / 5 ({stat.review_count}{" " + i18n.t("đánh giá)", { ns: 'legacy', keySeparator: false })}</span>
                                             </p>
                                         ) : (
-                                            <p className="mt-2 text-sm text-gray-400">{translatePageText("Chưa có đánh giá")}</p>
+                                            <p className="mt-2 text-sm text-gray-400">{i18n.t("Chưa có đánh giá", { ns: 'legacy', keySeparator: false })}</p>
                                         )}
                                     </div>
                                 </div>
@@ -673,13 +693,13 @@ const AdminMenuManagement = () => {
                             <thead className="bg-red-600 text-white uppercase text-xs">
                                 <tr>
                                     <th className="px-2 py-2.5">STT</th>
-                                    <th className="px-2 py-2.5">{translatePageText("Hình ảnh")}</th>
-                                    <th className="px-3 py-2.5">{translatePageText("Tên món")}</th>
-                                    <th className="px-3 py-2.5">{translatePageText("Loại")}</th>
-                                    <th className="px-4 py-2.5">{translatePageText("Giá tiền")}</th>
-                                    <th className="px-1 py-2.5 text-center">Bestseller</th>
-                                    <th className="px-2 py-2.5 text-center">{translatePageText("Trạng thái")}</th>
-                                    <th className="px-2 py-2.5 text-center">{translatePageText("Thao tác")}</th>
+                                    <th className="px-2 py-2.5">{i18n.t("Hình ảnh", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-3 py-2.5">{i18n.t("Tên món", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-3 py-2.5">{i18n.t("Loại", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-4 py-2.5">{i18n.t("Giá tiền", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-1 py-2.5 text-center">{i18n.t("Món bán chạy", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-2 py-2.5 text-center">{i18n.t("Trạng thái", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-2 py-2.5 text-center">{i18n.t("Thao tác", { ns: 'legacy', keySeparator: false })}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -698,7 +718,7 @@ const AdminMenuManagement = () => {
                                             <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
                                         </td>
                                         <td className="px-4 py-2 font-bold text-red-600">
-                                            {Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ") + " "}</td>
+                                            {Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
                                         <td className="px-1 py-2 text-center">
                                             {dish.is_bestseller ? <span className="text-yellow-500 text-lg">⭐</span> : ''}
                                         </td>
@@ -707,17 +727,17 @@ const AdminMenuManagement = () => {
                                             <button
                                                 onClick={() => handleOpenModal(dish)}
                                                 className="text-blue-600 hover:text-blue-800 font-medium"
-                                            >{translatePageText("Chi tiết") + " "}</button>
+                                            >{i18n.t("Chi tiết", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                             <button
                                                 onClick={() => handleToggleStatus(dish)}
                                                 className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
                                             >
-                                                {dish.is_active ? translatePageText("Ẩn") : translatePageText("Hiện")}
+                                                {dish.is_active ? i18n.t("Ẩn", { ns: 'legacy', keySeparator: false }) : i18n.t("Hiện", { ns: 'legacy', keySeparator: false })}
                                             </button>
                                             <button
                                                 onClick={() => handleDelete(dish.dish_id)}
                                                 className="text-red-600 hover:text-red-800 font-medium"
-                                            >{translatePageText("Xóa") + " "}</button>
+                                            >{i18n.t("Xóa", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                         </td>
                                     </tr>
                                 ))}
@@ -742,10 +762,10 @@ const AdminMenuManagement = () => {
                                     </span>
                                     <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
                                         {dish.is_bestseller && (
-                                            <span className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded">{translatePageText("⭐ Bestseller")}</span>
+                                            <span className="bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded">{i18n.t("⭐ Bestseller", { ns: 'legacy', keySeparator: false })}</span>
                                         )}
                                         {!dish.is_active && (
-                                            <span className="bg-gray-700 text-white text-xs font-bold px-2 py-0.5 rounded">{translatePageText("Đã ẩn")}</span>
+                                            <span className="bg-gray-700 text-white text-xs font-bold px-2 py-0.5 rounded">{i18n.t("Đã ẩn", { ns: 'legacy', keySeparator: false })}</span>
                                         )}
                                     </div>
                                 </div>
@@ -754,16 +774,16 @@ const AdminMenuManagement = () => {
                                     <div className="mt-1">
                                         <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
                                     </div>
-                                    <p className="mt-2 font-bold text-red-600">{Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{translatePageText("đ")}</p>
+                                    <p className="mt-2 font-bold text-red-600">{Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</p>
                                     <div className="mt-auto pt-3 flex justify-between text-sm">
-                                        <button onClick={() => handleOpenModal(dish)} className="text-blue-600 hover:text-blue-800 font-medium">{translatePageText("Chi tiết")}</button>
+                                        <button onClick={() => handleOpenModal(dish)} className="text-blue-600 hover:text-blue-800 font-medium">{i18n.t("Chi tiết", { ns: 'legacy', keySeparator: false })}</button>
                                         <button
                                             onClick={() => handleToggleStatus(dish)}
                                             className={dish.is_active ? "text-orange-600 hover:text-orange-800 font-medium" : "text-green-600 hover:text-green-800 font-medium"}
                                         >
-                                            {dish.is_active ? translatePageText("Ẩn") : translatePageText("Hiện")}
+                                            {dish.is_active ? i18n.t("Ẩn", { ns: 'legacy', keySeparator: false }) : i18n.t("Hiện", { ns: 'legacy', keySeparator: false })}
                                         </button>
-                                        <button onClick={() => handleDelete(dish.dish_id)} className="text-red-600 hover:text-red-800 font-medium">{translatePageText("Xóa")}</button>
+                                        <button onClick={() => handleDelete(dish.dish_id)} className="text-red-600 hover:text-red-800 font-medium">{i18n.t("Xóa", { ns: 'legacy', keySeparator: false })}</button>
                                     </div>
                                 </div>
                             </div>
@@ -801,6 +821,7 @@ const AdminMenuManagement = () => {
                                         type="text" required readOnly={editMode} disabled={busy}
                                         value={formData.dish_name}
                                         onChange={e => {
+                                            void discardNewlyCreatedIngredients();
                                             setFormData({ ...formData, dish_name: e.target.value });
                                             setDraftIngredients([]);
                                             setConfirmedIngredients([]);
@@ -825,7 +846,7 @@ const AdminMenuManagement = () => {
                                     >
                                         <option value="" disabled>{t('adminDish.selectType')}</option>
                                         {dishTypes.map(type => (
-                                            <option key={type.type_id} value={type.type_id}>{translatePageText(type.type_name)}</option>
+                                            <option key={type.type_id} value={type.type_id}>{i18n.t(type.type_name, { ns: 'legacy', keySeparator: false })}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -1020,13 +1041,13 @@ const AdminMenuManagement = () => {
                 {!reviewSummary ? (
                     <TableLoading />
                 ) : reviewSummary.review_count === 0 ? (
-                    <p className="py-6 text-center text-gray-500">{translatePageText("Chưa có đánh giá")}</p>
+                    <p className="py-6 text-center text-gray-500">{i18n.t("Chưa có đánh giá", { ns: 'legacy', keySeparator: false })}</p>
                 ) : (
                     <>
                         <p className="mb-4 text-gray-700">
                             <span className="text-yellow-500 text-xl">★</span>{' '}
                             <span className="font-bold text-lg">{Number(reviewSummary.avg_rating).toFixed(1)}</span>
-                            <span className="text-gray-500"> / 5 ({reviewSummary.review_count}{" " + translatePageText("đánh giá)")}</span>
+                            <span className="text-gray-500"> / 5 ({reviewSummary.review_count}{" " + i18n.t("đánh giá)", { ns: 'legacy', keySeparator: false })}</span>
                         </p>
                         <div className="space-y-3">
                             {reviewList.map((r) => (
@@ -1050,7 +1071,7 @@ const AdminMenuManagement = () => {
                                     disabled={reviewLoading}
                                     className="text-blue-600 underline hover:text-blue-800 disabled:opacity-50"
                                 >
-                                    {reviewLoading ? translatePageText("Đang tải...") : translatePageText("Xem thêm")}
+                                    {reviewLoading ? i18n.t("Đang tải...", { ns: 'legacy', keySeparator: false }) : i18n.t("Xem thêm", { ns: 'legacy', keySeparator: false })}
                                 </button>
                             </div>
                         )}
@@ -1061,7 +1082,7 @@ const AdminMenuManagement = () => {
             {/* Modal chọn món để xem đánh giá */}
             <Modal
                 isOpen={isPickerOpen}
-                title={translatePageText("Chọn món muốn xem đánh giá")}
+                title={i18n.t("Chọn món muốn xem đánh giá", { ns: 'legacy', keySeparator: false })}
                 className="max-w-3xl"
                 onClose={() => setIsPickerOpen(false)}
                 cancelText="Quay lại"
@@ -1086,7 +1107,7 @@ const AdminMenuManagement = () => {
             {/* Modal thông báo (thay cho alert) */}
             <Modal
                 isOpen={Boolean(alertMessage)}
-                title={translatePageText("Thông báo")}
+                title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                 showHeaderClose
                 showFooterClose={false}
                 onClose={() => setAlertMessage('')}
@@ -1097,13 +1118,15 @@ const AdminMenuManagement = () => {
             {/* Modal xác nhận (thay cho window.confirm) */}
             <Modal
                 isOpen={Boolean(confirmState)}
-                title={translatePageText("Xác nhận")}
+                title={i18n.t("Xác nhận", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setConfirmState(null)}
                 onConfirm={confirmState?.onConfirm}
                 confirmText="Xác nhận"
                 cancelText="Hủy"
             >
-                <p className="text-gray-700">{confirmState?.message}</p>
+                <p className="text-gray-700">{confirmState?.key ? t(confirmState.key, {
+                    ...(confirmState.dish ? { dish: translateDishName(confirmState.dish) } : {}),
+                }) : ''}</p>
             </Modal>
         </AdminPageShell>
     );

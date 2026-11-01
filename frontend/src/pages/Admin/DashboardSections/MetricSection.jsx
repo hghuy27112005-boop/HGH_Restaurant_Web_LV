@@ -1,3 +1,4 @@
+import i18n from '../../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
@@ -5,7 +6,6 @@ import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { RED, LINE_COLORS, YEAR_OPTIONS, MONTH_OPTIONS, fmtMoney, extractError } from './helpers';
-import { translatePageText } from '../../../pageTextTranslations';
 
 // Dùng chung cho vùng "Doanh thu" (metric='revenue') và "Số đơn hàng" (metric='orders')
 const MetricSection = ({ metric }) => {
@@ -14,13 +14,13 @@ const MetricSection = ({ metric }) => {
     const english = document.documentElement.lang === 'en';
     const names = isRevenue
         ? {
-            total: translatePageText('Tổng doanh thu'),
-            booking: translatePageText('Doanh thu đặt bàn'),
-            ship: translatePageText('Doanh thu đặt ship'),
+            total: i18n.t('Tổng doanh thu', { ns: 'legacy', keySeparator: false }),
+            booking: i18n.t('Doanh thu đặt bàn', { ns: 'legacy', keySeparator: false }),
+            ship: i18n.t('Doanh thu đặt ship', { ns: 'legacy', keySeparator: false }),
             noun: english ? 'Revenue' : 'Doanh thu',
         }
         : {
-            total: translatePageText('Tổng số đơn'),
+            total: i18n.t('Tổng số đơn', { ns: 'legacy', keySeparator: false }),
             booking: english ? 'Table bookings' : 'Số đơn đặt bàn',
             ship: english ? 'Delivery orders' : 'Số đơn đặt ship',
             noun: english ? 'Orders' : 'Số đơn',
@@ -57,7 +57,7 @@ const MetricSection = ({ metric }) => {
                 if (!cancelled) setDayData(res?.data?.data || []);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, translatePageText("Lỗi tải biểu đồ theo ngày")));
+                    setError(extractError(err, i18n.t("Lỗi tải biểu đồ theo ngày", { ns: 'legacy', keySeparator: false })));
                     setDayData([]);
                 }
             } finally {
@@ -81,7 +81,7 @@ const MetricSection = ({ metric }) => {
                 if (!cancelled) setTopRows(res?.data?.data || []);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, translatePageText("Lỗi tải bảng xếp hạng tháng")));
+                    setError(extractError(err, i18n.t("Lỗi tải bảng xếp hạng tháng", { ns: 'legacy', keySeparator: false })));
                     setTopRows([]);
                 }
             }
@@ -105,7 +105,7 @@ const MetricSection = ({ metric }) => {
                 data: res?.data?.data || [],
             });
         } catch (err) {
-            setError(extractError(err, translatePageText("Lỗi tải biểu đồ theo khoảng tháng")));
+            setError(extractError(err, i18n.t("Lỗi tải biểu đồ theo khoảng tháng", { ns: 'legacy', keySeparator: false })));
         } finally {
             setRangeLoading(false);
         }
@@ -141,8 +141,8 @@ const MetricSection = ({ metric }) => {
 
             {/* Bộ lọc */}
             <div className="flex items-center gap-2 mb-4 flex-wrap">
-                <button className={tabCls(mode === 'day')} onClick={() => setMode('day')}>{translatePageText("Theo ngày")}</button>
-                <button className={tabCls(mode === 'range')} onClick={() => setMode('range')}>{translatePageText("Theo khoảng tháng")}</button>
+                <button className={tabCls(mode === 'day')} onClick={() => setMode('day')}>{i18n.t("Theo ngày", { ns: 'legacy', keySeparator: false })}</button>
+                <button className={tabCls(mode === 'range')} onClick={() => setMode('range')}>{i18n.t("Theo khoảng tháng", { ns: 'legacy', keySeparator: false })}</button>
 
                 {mode === 'day' ? (
                     <>
@@ -150,7 +150,7 @@ const MetricSection = ({ metric }) => {
                             {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                         </select>
                         <select value={dayMonth} onChange={(e) => setDayMonth(Number(e.target.value))} className={selectCls}>
-                            {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
+                            {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m}</option>)}
                         </select>
                     </>
                 ) : (
@@ -160,7 +160,7 @@ const MetricSection = ({ metric }) => {
                             onChange={(e) => setRangeYear(e.target.value)}
                             className={selectCls}
                         >
-                            <option value="">{translatePageText("-- Năm --")}</option>
+                            <option value="">{i18n.t("-- Năm --", { ns: 'legacy', keySeparator: false })}</option>
                             {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                         </select>
                         <select
@@ -168,8 +168,8 @@ const MetricSection = ({ metric }) => {
                             onChange={(e) => { setRangeA(e.target.value); setRangeB(''); }}
                             className={selectCls}
                         >
-                            <option value="">{translatePageText("-- Từ tháng --")}</option>
-                            {MONTH_OPTIONS.slice(0, 11).map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
+                            <option value="">{i18n.t("-- Từ tháng --", { ns: 'legacy', keySeparator: false })}</option>
+                            {MONTH_OPTIONS.slice(0, 11).map((m) => <option key={m} value={m}>{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m}</option>)}
                         </select>
                         <select
                             value={rangeB}
@@ -177,14 +177,14 @@ const MetricSection = ({ metric }) => {
                             onChange={(e) => setRangeB(e.target.value)}
                             className={`${selectCls} disabled:bg-gray-100`}
                         >
-                            <option value="">{translatePageText("-- Đến tháng --")}</option>
-                            {endOptions.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
+                            <option value="">{i18n.t("-- Đến tháng --", { ns: 'legacy', keySeparator: false })}</option>
+                            {endOptions.map((m) => <option key={m} value={m}>{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m}</option>)}
                         </select>
                         <button
                             onClick={handleCreateRange}
                             disabled={!rangeValid || rangeLoading}
                             className="px-4 py-1 rounded bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-300"
-                        >{translatePageText("Tạo biểu đồ") + " "}</button>
+                        >{i18n.t("Tạo biểu đồ", { ns: 'legacy', keySeparator: false }) + " "}</button>
                     </>
                 )}
             </div>
@@ -226,7 +226,7 @@ const MetricSection = ({ metric }) => {
                         </LineChart>
                     </ResponsiveContainer>
                 ) : (
-                    <div className="h-full flex items-center justify-center text-gray-500">{translatePageText("Chọn bộ lọc rồi bấm \"Tạo biểu đồ\"") + " "}</div>
+                    <div className="h-full flex items-center justify-center text-gray-500">{i18n.t("Chọn bộ lọc rồi bấm \"Tạo biểu đồ\"", { ns: 'legacy', keySeparator: false }) + " "}</div>
                 )}
             </div>
 
@@ -234,15 +234,15 @@ const MetricSection = ({ metric }) => {
             {tableYear && (
                 <div className="mt-6">
                     <p className="font-semibold mb-2">
-                        {isRevenue ? translatePageText("Top 3 tháng có doanh thu cao nhất") : translatePageText("Top 3 tháng có nhiều đơn nhất")}{" " + translatePageText("năm") + " "}{tableYear}
+                        {isRevenue ? i18n.t("Top 3 tháng có doanh thu cao nhất", { ns: 'legacy', keySeparator: false }) : i18n.t("Top 3 tháng có nhiều đơn nhất", { ns: 'legacy', keySeparator: false })}{" " + i18n.t("năm", { ns: 'legacy', keySeparator: false }) + " "}{tableYear}
                     </p>
                     {topRows.length > 0 ? (
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead className="bg-red-600 text-white">
                                     <tr>
-                                        <th className="px-4 py-2 text-left">{translatePageText("Hạng")}</th>
-                                        <th className="px-4 py-2 text-left">{translatePageText("Tháng")}</th>
+                                        <th className="px-4 py-2 text-left">{i18n.t("Hạng", { ns: 'legacy', keySeparator: false })}</th>
+                                        <th className="px-4 py-2 text-left">{i18n.t("Tháng", { ns: 'legacy', keySeparator: false })}</th>
                                         <th className="px-4 py-2 text-right">{names.total}</th>
                                         <th className="px-4 py-2 text-right">{names.booking}</th>
                                         <th className="px-4 py-2 text-right">{names.ship}</th>
@@ -252,7 +252,7 @@ const MetricSection = ({ metric }) => {
                                     {topRows.map((r) => (
                                         <tr key={r.month} className="border-b hover:bg-gray-50">
                                             <td className="px-4 py-2 font-bold text-red-600">#{r.rank}</td>
-                                            <td className="px-4 py-2">{translatePageText("Tháng") + " "}{r.month}</td>
+                                            <td className="px-4 py-2">{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{r.month}</td>
                                             <td className="px-4 py-2 text-right font-bold">{fmt(r.total)}</td>
                                             <td className="px-4 py-2 text-right">{fmt(r.booking)}</td>
                                             <td className="px-4 py-2 text-right">{fmt(r.ship)}</td>
@@ -262,7 +262,7 @@ const MetricSection = ({ metric }) => {
                             </table>
                         </div>
                     ) : (
-                        <div className="p-4 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
+                        <div className="p-4 text-center text-gray-500">{i18n.t("Không có dữ liệu", { ns: 'legacy', keySeparator: false })}</div>
                     )}
                 </div>
             )}

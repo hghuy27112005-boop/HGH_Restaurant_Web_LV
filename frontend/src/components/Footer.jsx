@@ -1,6 +1,6 @@
+import i18n from '../i18n.js';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { translatePageText } from '../pageTextTranslations';
 
 // Chân trang: nền trong suốt, chữ trắng. Chỉ được dùng trong trang chủ (HomeApp), cho cả admin lẫn user.
 const Footer = () => {
@@ -15,7 +15,7 @@ const Footer = () => {
                     </p>
                     <p className="flex items-start gap-3">
                         <i className="fas fa-location-dot w-6 flex-shrink-0 text-center mt-1"></i>
-                        <span>{translatePageText("Khu 2, Đ. 3/2, P. Ninh Kiều, TP. Cần Thơ")}</span>
+                        <span>{i18n.t("Khu 2, Đ. 3/2, P. Ninh Kiều, TP. Cần Thơ", { ns: 'legacy', keySeparator: false })}</span>
                     </p>
                 </div>
                 <div>

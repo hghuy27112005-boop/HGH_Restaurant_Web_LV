@@ -29,4 +29,9 @@ class Ingredient extends Model
     {
         return $this->hasMany(IngredientStock::class, 'ingredient_id', 'ingredient_id');
     }
+
+    public function dishRules()
+    {
+        return $this->hasMany(DishIngredientRule::class, 'ingredient_id', 'ingredient_id');
+    }
 }

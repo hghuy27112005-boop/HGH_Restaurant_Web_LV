@@ -1,7 +1,8 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import { bookingService } from '../../services/api';
 import { Modal } from '../../components/Shared';
-import { translatePageText, translateTableSelectionLimit } from '../../pageTextTranslations';
+import { getTableSelectionLimitMessage } from '../../i18nMessageFormatters';
 
 // Modal chỉnh sửa đơn đặt bàn ĐÃ thanh toán: ngày giờ, số lượng + loại bàn, số thứ tự bàn.
 // Dùng state riêng, không dùng chung với wizard đặt bàn mới ở BookingsPage (wizard gắn chặt
@@ -257,14 +258,14 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
         }
 
         if (selectedTables.length >= totalTables) {
-            setHint(translateTableSelectionLimit(totalTables));
+            setHint(getTableSelectionLimitMessage(totalTables));
             return;
         }
 
         const type = getTableType(num);
         const selectedOfType = selectedTables.filter((t) => getTableType(t) === type).length;
         if (selectedOfType >= tableTypes[type]) {
-            setHint(translateTableSelectionLimit(tableTypes[type], type));
+            setHint(getTableSelectionLimitMessage(tableTypes[type], type));
             return;
         }
 
@@ -295,7 +296,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
             const data = err.response?.data;
             setConfirmOpen(false);
             if (data?.stock_status === 'insufficient') {
-                setSaveError(translatePageText("Không đủ nguyên liệu cho đơn này vào ngày giờ mới. Vui lòng chọn ngày hoặc giờ khác, hoặc giữ nguyên lịch cũ."));
+                setSaveError(i18n.t("Không đủ nguyên liệu cho đơn này vào ngày giờ mới. Vui lòng chọn ngày hoặc giờ khác, hoặc giữ nguyên lịch cũ.", { ns: 'legacy', keySeparator: false }));
             } else {
                 setSaveError(data?.message || err.message || 'Không thể chỉnh sửa đơn. Vui lòng thử lại.');
             }
@@ -312,7 +313,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
         <>
             <Modal
                 isOpen={isOpen}
-                title={translatePageText("Chỉnh sửa thông tin đặt bàn")}
+                title={i18n.t("Chỉnh sửa thông tin đặt bàn", { ns: 'legacy', keySeparator: false })}
                 className="max-w-2xl"
                 onClose={handleClose}
                 cancelText="Đóng"
@@ -322,10 +323,10 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
             >
                 <div className="space-y-6 text-sm">
                     <div className="bg-gray-50 border border-gray-200 rounded p-3 space-y-1">
-                        <div className="font-bold text-gray-800">{translatePageText("Đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{translatePageText(": thông tin hiện tại") + " "}</div>
-                        <div className="text-gray-600">{translatePageText("Ngày") + " "}<strong>{formatDateOnly(original.date)}</strong>, {original.start} - {original.end}{translatePageText(", bàn") + " "}<strong>{original.tables.join(', ') || '—'}</strong>
+                        <div className="font-bold text-gray-800">{i18n.t("Đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}{bill?.order_stt || bill?.order_id}{i18n.t(": thông tin hiện tại", { ns: 'legacy', keySeparator: false }) + " "}</div>
+                        <div className="text-gray-600">{i18n.t("Ngày", { ns: 'legacy', keySeparator: false }) + " "}<strong>{formatDateOnly(original.date)}</strong>, {original.start} - {original.end}{i18n.t(", bàn", { ns: 'legacy', keySeparator: false }) + " "}<strong>{original.tables.join(', ') || '—'}</strong>
                         </div>
-                        <div className="text-xs text-gray-500">{translatePageText("Mỗi lần lưu tiêu hao 1 lượt chỉnh sửa trong tuần (hiện còn") + " "}{attemptsLeft}{" " + translatePageText("lượt). Không thể thay đổi món ăn và không cần thanh toán lại.") + " "}</div>
+                        <div className="text-xs text-gray-500">{i18n.t("Mỗi lần lưu tiêu hao 1 lượt chỉnh sửa trong tuần (hiện còn", { ns: 'legacy', keySeparator: false }) + " "}{attemptsLeft}{" " + i18n.t("lượt). Không thể thay đổi món ăn và không cần thanh toán lại.", { ns: 'legacy', keySeparator: false }) + " "}</div>
                     </div>
 
                     {saveError && (
@@ -336,12 +337,12 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
                     {/* Cụm 1: ngày giờ */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-1">{translatePageText("1. Ngày & giờ")}</h3>
-                        <p className="text-gray-600 mb-3">{translatePageText("Giờ hoạt động: 07:00 - 22:00.") + " "}<strong className="text-red-600">{translatePageText("Chỉ được đặt bàn tối đa 90'.")}</strong>
+                        <h3 className="font-bold text-base text-red-600 mb-1">{i18n.t("1. Ngày & giờ", { ns: 'legacy', keySeparator: false })}</h3>
+                        <p className="text-gray-600 mb-3">{i18n.t("Giờ hoạt động: 07:00 - 22:00.", { ns: 'legacy', keySeparator: false }) + " "}<strong className="text-red-600">{i18n.t("Chỉ được đặt bàn tối đa 90'.", { ns: 'legacy', keySeparator: false })}</strong>
                         </p>
                         <div className="space-y-4">
                             <div>
-                                <label className="block font-semibold mb-1">{translatePageText("Ngày đặt")}</label>
+                                <label className="block font-semibold mb-1">{i18n.t("Ngày đặt", { ns: 'legacy', keySeparator: false })}</label>
                                 <input
                                     type="date"
                                     min={minDate}
@@ -353,7 +354,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block font-semibold mb-1">{translatePageText("Giờ đến")}</label>
+                                    <label className="block font-semibold mb-1">{i18n.t("Giờ đến", { ns: 'legacy', keySeparator: false })}</label>
                                     <div className={timeBoxClass}>
                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="07" value={startH} onChange={(e) => setStartH(e.target.value.replace(/\D/g, ''))} className={timeInputClass} />
                                         <span className="font-bold text-gray-500">:</span>
@@ -361,7 +362,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block font-semibold mb-1">{translatePageText("Giờ về")}</label>
+                                    <label className="block font-semibold mb-1">{i18n.t("Giờ về", { ns: 'legacy', keySeparator: false })}</label>
                                     <div className={timeBoxClass}>
                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="08" value={endH} onChange={(e) => setEndH(e.target.value.replace(/\D/g, ''))} className={timeInputClass} />
                                         <span className="font-bold text-gray-500">:</span>
@@ -377,8 +378,8 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
                     {/* Cụm 2: số lượng và loại bàn */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-1">{translatePageText("2. Số lượng & loại bàn")}</h3>
-                        <p className="text-gray-600 mb-3">{translatePageText("Bạn muốn đặt bao nhiêu bàn? (Tối đa 3 bàn)")}</p>
+                        <h3 className="font-bold text-base text-red-600 mb-1">{i18n.t("2. Số lượng & loại bàn", { ns: 'legacy', keySeparator: false })}</h3>
+                        <p className="text-gray-600 mb-3">{i18n.t("Bạn muốn đặt bao nhiêu bàn? (Tối đa 3 bàn)", { ns: 'legacy', keySeparator: false })}</p>
                         <div className="flex justify-center gap-4 mb-4">
                             {[1, 2, 3].map((num) => (
                                 <button
@@ -391,13 +392,13 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                                 </button>
                             ))}
                         </div>
-                        <p className="text-gray-600 mb-2">{translatePageText("Phân bổ số lượng theo sức chứa. Tổng:") + " "}<b>{totalTables}</b>{" " + translatePageText("bàn.")}</p>
+                        <p className="text-gray-600 mb-2">{i18n.t("Phân bổ số lượng theo sức chứa. Tổng:", { ns: 'legacy', keySeparator: false }) + " "}<b>{totalTables}</b>{" " + i18n.t("bàn.", { ns: 'legacy', keySeparator: false })}</p>
                         <div className="space-y-3">
                             {TABLE_GROUPS.map((g) => (
                                 <div key={g.key} className="flex justify-between items-center bg-white p-3 border rounded-lg">
                                     <div>
-                                        <div className="font-bold">{translatePageText(g.name)} ({translatePageText(g.cap)})</div>
-                                        <div className="text-xs text-gray-500">{translatePageText("STT từ") + " "}{g.range}</div>
+                                        <div className="font-bold">{i18n.t(g.name, { ns: 'legacy', keySeparator: false })} ({i18n.t(g.cap, { ns: 'legacy', keySeparator: false })})</div>
+                                        <div className="text-xs text-gray-500">{i18n.t("STT từ", { ns: 'legacy', keySeparator: false }) + " "}{g.range}</div>
                                     </div>
                                     <div className="flex items-center gap-3">
                                         <button type="button" onClick={() => handleTableTypeChange(g.key, -1)} className={stepBtnClass}>-</button>
@@ -414,20 +415,20 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
                     {/* Cụm 3: chọn số thứ tự bàn */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-1">{translatePageText("3. Chọn bàn trống")}</h3>
-                        <p className="text-gray-600 mb-1">{translatePageText("Vui lòng chọn") + " "}<b>{totalTables}</b>{" " + translatePageText("bàn. Đã chọn") + " "}{selectedTables.length}/{totalTables}.
+                        <h3 className="font-bold text-base text-red-600 mb-1">{i18n.t("3. Chọn bàn trống", { ns: 'legacy', keySeparator: false })}</h3>
+                        <p className="text-gray-600 mb-1">{i18n.t("Vui lòng chọn", { ns: 'legacy', keySeparator: false }) + " "}<b>{totalTables}</b>{" " + i18n.t("bàn. Đã chọn", { ns: 'legacy', keySeparator: false }) + " "}{selectedTables.length}/{totalTables}.
                         </p>
                         <p className="text-gray-500 mb-2 text-xs">
-                            <span className="inline-block w-3 h-3 bg-gray-400 rounded-sm align-middle mr-1"></span>{translatePageText("Bàn xám: đã có người đặt trong khung giờ này") + " "}</p>
+                            <span className="inline-block w-3 h-3 bg-gray-400 rounded-sm align-middle mr-1"></span>{i18n.t("Bàn xám: đã có người đặt trong khung giờ này", { ns: 'legacy', keySeparator: false }) + " "}</p>
                         {isCheckingOverlap && (
-                            <p className="text-gray-500 mb-2">{translatePageText("Đang kiểm tra bàn trống...")}</p>
+                            <p className="text-gray-500 mb-2">{i18n.t("Đang kiểm tra bàn trống...", { ns: 'legacy', keySeparator: false })}</p>
                         )}
 
                         <div className="border p-2 bg-white rounded">
                             {TABLE_GROUPS.map((g) => tableTypes[g.key] > 0 && (
                                 <div key={g.key} className="mb-4">
                                     <div className="font-bold text-sm mb-2 text-gray-700 border-b pb-1">
-                                        {translatePageText(g.name)} ({g.range.replace(' - ', '-')}{translatePageText(") - Cần chọn") + " "}{tableTypes[g.key]}{" " + translatePageText("bàn") + " "}</div>
+                                        {i18n.t(g.name, { ns: 'legacy', keySeparator: false })} ({g.range.replace(' - ', '-')}{i18n.t(") - Cần chọn", { ns: 'legacy', keySeparator: false }) + " "}{tableTypes[g.key]}{" " + i18n.t("bàn", { ns: 'legacy', keySeparator: false }) + " "}</div>
                                     <div className="grid grid-cols-5 gap-2">
                                         {Array.from({ length: g.count }, (_, i) => i + g.from).map((num) => {
                                             const occupied = unavailableTables.includes(num);
@@ -454,7 +455,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
                                 </div>
                             ))}
                             {typesTotal === 0 && (
-                                <p className="text-gray-500 p-2">{translatePageText("Hãy chọn loại bàn ở phần 2 trước.")}</p>
+                                <p className="text-gray-500 p-2">{i18n.t("Hãy chọn loại bàn ở phần 2 trước.", { ns: 'legacy', keySeparator: false })}</p>
                             )}
                         </div>
                         {tableSelectError && (
@@ -466,19 +467,19 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
 
             <Modal
                 isOpen={confirmOpen}
-                title={translatePageText("Xác nhận chỉnh sửa đơn")}
+                title={i18n.t("Xác nhận chỉnh sửa đơn", { ns: 'legacy', keySeparator: false })}
                 onClose={() => { if (!saving) setConfirmOpen(false); }}
                 cancelText="Quay lại"
                 onConfirm={handleSave}
-                confirmText={saving ? translatePageText("Đang lưu...") : translatePageText("Xác nhận")}
+                confirmText={saving ? i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false }) : i18n.t("Xác nhận", { ns: 'legacy', keySeparator: false })}
                 confirmDisabled={saving}
             >
-                <p className="text-gray-700 mb-3">{translatePageText("Bạn có chắc muốn lưu các thay đổi cho đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{" " + translatePageText("không?") + " "}</p>
-                <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Việc chỉnh sửa sẽ tiêu hao") + " "}<strong>{translatePageText("1 lượt chỉnh sửa đơn")}</strong>{" " + translatePageText("trong tuần (hiện còn") + " "}<strong>{attemptsLeft}</strong>{" " + translatePageText("lượt). Đơn không cần thanh toán lại.") + " "}</p>
+                <p className="text-gray-700 mb-3">{i18n.t("Bạn có chắc muốn lưu các thay đổi cho đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}{bill?.order_stt || bill?.order_id}{" " + i18n.t("không?", { ns: 'legacy', keySeparator: false }) + " "}</p>
+                <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{i18n.t("Việc chỉnh sửa sẽ tiêu hao", { ns: 'legacy', keySeparator: false }) + " "}<strong>{i18n.t("1 lượt chỉnh sửa đơn", { ns: 'legacy', keySeparator: false })}</strong>{" " + i18n.t("trong tuần (hiện còn", { ns: 'legacy', keySeparator: false }) + " "}<strong>{attemptsLeft}</strong>{" " + i18n.t("lượt). Đơn không cần thanh toán lại.", { ns: 'legacy', keySeparator: false }) + " "}</p>
             </Modal>
             <Modal
                 isOpen={Boolean(hint)}
-                title={translatePageText("Thông báo")}
+                title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setHint('')}
                 cancelText="Đóng"
             >

@@ -42,14 +42,12 @@ class IngredientStock extends Model
         return Str::lower(trim($name));
     }
 
-    public static function getOrCreateForDate(string $name, string $date): self
+    public static function getOrCreateForDate(string $name, string $date, string $language = 'vi'): self
     {
         $name = trim($name);
         $key = self::keyFor($name);
-        $ingredientNameAttributes = preg_match(
-            '/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/iu',
-            $name
-        )
+        $language = $language === 'en' ? 'en' : 'vi';
+        $ingredientNameAttributes = $language === 'vi'
             ? ['ingredient_name' => null, 'ingredient_name_vi' => $name]
             : ['ingredient_name' => $name];
 
@@ -62,7 +60,11 @@ class IngredientStock extends Model
             ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date],
             [
                 'ingredient_key' => $key,
-                'ingredient_name' => $name,
+                // This snapshot column stores English names; language is explicit
+                // because Vietnamese names may not contain diacritics.
+                // Stock snapshots are English-only and the legacy schema requires
+                // a non-null value. Keep Vietnamese catalog text in its own column.
+                'ingredient_name' => $ingredient->ingredient_name ?? '',
                 'quantity_start' => 50,
                 'quantity_left' => 50,
                 'refill_count' => 0,

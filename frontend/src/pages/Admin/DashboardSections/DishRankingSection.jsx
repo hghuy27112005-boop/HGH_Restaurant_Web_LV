@@ -1,18 +1,20 @@
+import i18n from '../../../i18n.js';
 import React, { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
 import { YEAR_OPTIONS, MONTH_OPTIONS, fmtMoney, extractError } from './helpers';
-import { translatePageText } from '../../../pageTextTranslations';
 import { translateDishName } from '../../../dishTranslations';
 
 const COLUMNS = [
-    { key: 'revenue', get label() { return translatePageText('Doanh thu'); }, render: (r) => fmtMoney(r.revenue) },
-    { key: 'quantity', get label() { return translatePageText("Số phần đặt"); }, render: (r) => Number(r.quantity).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') },
-    { key: 'avg_rating', get label() { return translatePageText("Sao trung bình"); }, render: (r) => (r.rating_count > 0 ? r.avg_rating.toFixed(2) : '—') },
-    { key: 'rating_count', get label() { return translatePageText("Lượt đánh giá"); }, render: (r) => Number(r.rating_count).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') },
+    { key: 'revenue', get label() { return i18n.t('Doanh thu', { ns: 'legacy', keySeparator: false }); }, render: (r) => fmtMoney(r.revenue) },
+    { key: 'quantity', get label() { return i18n.t("Số phần đặt", { ns: 'legacy', keySeparator: false }); }, render: (r) => Number(r.quantity).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') },
+    { key: 'avg_rating', get label() { return i18n.t("Sao trung bình", { ns: 'legacy', keySeparator: false }); }, render: (r) => (r.rating_count > 0 ? r.avg_rating.toFixed(2) : '—') },
+    { key: 'rating_count', get label() { return i18n.t("Lượt đánh giá", { ns: 'legacy', keySeparator: false }); }, render: (r) => Number(r.rating_count).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') },
 ];
 
 const DishRankingSection = () => {
+    const { t } = useTranslation();
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
     const [month, setMonth] = useState(now.getMonth() + 1);
@@ -31,7 +33,7 @@ const DishRankingSection = () => {
                 if (!cancelled) setRows(res?.data?.data || []);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, translatePageText("Lỗi tải bảng thống kê thực đơn")));
+                    setError(extractError(err, i18n.t("Lỗi tải bảng thống kê thực đơn", { ns: 'legacy', keySeparator: false })));
                     setRows([]);
                 }
             } finally {
@@ -64,7 +66,7 @@ const DishRankingSection = () => {
                     {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={selectCls}>
-                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
+                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m}</option>)}
                 </select>
             </div>
 
@@ -76,15 +78,15 @@ const DishRankingSection = () => {
                         <thead className="bg-red-600 text-white">
                             <tr>
                                 <th className="px-3 py-2 text-left">STT</th>
-                                <th className="px-3 py-2 text-left">{translatePageText("Tên món")}</th>
+                                <th className="px-3 py-2 text-left">{i18n.t("Tên món", { ns: 'legacy', keySeparator: false })}</th>
                                 {COLUMNS.map((c) => (
                                     <th key={c.key} className="px-3 py-2 text-right whitespace-nowrap">
                                         {c.label}
                                         <span className="inline-flex flex-col ml-1 align-middle">
                                             <button
                                                 type="button"
-                                                aria-label={document.documentElement.lang === 'en' ? `Sort ${c.label} descending` : `${c.label} giảm dần`}
-                                                title={translatePageText("Lớn đến bé")}
+                                                aria-label={t('admin.sortDescending', { label: c.label })}
+                                                title={i18n.t("Lớn đến bé", { ns: 'legacy', keySeparator: false })}
                                                 onClick={() => setSort({ key: c.key, dir: 'desc' })}
                                                 className={arrowCls(sort.key === c.key && sort.dir === 'desc')}
                                             >
@@ -92,8 +94,8 @@ const DishRankingSection = () => {
                                             </button>
                                             <button
                                                 type="button"
-                                                aria-label={document.documentElement.lang === 'en' ? `Sort ${c.label} ascending` : `${c.label} tăng dần`}
-                                                title={translatePageText("Bé đến lớn")}
+                                                aria-label={t('admin.sortAscending', { label: c.label })}
+                                                title={i18n.t("Bé đến lớn", { ns: 'legacy', keySeparator: false })}
                                                 onClick={() => setSort({ key: c.key, dir: 'asc' })}
                                                 className={arrowCls(sort.key === c.key && sort.dir === 'asc')}
                                             >
@@ -118,7 +120,7 @@ const DishRankingSection = () => {
                     </table>
                 </div>
             ) : (
-                <div className="p-6 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
+                <div className="p-6 text-center text-gray-500">{i18n.t("Không có dữ liệu", { ns: 'legacy', keySeparator: false })}</div>
             )}
         </div>
     );

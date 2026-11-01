@@ -256,7 +256,7 @@ class Stock extends Model
                 IngredientStockTransaction::create([
                     'order_id' => $order->order_id,
                     'ingredient_stock_id' => $stock->ingredient_stock_id,
-                    'ingredient_name' => $stock->ingredient_name,
+                    'ingredient_name' => $stock->ingredient_name ?? '',
                     'quantity_before' => $before,
                     'quantity_deducted' => $needed,
                     'quantity_after' => $after,
@@ -390,7 +390,9 @@ class Stock extends Model
     {
         $stocks = [];
         foreach ($requirements as $key => $requirement) {
-            $stocks[$key] = IngredientStock::getOrCreateForDate($requirement['name'], $date);
+            // The dish ingredient list is stored in Vietnamese, so locale is data,
+            // not something to guess from whether the name contains diacritics.
+            $stocks[$key] = IngredientStock::getOrCreateForDate($requirement['name'], $date, 'vi');
         }
 
         uasort($stocks, fn ($first, $second) => $first->ingredient_id <=> $second->ingredient_id);

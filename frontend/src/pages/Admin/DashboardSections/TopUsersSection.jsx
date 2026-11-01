@@ -1,8 +1,8 @@
+import i18n from '../../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
 import { YEAR_OPTIONS, MONTH_OPTIONS, fmtMoney, extractError } from './helpers';
-import { translatePageText } from '../../../pageTextTranslations';
 
 const MEMBERSHIP_LABEL = {
     bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum', diamond: 'Diamond',
@@ -26,7 +26,7 @@ const TopUsersSection = () => {
                 if (!cancelled) setRows(res?.data?.data || []);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, translatePageText("Lỗi tải xếp hạng người dùng")));
+                    setError(extractError(err, i18n.t("Lỗi tải xếp hạng người dùng", { ns: 'legacy', keySeparator: false })));
                     setRows([]);
                 }
             } finally {
@@ -47,8 +47,8 @@ const TopUsersSection = () => {
                     {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
                 </select>
                 <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className={selectCls}>
-                    <option value={0}>{translatePageText("Cả năm")}</option>
-                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{translatePageText("Tháng") + " "}{m}</option>)}
+                    <option value={0}>{i18n.t("Cả năm", { ns: 'legacy', keySeparator: false })}</option>
+                    {MONTH_OPTIONS.map((m) => <option key={m} value={m}>{i18n.t("Tháng", { ns: 'legacy', keySeparator: false }) + " "}{m}</option>)}
                 </select>
             </div>
 
@@ -60,11 +60,11 @@ const TopUsersSection = () => {
                         <thead className="bg-red-600 text-white">
                             <tr>
                                 <th className="px-3 py-2 text-left">STT</th>
-                                <th className="px-3 py-2 text-left">{translatePageText("Tên")}</th>
+                                <th className="px-3 py-2 text-left">{i18n.t("Tên", { ns: 'legacy', keySeparator: false })}</th>
                                 <th className="px-3 py-2 text-left">Gmail</th>
-                                <th className="px-3 py-2 text-left">{translatePageText("Số điện thoại")}</th>
-                                <th className="px-3 py-2 text-left">{translatePageText('Bậc thành viên')}</th>
-                                <th className="px-3 py-2 text-right">{translatePageText("Chi tiêu")}</th>
+                                <th className="px-3 py-2 text-left">{i18n.t("Số điện thoại", { ns: 'legacy', keySeparator: false })}</th>
+                                <th className="px-3 py-2 text-left">{i18n.t('Bậc thành viên', { ns: 'legacy', keySeparator: false })}</th>
+                                <th className="px-3 py-2 text-right">{i18n.t("Chi tiêu", { ns: 'legacy', keySeparator: false })}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -82,7 +82,7 @@ const TopUsersSection = () => {
                     </table>
                 </div>
             ) : (
-                <div className="p-6 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
+                <div className="p-6 text-center text-gray-500">{i18n.t("Không có dữ liệu", { ns: 'legacy', keySeparator: false })}</div>
             )}
         </div>
     );

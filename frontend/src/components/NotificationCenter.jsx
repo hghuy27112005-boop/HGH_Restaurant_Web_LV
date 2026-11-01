@@ -1,7 +1,7 @@
+import i18n from '../i18n.js';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { notificationAPI } from '../services/api';
-import { translatePageText } from '../pageTextTranslations';
 
 const NotificationCenter = ({ isDarkPage }) => {
     const { t, i18n } = useTranslation();
@@ -96,7 +96,7 @@ const NotificationCenter = ({ isDarkPage }) => {
 
             {open && (
                 <section
-                    aria-label={translatePageText("Trung tâm thông báo")}
+                    aria-label={i18n.t("Trung tâm thông báo", { ns: 'legacy', keySeparator: false })}
                     className="absolute right-0 z-50 mt-2 w-[min(92vw,420px)] overflow-hidden rounded-xl border border-gray-200 bg-white text-gray-800 shadow-xl"
                 >
                     <div className="flex items-center justify-between border-b px-4 py-3">

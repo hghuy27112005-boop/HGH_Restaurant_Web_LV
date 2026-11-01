@@ -1,7 +1,7 @@
+import i18n from '../../i18n.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import { deliveryService } from '../../services/api';
 import { Modal } from '../../components/Shared';
-import { translatePageText } from '../../pageTextTranslations';
 
 // Modal chỉnh sửa đơn ship ĐÃ thanh toán: địa chỉ giao và thời điểm muốn nhận hàng (bật/tắt được giờ hẹn).
 // Không đổi món, không thanh toán lại, phí ship thu riêng khi nhận hàng nên không đổi giá đơn.
@@ -153,7 +153,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
             } catch (err) {
                 if (cancelled) return;
                 setPreview(null);
-                handleRequestError(err, translatePageText("Không thể kiểm tra địa chỉ này."), true);
+                handleRequestError(err, i18n.t("Không thể kiểm tra địa chỉ này.", { ns: 'legacy', keySeparator: false }), true);
             } finally {
                 if (!cancelled) setPreviewLoading(false);
             }
@@ -173,7 +173,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
 
     const handleUseCurrentLocation = () => {
         if (!navigator.geolocation) {
-            setPreviewError(translatePageText("Trình duyệt của bạn không hỗ trợ lấy vị trí hiện tại."));
+            setPreviewError(i18n.t("Trình duyệt của bạn không hỗ trợ lấy vị trí hiện tại.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -196,14 +196,14 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                     setPreview(data);
                     setPreviewedSig(`${newAddress}|${prefStr ?? ''}|${data.lat},${data.lng}`);
                 } catch (err) {
-                    handleRequestError(err, translatePageText("Không thể xác định vị trí giao hàng từ vị trí hiện tại."), true);
+                    handleRequestError(err, i18n.t("Không thể xác định vị trí giao hàng từ vị trí hiện tại.", { ns: 'legacy', keySeparator: false }), true);
                 } finally {
                     setGpsLoading(false);
                 }
             },
             () => {
                 setGpsLoading(false);
-                setPreviewError(translatePageText("Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí hoặc nhập địa chỉ thủ công."));
+                setPreviewError(i18n.t("Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí hoặc nhập địa chỉ thủ công.", { ns: 'legacy', keySeparator: false }));
             }
         );
     };
@@ -253,7 +253,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
             const data = err.response?.data;
             setConfirmOpen(false);
             if (data?.stock_status === 'insufficient') {
-                setSaveError(translatePageText("Không đủ nguyên liệu cho đơn này theo lịch mới. Vui lòng chọn thời điểm khác hoặc giữ nguyên lịch cũ."));
+                setSaveError(i18n.t("Không đủ nguyên liệu cho đơn này theo lịch mới. Vui lòng chọn thời điểm khác hoặc giữ nguyên lịch cũ.", { ns: 'legacy', keySeparator: false }));
             } else {
                 setSaveError(data?.message || err.message || 'Không thể chỉnh sửa đơn. Vui lòng thử lại.');
             }
@@ -266,7 +266,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
         <>
             <Modal
                 isOpen={isOpen}
-                title={translatePageText("Chỉnh sửa thông tin đơn ship")}
+                title={i18n.t("Chỉnh sửa thông tin đơn ship", { ns: 'legacy', keySeparator: false })}
                 className="max-w-2xl"
                 onClose={handleClose}
                 cancelText="Đóng"
@@ -276,14 +276,14 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
             >
                 <div className="space-y-6 text-sm">
                     <div className="bg-gray-50 border border-gray-200 rounded p-3 space-y-1">
-                        <div className="font-bold text-gray-800">{translatePageText("Đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{translatePageText(": thông tin hiện tại") + " "}</div>
-                        <div className="text-gray-600">{translatePageText("Địa chỉ:") + " "}<strong>{original.address || '—'}</strong>
+                        <div className="font-bold text-gray-800">{i18n.t("Đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}{bill?.order_stt || bill?.order_id}{i18n.t(": thông tin hiện tại", { ns: 'legacy', keySeparator: false }) + " "}</div>
+                        <div className="text-gray-600">{i18n.t("Địa chỉ:", { ns: 'legacy', keySeparator: false }) + " "}<strong>{original.address || '—'}</strong>
                         </div>
-                        <div className="text-gray-600">{translatePageText("Giờ muốn nhận hàng:") + " "}<strong>{original.pref || translatePageText("Không hẹn giờ")}</strong>
-                            {' · '}{translatePageText("Bắt đầu nấu:") + " "}{formatDateTime(original.cookingAt)}
-                            {' · '}{translatePageText("Hàng tới:") + " "}{formatDateTime(original.arrivalAt)}
+                        <div className="text-gray-600">{i18n.t("Giờ muốn nhận hàng:", { ns: 'legacy', keySeparator: false }) + " "}<strong>{original.pref || i18n.t("Không hẹn giờ", { ns: 'legacy', keySeparator: false })}</strong>
+                            {' · '}{i18n.t("Bắt đầu nấu:", { ns: 'legacy', keySeparator: false }) + " "}{formatDateTime(original.cookingAt)}
+                            {' · '}{i18n.t("Hàng tới:", { ns: 'legacy', keySeparator: false }) + " "}{formatDateTime(original.arrivalAt)}
                         </div>
-                        <div className="text-xs text-gray-500">{translatePageText("Mỗi lần lưu tiêu hao 1 lượt chỉnh sửa trong tuần (hiện còn") + " "}{attemptsLeft}{" " + translatePageText("lượt). Không thể thay đổi món ăn và không cần thanh toán lại. Chỉ sửa được khi đơn chưa tới giờ bắt đầu chuẩn bị.") + " "}</div>
+                        <div className="text-xs text-gray-500">{i18n.t("Mỗi lần lưu tiêu hao 1 lượt chỉnh sửa trong tuần (hiện còn", { ns: 'legacy', keySeparator: false }) + " "}{attemptsLeft}{" " + i18n.t("lượt). Không thể thay đổi món ăn và không cần thanh toán lại. Chỉ sửa được khi đơn chưa tới giờ bắt đầu chuẩn bị.", { ns: 'legacy', keySeparator: false }) + " "}</div>
                     </div>
 
                     {saveError && (
@@ -294,13 +294,13 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
 
                     {/* Cụm 1: địa chỉ giao hàng */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-2">{translatePageText("1. Địa chỉ giao hàng")}</h3>
+                        <h3 className="font-bold text-base text-red-600 mb-2">{i18n.t("1. Địa chỉ giao hàng", { ns: 'legacy', keySeparator: false })}</h3>
                         <input
                             type="text"
                             value={address}
                             onChange={(e) => handleAddressChange(e.target.value)}
                             className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
-                            placeholder={translatePageText("Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)...")}
+                            placeholder={i18n.t("Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)...", { ns: 'legacy', keySeparator: false })}
                         />
                         <button
                             type="button"
@@ -309,11 +309,11 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                             className="mt-2 text-sm font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-1"
                         >
                             <i className={`fas ${gpsLoading ? 'fa-spinner fa-spin' : 'fa-location-crosshairs'}`}></i>
-                            {gpsLoading ? translatePageText("Đang lấy vị trí...") : translatePageText("Tự động lấy vị trí hiện tại")}
+                            {gpsLoading ? i18n.t("Đang lấy vị trí...", { ns: 'legacy', keySeparator: false }) : i18n.t("Tự động lấy vị trí hiện tại", { ns: 'legacy', keySeparator: false })}
                         </button>
 
                         {previewLoading && (
-                            <p className="mt-2 text-gray-500">{translatePageText("Đang kiểm tra địa chỉ...")}</p>
+                            <p className="mt-2 text-gray-500">{i18n.t("Đang kiểm tra địa chỉ...", { ns: 'legacy', keySeparator: false })}</p>
                         )}
 
                         {!previewLoading && addressError && (
@@ -323,16 +323,16 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                         {previewReady && (
                             <div className="mt-3 bg-blue-50 border border-blue-200 rounded p-3 space-y-1">
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">{translatePageText("Khoảng cách:")}</span>
+                                    <span className="text-gray-600">{i18n.t("Khoảng cách:", { ns: 'legacy', keySeparator: false })}</span>
                                     <span className="font-semibold">{preview.distance_km} km</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">{translatePageText("Thời gian giao dự kiến:")}</span>
-                                    <span className="font-semibold">{preview.duration_minutes}{" " + translatePageText("phút")}</span>
+                                    <span className="text-gray-600">{i18n.t("Thời gian giao dự kiến:", { ns: 'legacy', keySeparator: false })}</span>
+                                    <span className="font-semibold">{preview.duration_minutes}{" " + i18n.t("phút", { ns: 'legacy', keySeparator: false })}</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">{translatePageText("Phí ship (thu riêng khi nhận hàng):")}</span>
-                                    <span className="font-bold text-red-600">{Number(preview.shipping_fee ?? 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                                    <span className="text-gray-600">{i18n.t("Phí ship (thu riêng khi nhận hàng):", { ns: 'legacy', keySeparator: false })}</span>
+                                    <span className="font-bold text-red-600">{Number(preview.shipping_fee ?? 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                                 </div>
                             </div>
                         )}
@@ -340,22 +340,22 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
 
                     {/* Cụm 2: thời điểm muốn nhận hàng */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-2">{translatePageText("2. Thời điểm muốn nhận hàng")}</h3>
+                        <h3 className="font-bold text-base text-red-600 mb-2">{i18n.t("2. Thời điểm muốn nhận hàng", { ns: 'legacy', keySeparator: false })}</h3>
                         <div className="flex flex-wrap items-start justify-between gap-4">
                             <div>
                                 <div className="flex items-center gap-3">
-                                    <span className="font-semibold text-gray-700">{translatePageText("Thời điểm giao hàng mong muốn")}</span>
+                                    <span className="font-semibold text-gray-700">{i18n.t("Thời điểm giao hàng mong muốn", { ns: 'legacy', keySeparator: false })}</span>
                                     <button
                                         type="button"
                                         onClick={() => setPrefEnabled((value) => !value)}
                                         className={`relative inline-flex items-center w-14 h-7 rounded-full border-2 border-white shadow-inner transition-colors duration-200 flex-shrink-0 ${prefEnabled ? 'bg-green-500' : 'bg-gray-400'}`}
-                                        aria-label={translatePageText("Bật thời điểm giao hàng mong muốn")}
+                                        aria-label={i18n.t("Bật thời điểm giao hàng mong muốn", { ns: 'legacy', keySeparator: false })}
                                     >
                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${prefEnabled ? 'translate-x-8' : 'translate-x-1'}`} />
                                     </button>
                                 </div>
                                 <p className="mt-1 text-xs text-gray-500">
-                                    {prefEnabled ? translatePageText("Bạn muốn hàng được giao tới lúc mấy giờ?") : translatePageText("Đang tắt: đơn được chuẩn bị và giao sớm nhất có thể.")}
+                                    {prefEnabled ? i18n.t("Bạn muốn hàng được giao tới lúc mấy giờ?", { ns: 'legacy', keySeparator: false }) : i18n.t("Đang tắt: đơn được chuẩn bị và giao sớm nhất có thể.", { ns: 'legacy', keySeparator: false })}
                                 </p>
                             </div>
                             {prefEnabled && (
@@ -366,7 +366,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="30" value={prefM} onChange={(e) => setPrefM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                     </div>
                                     <p className="mt-1 text-xs text-gray-500">
-                                        {schedule ? `Sớm nhất: ${earliestTime} — muộn nhất: 22:00` : translatePageText("Muộn nhất: 22:00")}
+                                        {schedule ? `Sớm nhất: ${earliestTime} — muộn nhất: 22:00` : i18n.t("Muộn nhất: 22:00", { ns: 'legacy', keySeparator: false })}
                                     </p>
                                 </div>
                             )}
@@ -377,37 +377,37 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                         )}
 
                         {afterClosing && (
-                            <p className="mt-2 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Nhà hàng đóng cửa lúc 22h và không giao hàng sau giờ đóng cửa. Nhà hàng sẽ bắt đầu chuẩn bị đơn vào 7h30 sáng hôm sau.") + " "}</p>
+                            <p className="mt-2 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{i18n.t("Nhà hàng đóng cửa lúc 22h và không giao hàng sau giờ đóng cửa. Nhà hàng sẽ bắt đầu chuẩn bị đơn vào 7h30 sáng hôm sau.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                         )}
                     </div>
 
                     {/* Cụm 3: lịch dự kiến sau khi sửa */}
                     <div>
-                        <h3 className="font-bold text-base text-red-600 mb-2">{translatePageText("3. Lịch dự kiến sau khi sửa")}</h3>
+                        <h3 className="font-bold text-base text-red-600 mb-2">{i18n.t("3. Lịch dự kiến sau khi sửa", { ns: 'legacy', keySeparator: false })}</h3>
                         {schedule && cookingAt ? (
                             <div className="bg-white border border-gray-200 rounded p-3 space-y-2">
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">{translatePageText("Bắt đầu nấu (dự kiến):")}</span>
-                                    <span className="font-semibold">{cookingNow ? translatePageText("Ngay sau khi lưu") : formatDateTime(cookingAt)}</span>
+                                    <span className="text-gray-600">{i18n.t("Bắt đầu nấu (dự kiến):", { ns: 'legacy', keySeparator: false })}</span>
+                                    <span className="font-semibold">{cookingNow ? i18n.t("Ngay sau khi lưu", { ns: 'legacy', keySeparator: false }) : formatDateTime(cookingAt)}</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">{translatePageText("Bắt đầu giao (dự kiến):")}</span>
+                                    <span className="text-gray-600">{i18n.t("Bắt đầu giao (dự kiến):", { ns: 'legacy', keySeparator: false })}</span>
                                     <span className="font-semibold">{formatDateTime(shipAt)}</span>
                                 </div>
                                 <div className="flex justify-between gap-4">
-                                    <span className="text-gray-600">{translatePageText("Hàng tới (dự kiến):")}</span>
+                                    <span className="text-gray-600">{i18n.t("Hàng tới (dự kiến):", { ns: 'legacy', keySeparator: false })}</span>
                                     <span className="font-semibold">{formatDateTime(arrivalAt)}</span>
                                 </div>
                                 {cookingNotToday && (
-                                    <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Đơn hàng này dự kiến không thể hoàn tất giao trong hôm nay, nên nhà hàng sẽ bắt đầu chuẩn bị vào") + " "}<strong>{formatDateTime(cookingAt)}</strong>.
+                                    <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{i18n.t("Đơn hàng này dự kiến không thể hoàn tất giao trong hôm nay, nên nhà hàng sẽ bắt đầu chuẩn bị vào", { ns: 'legacy', keySeparator: false }) + " "}<strong>{formatDateTime(cookingAt)}</strong>.
                                     </p>
                                 )}
                                 {cookingNow && (
-                                    <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Sau khi lưu, đơn sẽ được chuẩn bị ngay nên bạn sẽ không thể chỉnh sửa thêm.") + " "}</p>
+                                    <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{i18n.t("Sau khi lưu, đơn sẽ được chuẩn bị ngay nên bạn sẽ không thể chỉnh sửa thêm.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                                 )}
                             </div>
                         ) : (
-                            <p className="text-gray-500">{translatePageText("Lịch dự kiến sẽ hiện sau khi địa chỉ và thời điểm nhận hàng hợp lệ.")}</p>
+                            <p className="text-gray-500">{i18n.t("Lịch dự kiến sẽ hiện sau khi địa chỉ và thời điểm nhận hàng hợp lệ.", { ns: 'legacy', keySeparator: false })}</p>
                         )}
                     </div>
                 </div>
@@ -415,15 +415,15 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
 
             <Modal
                 isOpen={confirmOpen}
-                title={translatePageText("Xác nhận chỉnh sửa đơn")}
+                title={i18n.t("Xác nhận chỉnh sửa đơn", { ns: 'legacy', keySeparator: false })}
                 onClose={() => { if (!saving) setConfirmOpen(false); }}
                 cancelText="Quay lại"
                 onConfirm={handleSave}
-                confirmText={saving ? translatePageText("Đang lưu...") : translatePageText("Xác nhận")}
+                confirmText={saving ? i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false }) : i18n.t("Xác nhận", { ns: 'legacy', keySeparator: false })}
                 confirmDisabled={saving}
             >
-                <p className="text-gray-700 mb-3">{translatePageText("Bạn có chắc muốn lưu các thay đổi cho đơn hàng") + " "}{bill?.order_stt || bill?.order_id}{" " + translatePageText("không?") + " "}</p>
-                <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Việc chỉnh sửa sẽ tiêu hao") + " "}<strong>{translatePageText("1 lượt chỉnh sửa đơn")}</strong>{" " + translatePageText("trong tuần (hiện còn") + " "}<strong>{attemptsLeft}</strong>{" " + translatePageText("lượt). Đơn không cần thanh toán lại, phí ship vẫn thu riêng khi nhận hàng.") + " "}</p>
+                <p className="text-gray-700 mb-3">{i18n.t("Bạn có chắc muốn lưu các thay đổi cho đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}{bill?.order_stt || bill?.order_id}{" " + i18n.t("không?", { ns: 'legacy', keySeparator: false }) + " "}</p>
+                <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{i18n.t("Việc chỉnh sửa sẽ tiêu hao", { ns: 'legacy', keySeparator: false }) + " "}<strong>{i18n.t("1 lượt chỉnh sửa đơn", { ns: 'legacy', keySeparator: false })}</strong>{" " + i18n.t("trong tuần (hiện còn", { ns: 'legacy', keySeparator: false }) + " "}<strong>{attemptsLeft}</strong>{" " + i18n.t("lượt). Đơn không cần thanh toán lại, phí ship vẫn thu riêng khi nhận hàng.", { ns: 'legacy', keySeparator: false }) + " "}</p>
             </Modal>
         </>
     );

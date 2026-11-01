@@ -1,8 +1,8 @@
+import i18n from '../../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../../services/api';
 import { ErrorMessage, TableLoading } from '../../../components/Shared';
 import { YEAR_OPTIONS, fmtMoney, extractError } from './helpers';
-import { translatePageText, translateSeededEventName } from '../../../pageTextTranslations';
 
 const fmtDate = (s) => {
     const [y, m, d] = String(s).split('-');
@@ -33,7 +33,7 @@ const HolidaysSection = () => {
                 if (!cancelled) setRows(res?.data?.data || []);
             } catch (err) {
                 if (!cancelled) {
-                    setError(extractError(err, translatePageText("Lỗi tải bảng ngày lễ")));
+                    setError(extractError(err, i18n.t("Lỗi tải bảng ngày lễ", { ns: 'legacy', keySeparator: false })));
                     setRows([]);
                 }
             } finally {
@@ -65,17 +65,17 @@ const HolidaysSection = () => {
                         <thead className="bg-red-600 text-white">
                             <tr>
                                 <th className="px-3 py-2 text-left">STT</th>
-                                <th className="px-3 py-2 text-left">{translatePageText("Tên ngày nghỉ lễ")}</th>
-                                <th className="px-3 py-2 text-left">{translatePageText("Ngày")}</th>
-                                <th className="px-3 py-2 text-right">{translatePageText("Tổng doanh thu")}</th>
-                                <th className="px-3 py-2 text-right">{translatePageText("Tổng số đơn")}</th>
+                                <th className="px-3 py-2 text-left">{i18n.t("Tên ngày nghỉ lễ", { ns: 'legacy', keySeparator: false })}</th>
+                                <th className="px-3 py-2 text-left">{i18n.t("Ngày", { ns: 'legacy', keySeparator: false })}</th>
+                                <th className="px-3 py-2 text-right">{i18n.t("Tổng doanh thu", { ns: 'legacy', keySeparator: false })}</th>
+                                <th className="px-3 py-2 text-right">{i18n.t("Tổng số đơn", { ns: 'legacy', keySeparator: false })}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {rows.map((r, idx) => (
                                 <tr key={`${r.name}-${r.start_date}`} className="border-b hover:bg-gray-50">
                                     <td className="px-3 py-2 font-bold text-red-600">{idx + 1}</td>
-                                    <td className="px-3 py-2 font-semibold">{translateSeededEventName(r.name)}</td>
+                                    <td className="px-3 py-2 font-semibold">{i18n.t(r.name, { ns: 'legacy', keySeparator: false })}</td>
                                     <td className="px-3 py-2 whitespace-nowrap">{dateText(r)}</td>
                                     <td className="px-3 py-2 text-right font-bold">{fmtMoney(r.revenue)}</td>
                                     <td className="px-3 py-2 text-right">{Number(r.orders).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}</td>
@@ -85,7 +85,7 @@ const HolidaysSection = () => {
                     </table>
                 </div>
             ) : (
-                <div className="p-6 text-center text-gray-500">{translatePageText("Không có dữ liệu")}</div>
+                <div className="p-6 text-center text-gray-500">{i18n.t("Không có dữ liệu", { ns: 'legacy', keySeparator: false })}</div>
             )}
         </div>
     );

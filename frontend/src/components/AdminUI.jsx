@@ -1,5 +1,5 @@
+import i18n from '../i18n.js';
 import React from 'react';
-import { translatePageText } from '../pageTextTranslations';
 
 // Khung chung cho mọi trang admin: tiêu đề + mô tả ngắn + vùng nút bên phải
 export const AdminPageShell = ({ title, description, actions, children }) => (
@@ -8,11 +8,11 @@ export const AdminPageShell = ({ title, description, actions, children }) => (
             <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
                 <div>
                     <h1 className="text-3xl font-bold text-red-600">
-                        {typeof title === 'string' ? translatePageText(title) : title}
+                        {typeof title === 'string' ? i18n.t(title, { ns: 'legacy', keySeparator: false }) : title}
                     </h1>
                     {description && (
                         <p className="mt-1 text-sm text-gray-500">
-                            {typeof description === 'string' ? translatePageText(description) : description}
+                            {typeof description === 'string' ? i18n.t(description, { ns: 'legacy', keySeparator: false }) : description}
                         </p>
                     )}
                 </div>
@@ -50,7 +50,7 @@ export const StatCard = ({ label, value, icon = 'fa-chart-simple', tone = 'gray'
             </div>
             <div className="min-w-0">
                 <p className="text-xs text-gray-500 truncate">
-                    {typeof label === 'string' ? translatePageText(label) : label}
+                    {typeof label === 'string' ? i18n.t(label, { ns: 'legacy', keySeparator: false }) : label}
                 </p>
                 <p className={`text-2xl font-bold leading-tight ${t.text}`}>{value ?? 0}</p>
             </div>

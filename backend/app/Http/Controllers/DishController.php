@@ -8,9 +8,11 @@ use Illuminate\Http\Request;
 use App\Models\Dish;
 use App\Models\DishIngredientRule;
 use App\Models\Ingredient;
+use App\Models\IngredientReservation;
 use App\Models\IngredientStock;
 use App\Models\OrderItem;
 use App\Services\GeminiChatbotService;
+use App\Services\DishIngredientAvailabilityService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -143,6 +145,11 @@ class DishController extends Controller
             }
 
             $pantryIngredients = Ingredient::query()
+                ->where(function ($query): void {
+                    $query->where('is_active', true)
+                        ->orWhereHas('stocks')
+                        ->orWhereHas('dishRules');
+                })
                 ->orderBy('ingredient_id')
                 ->get()
                 ->map(fn (Ingredient $ingredient): array => [
@@ -218,6 +225,7 @@ class DishController extends Controller
             $resolved = [];
             foreach ($data['ingredients'] as $item) {
                 $sourceName = trim($item[$nameField]);
+                $createdForConfirmation = false;
                 $match = isset($item['ingredient_id'])
                     ? $catalog->first(fn (Ingredient $ingredient): bool =>
                         (int) $ingredient->ingredient_id === (int) $item['ingredient_id']
@@ -245,18 +253,12 @@ class DishController extends Controller
                         'ingredient_group' => 'other',
                         'aliases' => [$sourceName],
                         'is_add_on' => $item['role'] === 'optional',
-                        'is_active' => true,
+                        // Keep a newly confirmed draft out of stock/catalog listings
+                        // until the dish transaction actually commits.
+                        'is_active' => false,
                     ]);
                     $catalog->push($match);
-                } else {
-                    $sourceColumn = $language === 'en' ? 'ingredient_name' : 'ingredient_name_vi';
-                    $aliases = $match->aliases ?? [];
-                    $aliases[] = $sourceName;
-                    $match->fill([
-                        $sourceColumn => $match->{$sourceColumn} ?: $sourceName,
-                        'aliases' => array_values(array_unique($aliases)),
-                        ...(!$match->is_active ? ['is_active' => true] : []),
-                    ])->save();
+                    $createdForConfirmation = true;
                 }
 
                 $id = (int) $match->ingredient_id;
@@ -271,6 +273,7 @@ class DishController extends Controller
                     $nameField => $this->canonicalIngredientName($match, $language) ?: $sourceName,
                     'name' => $sourceName,
                     'role' => $item['role'],
+                    'created_in_confirmation' => $createdForConfirmation,
                 ];
             }
 
@@ -278,6 +281,43 @@ class DishController extends Controller
         });
 
         return response()->json(['success' => true, 'ingredients' => $confirmed]);
+    }
+
+    public function discardConfirmedIngredients(Request $request)
+    {
+        $data = $request->validate([
+            'ingredient_ids' => 'required|array|max:40',
+            'ingredient_ids.*' => 'integer|distinct',
+        ]);
+        $ingredientIds = array_map('intval', $data['ingredient_ids']);
+        $deleted = DB::transaction(function () use ($ingredientIds): int {
+            $discardableIds = Ingredient::query()
+                ->whereIn('ingredient_id', $ingredientIds)
+                ->where('is_active', false)
+                ->orderBy('ingredient_id')
+                ->lockForUpdate()
+                ->pluck('ingredient_id')->all();
+            if ($discardableIds === []) return 0;
+
+            $usedByDish = DishIngredientRule::query()
+                ->whereIn('ingredient_id', $discardableIds)
+                ->pluck('ingredient_id')->all();
+            $hasStock = IngredientStock::query()
+                ->whereIn('ingredient_id', $discardableIds)
+                ->pluck('ingredient_id')->all();
+            $hasReservation = IngredientReservation::query()
+                ->whereIn('ingredient_id', $discardableIds)
+                ->pluck('ingredient_id')->all();
+            $protectedIds = array_unique([...$usedByDish, ...$hasStock, ...$hasReservation]);
+            $discardableIds = array_values(array_diff($discardableIds, $protectedIds));
+
+            return $discardableIds === [] ? 0 : Ingredient::query()
+                ->whereIn('ingredient_id', $discardableIds)
+                ->where('is_active', false)
+                ->delete();
+        });
+
+        return response()->json(['success' => true, 'deleted_count' => $deleted]);
     }
 
     public function previewDishRecipe(Request $request, GeminiChatbotService $gemini)
@@ -292,7 +332,7 @@ class DishController extends Controller
             'ingredient_names.*.name' => 'required_with:ingredient_names|string|max:255',
         ]);
         $language = $data['language'] ?? 'vi';
-        $ingredients = Ingredient::query()->where('is_active', true)
+        $ingredients = Ingredient::query()
             ->whereIn('ingredient_id', $data['ingredient_ids'])
             ->orderBy('ingredient_id')->get();
         if ($ingredients->count() !== count($data['ingredient_ids'])) {
@@ -358,7 +398,7 @@ class DishController extends Controller
         ]);
 
         $selected = collect($validated['ingredients'])->keyBy(fn (array $item) => (int) $item['ingredient_id']);
-        $ingredients = Ingredient::query()->where('is_active', true)
+        $ingredients = Ingredient::query()
             ->whereIn('ingredient_id', $selected->keys())
             ->orderBy('ingredient_id')->get();
         if ($ingredients->count() !== $selected->count()) {
@@ -393,7 +433,8 @@ class DishController extends Controller
                 $ingredients,
                 $sourceIngredientNames->all(),
                 $language,
-                $gemini
+                $gemini,
+                $this->splitTranslatedIngredientNames($translated['ingredients'], $ingredients->count())
             );
             $source = [
                 'dish_name' => $sourceName,
@@ -416,7 +457,7 @@ class DishController extends Controller
             report($exception);
             return response()->json([
                 'success' => false,
-                'code' => 'TRANSLATION_UNAVAILABLE',
+                'code' => 'translation_unavailable',
                 'message' => 'Không thể tạo bản dịch song ngữ. Món ăn chưa được tạo; vui lòng thử lại.',
             ], 503);
         }
@@ -447,7 +488,8 @@ class DishController extends Controller
                     'price' => $validated['price'],
                     'image_url' => 'pending.jpg',
                     'is_bestseller' => false,
-                    'is_active' => true,
+                    // New menu items require an explicit admin approval before sale.
+                    'is_active' => false,
                     'ingredients' => $ingredientsVi,
                     'ingredients_en' => $ingredientsEn,
                     'recipe_instructions' => $vietnamese['recipe_instructions'],
@@ -483,6 +525,10 @@ class DishController extends Controller
                         'sort_order' => $index,
                     ]);
                 }
+
+                app(DishIngredientAvailabilityService::class)->syncForIngredientIds(
+                    collect($validated['ingredients'])->pluck('ingredient_id')->all()
+                );
 
                 return $dish;
             });
@@ -550,7 +596,7 @@ class DishController extends Controller
     {
         return response()->json([
             'success' => false,
-            'code' => 'DISH_NAME_DUPLICATE',
+            'code' => 'dish_name_duplicate',
             'message' => 'Tên món tiếng Việt đã tồn tại. Vui lòng chọn tên khác.',
         ], 422);
     }
@@ -587,7 +633,8 @@ class DishController extends Controller
         \Illuminate\Database\Eloquent\Collection $ingredients,
         array $sourceNames,
         string $sourceLanguage,
-        GeminiChatbotService $gemini
+        GeminiChatbotService $gemini,
+        ?array $translatedNames = null
     ): array {
         $targetColumn = $sourceLanguage === 'vi' ? 'ingredient_name' : 'ingredient_name_vi';
         $missing = [];
@@ -597,12 +644,27 @@ class DishController extends Controller
                 $missing[] = [
                     'ingredient_id' => (int) $ingredient->ingredient_id,
                     'source_name' => $sourceNames[$index],
+                    'index' => $index,
                 ];
             }
         }
 
         if ($missing === []) {
             return [];
+        }
+
+        if ($translatedNames !== null && count($translatedNames) === $ingredients->count()) {
+            $result = [];
+            foreach ($missing as $item) {
+                $translatedName = trim((string) ($translatedNames[$item['index']] ?? ''));
+                if ($translatedName !== '') {
+                    $result[$item['ingredient_id']] = $translatedName;
+                }
+            }
+
+            if (count($result) === count($missing)) {
+                return $result;
+            }
         }
 
         $translated = $gemini->translateIngredientNames(
@@ -616,6 +678,16 @@ class DishController extends Controller
         }
 
         return $result;
+    }
+
+    private function splitTranslatedIngredientNames(string $translatedIngredients, int $expectedCount): ?array
+    {
+        $names = array_values(array_filter(
+            array_map('trim', explode(',', $translatedIngredients)),
+            static fn (string $name): bool => $name !== ''
+        ));
+
+        return count($names) === $expectedCount ? $names : null;
     }
 
     private function normalizeIngredientName(string $name): string
@@ -691,7 +763,7 @@ class DishController extends Controller
             } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
                 report($exception);
                 return response()->json([
-                    'code' => 'TRANSLATION_UNAVAILABLE',
+                    'code' => 'translation_unavailable',
                     'message' => 'Không thể đồng bộ bản dịch song ngữ. Món ăn chưa được cập nhật; vui lòng thử lại.',
                 ], 503);
             }
@@ -809,7 +881,7 @@ class DishController extends Controller
 
         $selected = collect($validated['ingredients'])
             ->keyBy(fn (array $item) => (int) $item['ingredient_id']);
-        $ingredients = Ingredient::query()->where('is_active', true)
+        $ingredients = Ingredient::query()
             ->whereIn('ingredient_id', $selected->keys())
             ->orderBy('ingredient_id')->get();
         if ($ingredients->count() !== $selected->count()) {
@@ -838,7 +910,8 @@ class DishController extends Controller
                 $ingredients,
                 $sourceIngredientNames->all(),
                 $language,
-                $gemini
+                $gemini,
+                $this->splitTranslatedIngredientNames($translated['ingredients'], $ingredients->count())
             );
             $source = [
                 'dish_name' => $dishName,
@@ -864,7 +937,7 @@ class DishController extends Controller
         } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
             report($exception);
             return response()->json([
-                'code' => 'TRANSLATION_UNAVAILABLE',
+                'code' => 'translation_unavailable',
                 'message' => 'Không thể tạo bản tiếng Anh mới. Món ăn chưa được cập nhật; vui lòng thử lại.',
             ], 503);
         }
@@ -951,16 +1024,6 @@ class DishController extends Controller
                         ->whereIn('ingredient_id', $removedIngredientIds)
                         ->delete();
 
-                    foreach ($removedIngredientIds as $ingredientId) {
-                        $usedByAnotherDish = DishIngredientRule::query()
-                            ->where('ingredient_id', $ingredientId)
-                            ->exists();
-                        if (!$usedByAnotherDish) {
-                            Ingredient::query()
-                                ->where('ingredient_id', $ingredientId)
-                                ->update(['is_active' => false]);
-                        }
-                    }
                 }
 
                 $lockedDish->update([
@@ -973,6 +1036,11 @@ class DishController extends Controller
                     'recipe_instructions' => $recipeVi,
                     'recipe_instructions_en' => $recipeEn,
                     ...($request->hasFile('image') ? ['image_url' => $dish->dish_id . '.jpg'] : []),
+                ]);
+
+                app(DishIngredientAvailabilityService::class)->syncForIngredientIds([
+                    ...$oldIngredientIds,
+                    ...$newIngredientIds,
                 ]);
             });
 
@@ -1052,7 +1120,21 @@ class DishController extends Controller
      */
     public function toggleStatus($id)
     {
-        $dish = Dish::find($id);
+        $dish = DB::transaction(function () use ($id): ?Dish {
+            $dish = Dish::query()->lockForUpdate()->find($id);
+            if (!$dish) {
+                return null;
+            }
+
+            $dish->is_active = !$dish->is_active;
+            $dish->save();
+
+            app(DishIngredientAvailabilityService::class)->syncForIngredientIds(
+                $dish->ingredientRules()->pluck('ingredient_id')->all()
+            );
+
+            return $dish;
+        });
 
         if (!$dish) {
             return response()->json([
@@ -1061,9 +1143,6 @@ class DishController extends Controller
                 'message' => 'Không tìm thấy món ăn này.'
             ], 404);
         }
-
-        $dish->is_active = !$dish->is_active;
-        $dish->save();
 
         return response()->json([
             'success' => true,
@@ -1111,7 +1190,14 @@ class DishController extends Controller
 
             // Xóa record trong DB. Nếu vẫn còn bị chặn bởi khóa ngoại nào khác phát sinh
             // sau này thì sẽ ném exception ngay tại đây -> file ảnh chưa bị động tới, vẫn an toàn.
-            $dish->delete();
+            $ingredientIds = [];
+            DB::transaction(function () use ($id, &$ingredientIds): void {
+                $dish = Dish::query()->lockForUpdate()->findOrFail($id);
+                $ingredientIds = $dish->ingredientRules()->pluck('ingredient_id')->all();
+                $dish->delete();
+
+                app(DishIngredientAvailabilityService::class)->syncForIngredientIds($ingredientIds);
+            });
 
             // Chỉ xóa file ảnh SAU KHI đã chắc chắn xóa DB thành công
             if ($imageName) {

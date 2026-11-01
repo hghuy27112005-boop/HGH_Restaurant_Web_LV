@@ -1,7 +1,7 @@
+import i18n from '../i18n.js';
 import React from 'react';
 import { Modal } from './Shared';
 import { translateDishName } from '../dishTranslations';
-import { translatePageText } from '../pageTextTranslations';
 
 // Modal báo lỗi vượt định lượng dùng chung (giỏ hàng / đặt ship / đặt bàn):
 // - overLimit: [{ ingredient_name, requested, dish_names[] }] — nguyên liệu bị yêu cầu vượt 50
@@ -14,7 +14,7 @@ const IngredientLimitModal = ({
 }) => (
     <Modal
         isOpen={isOpen}
-        title={translatePageText("Vượt định lượng tối đa")}
+        title={i18n.t("Vượt định lượng tối đa", { ns: 'legacy', keySeparator: false })}
         onClose={onClose}
         cancelText="Đóng"
         className="max-w-2xl"
@@ -24,13 +24,13 @@ const IngredientLimitModal = ({
 
             {overLimit.length > 0 && (
                 <div>
-                    <p className="mb-2 text-gray-600">{translatePageText("Mỗi nguyên liệu chỉ dùng tối đa 50 phần cho một đơn. Nguyên liệu trùng giữa các món được cộng dồn.") + " "}</p>
+                    <p className="mb-2 text-gray-600">{i18n.t("Mỗi nguyên liệu chỉ dùng tối đa 50 phần cho một đơn. Nguyên liệu trùng giữa các món được cộng dồn.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                     <table className="w-full text-sm bg-white border border-black border-t-4 border-t-red-600">
                         <thead>
                             <tr>
-                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">{translatePageText("Nguyên liệu")}</th>
-                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">{translatePageText("Các món dùng nguyên liệu này")}</th>
-                                <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-black">{translatePageText("Tổng cần")}</th>
+                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">{i18n.t("Nguyên liệu", { ns: 'legacy', keySeparator: false })}</th>
+                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">{i18n.t("Các món dùng nguyên liệu này", { ns: 'legacy', keySeparator: false })}</th>
+                                <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-black">{i18n.t("Tổng cần", { ns: 'legacy', keySeparator: false })}</th>
                             </tr>
                         </thead>
                         <tbody>

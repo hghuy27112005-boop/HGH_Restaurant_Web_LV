@@ -4,9 +4,9 @@ import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal, ShippingProgress
 import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from '../Menu/DishDetailPage';
-import { getCartKey, getSessionKey } from '../../utils/cartStorage';
+import { getCartKey, getSessionKey, hydrateLegacyCartNames } from '../../utils/cartStorage';
 import EditDeliveryModal from './EditDeliveryModal';
-import { translatePageText, translateModifySuccessMessage } from '../../pageTextTranslations';
+import { getModifySuccessMessage } from '../../i18nMessageFormatters';
 import { translateDishName } from '../../dishTranslations';
 import i18n from '../../i18n';
 
@@ -14,22 +14,22 @@ const MAX_ITEM_QUANTITY = 50; // giới hạn số lượng mỗi dòng trong gi
 
 // 6 trạng thái của đơn ship (khớp enum delivery_status ở backend)
 const DELIVERY_STATUS_INFO = {
-    waiting_payment: { get label() { return translatePageText("⏳ Chờ thanh toán"); }, variant: 'warning' },
-    scheduled: { get label() { return translatePageText("📅 Đã lên lịch"); }, variant: 'info' },
-    preparing: { get label() { return translatePageText("🍳 Đang chuẩn bị"); }, variant: 'info' },
-    shipping: { get label() { return translatePageText("🚗 Đang giao hàng"); }, variant: 'info' },
-    completed: { get label() { return translatePageText("✓ Đã giao hàng"); }, variant: 'success' },
-    cancelled: { get label() { return translatePageText("✕ Đã hủy"); }, variant: 'danger' },
+    waiting_payment: { get label() { return i18n.t("⏳ Chờ thanh toán", { ns: 'legacy', keySeparator: false }); }, variant: 'warning' },
+    scheduled: { get label() { return i18n.t("📅 Đã lên lịch", { ns: 'legacy', keySeparator: false }); }, variant: 'info' },
+    preparing: { get label() { return i18n.t("🍳 Đang chuẩn bị", { ns: 'legacy', keySeparator: false }); }, variant: 'info' },
+    shipping: { get label() { return i18n.t("🚗 Đang giao hàng", { ns: 'legacy', keySeparator: false }); }, variant: 'info' },
+    completed: { get label() { return i18n.t("✓ Đã giao hàng", { ns: 'legacy', keySeparator: false }); }, variant: 'success' },
+    cancelled: { get label() { return i18n.t("✕ Đã hủy", { ns: 'legacy', keySeparator: false }); }, variant: 'danger' },
 };
 
 const DELIVERY_STATUS_FILTERS = [
-    { id: 'all', get label() { return translatePageText("Tất cả"); } },
+    { id: 'all', get label() { return i18n.t("Tất cả", { ns: 'legacy', keySeparator: false }); } },
     // Không có nút "Chờ thanh toán": đơn chưa thanh toán chưa có Bill nên không hiện ở danh sách của khách.
-    { id: 'scheduled', get label() { return translatePageText("Đã lên lịch"); } },
-    { id: 'preparing', get label() { return translatePageText("Đang chuẩn bị"); } },
-    { id: 'shipping', get label() { return translatePageText("Đang giao hàng"); } },
-    { id: 'completed', get label() { return translatePageText("Đã giao hàng"); } },
-    { id: 'cancelled', get label() { return translatePageText("Đã hủy"); } },
+    { id: 'scheduled', get label() { return i18n.t("Đã lên lịch", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'preparing', get label() { return i18n.t("Đang chuẩn bị", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'shipping', get label() { return i18n.t("Đang giao hàng", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'completed', get label() { return i18n.t("Đã giao hàng", { ns: 'legacy', keySeparator: false }); } },
+    { id: 'cancelled', get label() { return i18n.t("Đã hủy", { ns: 'legacy', keySeparator: false }); } },
 ];
 
 const getTodayDateKey = () => {
@@ -135,7 +135,7 @@ const DeliveriesPage = () => {
     useEffect(() => {
         fetchDeliveries();
         const cart = JSON.parse(localStorage.getItem(getCartKey('delivery'))) || [];
-        setDeliveryCart(cart);
+        let cartToRestore = cart;
 
         // Khôi phục session nếu đã xác nhận thông tin trước đó
         const savedSession = sessionStorage.getItem(getSessionKey('delivery'));
@@ -152,14 +152,17 @@ const DeliveriesPage = () => {
                     if (session.orderSummary) setOrderSummary(session.orderSummary);
                     // 🔑 Restore cart từ session (trong case quay lại từ VNPay)
                     if (session.deliveryCart && session.deliveryCart.length > 0) {
-                        setDeliveryCart(session.deliveryCart);
-                        localStorage.setItem(getCartKey('delivery'), JSON.stringify(session.deliveryCart));
+                        cartToRestore = session.deliveryCart;
                     }
                 }
             } catch (e) {
                 sessionStorage.removeItem(getSessionKey('delivery'));
             }
         }
+        hydrateLegacyCartNames(cartToRestore).then((hydratedCart) => {
+            setDeliveryCart(hydratedCart);
+            localStorage.setItem(getCartKey('delivery'), JSON.stringify(hydratedCart));
+        });
     }, []);
 
     // Khi bấm Back từ VNPay, trình duyệt có thể khôi phục nguyên trang từ bfcache
@@ -188,7 +191,7 @@ const DeliveriesPage = () => {
             <>
                 <div>{translateDishName(item.dish_name_en ? { dish_name: dishName, dish_name_en: item.dish_name_en } : dishName)}</div>
                 {customizationName && (
-                    <div className="mt-1 text-xs text-gray-500">{translatePageText("Công thức thay thế:") + " "}{customizationName}</div>
+                    <div className="mt-1 text-xs text-gray-500">{i18n.t("Công thức thay thế:", { ns: 'legacy', keySeparator: false }) + " "}{customizationName}</div>
                 )}
             </>
         );
@@ -310,7 +313,7 @@ const DeliveriesPage = () => {
 
     const handleUseCurrentLocation = () => {
         if (!navigator.geolocation) {
-            showError(translatePageText("Trình duyệt của bạn không hỗ trợ lấy vị trí hiện tại."));
+            showError(i18n.t("Trình duyệt của bạn không hỗ trợ lấy vị trí hiện tại.", { ns: 'legacy', keySeparator: false }));
             return;
         }
 
@@ -337,7 +340,7 @@ const DeliveriesPage = () => {
             },
             () => {
                 setGpsLoading(false);
-                showError(translatePageText("Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí hoặc nhập địa chỉ thủ công."));
+                showError(i18n.t("Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí hoặc nhập địa chỉ thủ công.", { ns: 'legacy', keySeparator: false }));
             }
         );
     };
@@ -609,7 +612,9 @@ const DeliveriesPage = () => {
                 setPointsModalType('confirm');
             }
         } catch (err) {
-            setPointsErrorMessage('Không thể lấy thông tin điểm: ' + (err.response?.data?.message || err.message));
+            setPointsErrorMessage(i18n.t('orders.pointsLoadError', {
+                details: err.response?.data?.message || err.message,
+            }));
         }
     };
 
@@ -651,7 +656,7 @@ const DeliveriesPage = () => {
             const res = await userAPI.getProfile();
             const left = Number(res.data?.data?.cancel_attempts_left ?? 0);
             if (left <= 0) {
-                setCancelErrorMessage(translatePageText("Bạn đã hết lượt hủy đơn trong tuần này (tối đa 2 lượt/tuần, tính chung cho cả đặt bàn và đặt ship). Lượt hủy sẽ được làm mới vào thứ Hai tuần sau."));
+                setCancelErrorMessage(i18n.t("Bạn đã hết lượt hủy đơn trong tuần này (tối đa 2 lượt/tuần, tính chung cho cả đặt bàn và đặt ship). Lượt hủy sẽ được làm mới vào thứ Hai tuần sau.", { ns: 'legacy', keySeparator: false }));
                 return;
             }
             setCancelAttemptsLeft(left);
@@ -683,7 +688,7 @@ const DeliveriesPage = () => {
             const res = await userAPI.getProfile();
             const left = Number(res.data?.data?.modify_attempts_left ?? 0);
             if (left <= 0) {
-                setModifyErrorMessage(translatePageText("Bạn đã hết lượt chỉnh sửa đơn trong tuần này (tối đa 2 lượt/tuần). Lượt chỉnh sửa sẽ được làm mới vào thứ Hai tuần sau."));
+                setModifyErrorMessage(i18n.t("Bạn đã hết lượt chỉnh sửa đơn trong tuần này (tối đa 2 lượt/tuần). Lượt chỉnh sửa sẽ được làm mới vào thứ Hai tuần sau.", { ns: 'legacy', keySeparator: false }));
                 return;
             }
             setModifyAttemptsLeft(left);
@@ -701,7 +706,7 @@ const DeliveriesPage = () => {
         setEditModalOpen(false);
         setEditingBill(null);
         await fetchDeliveries();
-        setModifySuccessMessage(translateModifySuccessMessage('delivery', attemptsLeft));
+        setModifySuccessMessage(getModifySuccessMessage('delivery', attemptsLeft));
     };
 
     const confirmCancelOrder = async () => {
@@ -715,7 +720,7 @@ const DeliveriesPage = () => {
                 const res = await vnpayService.createRefundUrl({ order_id: cancelingBill.order_id });
                 window.location.href = res.data.payment_url;
             } else {
-                setCancelErrorMessage(translatePageText("Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ."));
+                setCancelErrorMessage(i18n.t("Không thể hủy đơn hàng này do phương thức thanh toán không hợp lệ.", { ns: 'legacy', keySeparator: false }));
             }
         } catch (err) {
             setCancelErrorMessage(err.response?.data?.message || err.message);
@@ -813,61 +818,61 @@ const DeliveriesPage = () => {
 
         return (
             <div className="bg-white border border-gray-200 rounded p-4 text-sm space-y-2 text-left">
-                <h4 className="font-bold text-gray-800 border-b pb-2">{translatePageText("Tóm tắt đơn hàng")}</h4>
+                <h4 className="font-bold text-gray-800 border-b pb-2">{i18n.t("Tóm tắt đơn hàng", { ns: 'legacy', keySeparator: false })}</h4>
                 <div className="flex justify-between gap-4">
-                    <span className="text-gray-600">{translatePageText("Địa chỉ giao hàng:")}</span>
+                    <span className="text-gray-600">{i18n.t("Địa chỉ giao hàng:", { ns: 'legacy', keySeparator: false })}</span>
                     <span className="font-semibold text-right">{orderSummary.address}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                    <span className="text-gray-600">{translatePageText("Tổng tiền món:")}</span>
-                    <span className="font-semibold">{cartTotal.toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                    <span className="text-gray-600">{i18n.t("Tổng tiền món:", { ns: 'legacy', keySeparator: false })}</span>
+                    <span className="font-semibold">{cartTotal.toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                    <span className="text-gray-600">{translatePageText("Phí ship (thu riêng khi nhận hàng):")}</span>
-                    <span className="font-semibold">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                    <span className="text-gray-600">{i18n.t("Phí ship (thu riêng khi nhận hàng):", { ns: 'legacy', keySeparator: false })}</span>
+                    <span className="font-semibold">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                    <span className="text-gray-600">{translatePageText("Khoảng cách / thời gian giao:")}</span>
-                    <span className="font-semibold">{orderSummary.distance_km} km / {orderSummary.duration_minutes}{" " + translatePageText("phút")}</span>
+                    <span className="text-gray-600">{i18n.t("Khoảng cách / thời gian giao:", { ns: 'legacy', keySeparator: false })}</span>
+                    <span className="font-semibold">{orderSummary.distance_km} km / {orderSummary.duration_minutes}{" " + i18n.t("phút", { ns: 'legacy', keySeparator: false })}</span>
                 </div>
                 {orderSummary.preferred_time && (
                     <div className="flex justify-between gap-4">
-                        <span className="text-gray-600">{translatePageText("Giờ hàng tới bạn chọn:")}</span>
+                        <span className="text-gray-600">{i18n.t("Giờ hàng tới bạn chọn:", { ns: 'legacy', keySeparator: false })}</span>
                         <span className="font-semibold">{orderSummary.preferred_time}</span>
                     </div>
                 )}
                 {hasFixedCooking ? (
                     <>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">{translatePageText("Bắt đầu nấu (dự kiến):")}</span>
+                            <span className="text-gray-600">{i18n.t("Bắt đầu nấu (dự kiến):", { ns: 'legacy', keySeparator: false })}</span>
                             <span className="font-semibold">{formatExpectedDateTime(cookingAt)}</span>
                         </div>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">{translatePageText("Bắt đầu giao (dự kiến):")}</span>
+                            <span className="text-gray-600">{i18n.t("Bắt đầu giao (dự kiến):", { ns: 'legacy', keySeparator: false })}</span>
                             <span className="font-semibold">{formatExpectedDateTime(shipAt)}</span>
                         </div>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">{translatePageText("Hàng tới (dự kiến):")}</span>
+                            <span className="text-gray-600">{i18n.t("Hàng tới (dự kiến):", { ns: 'legacy', keySeparator: false })}</span>
                             <span className="font-semibold">{formatExpectedDateTime(arrivalAt)}</span>
                         </div>
                     </>
                 ) : (
                     <>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">{translatePageText("Bắt đầu nấu:")}</span>
-                            <span className="font-semibold">{translatePageText("Ngay sau khi thanh toán")}</span>
+                            <span className="text-gray-600">{i18n.t("Bắt đầu nấu:", { ns: 'legacy', keySeparator: false })}</span>
+                            <span className="font-semibold">{i18n.t("Ngay sau khi thanh toán", { ns: 'legacy', keySeparator: false })}</span>
                         </div>
                         <div className="flex justify-between gap-4">
-                            <span className="text-gray-600">{translatePageText("Hàng tới (dự kiến):")}</span>
+                            <span className="text-gray-600">{i18n.t("Hàng tới (dự kiến):", { ns: 'legacy', keySeparator: false })}</span>
                             <span className="font-semibold">
                                 {totalMinutes != null
-                                    ? `${translatePageText("Sau khoảng")} ${totalMinutes} ${translatePageText("phút kể từ lúc thanh toán")}`
+                                    ? `${i18n.t("Sau khoảng", { ns: 'legacy', keySeparator: false })} ${totalMinutes} ${i18n.t("phút kể từ lúc thanh toán", { ns: 'legacy', keySeparator: false })}`
                                     : '—'}
                             </span>
                         </div>
                     </>
                 )}
-                <p className="text-xs text-gray-500 pt-1">{translatePageText("Lịch trên là dự kiến, hệ thống tính lại chính xác vào lúc bạn thanh toán thành công.")}</p>
+                <p className="text-xs text-gray-500 pt-1">{i18n.t("Lịch trên là dự kiến, hệ thống tính lại chính xác vào lúc bạn thanh toán thành công.", { ns: 'legacy', keySeparator: false })}</p>
             </div>
         );
     };
@@ -887,24 +892,24 @@ const DeliveriesPage = () => {
 
                 {/* Upper Half: Đặt hàng cố định */}
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 border-t-4 border-t-red-600 p-4 sm:p-6 mb-8">
-                    <h2 className="text-2xl font-bold mb-4">{translatePageText("Góc đặt hàng (Ship)")}</h2>
+                    <h2 className="text-2xl font-bold mb-4">{i18n.t("Góc đặt hàng (Ship)", { ns: 'legacy', keySeparator: false })}</h2>
 
                     {deliveryCart.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                             <i className="fas fa-shopping-basket text-4xl mb-3 text-gray-300 block"></i>
-                            <p className="text-lg">{translatePageText("Quầy đang trống, vui lòng quay lại Menu thêm món vào giỏ hàng.")}</p>
-                            <button onClick={() => window.location.href = '/menu'} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">{translatePageText("Đến Menu")}</button>
+                            <p className="text-lg">{i18n.t("Quầy đang trống, vui lòng quay lại Menu thêm món vào giỏ hàng.", { ns: 'legacy', keySeparator: false })}</p>
+                            <button onClick={() => window.location.href = '/menu'} className="mt-4 bg-red-600 text-white px-4 py-2 rounded">{i18n.t("Đến Menu", { ns: 'legacy', keySeparator: false })}</button>
                         </div>
                     ) : (
                         <div className="grid md:grid-cols-2 gap-6 md:gap-8">
                             <div>
-                                <h3 className="font-semibold mb-2">{translatePageText("Món đã chọn:")}</h3>
+                                <h3 className="font-semibold mb-2">{i18n.t("Món đã chọn:", { ns: 'legacy', keySeparator: false })}</h3>
                                 <table className="w-full mb-4 text-sm bg-white border border-gray-300 border-t-4 border-t-red-600">
                                     <thead>
                                         <tr>
-                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">{translatePageText("Món")}</th>
-                                            <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-gray-300">{translatePageText("Số lượng")}</th>
-                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">{translatePageText("Thành tiền")}</th>
+                                            <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-gray-300">{i18n.t("Món", { ns: 'legacy', keySeparator: false })}</th>
+                                            <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-gray-300">{i18n.t("Số lượng", { ns: 'legacy', keySeparator: false })}</th>
+                                            <th className="text-right py-2 px-3 font-semibold text-gray-700 border border-gray-300">{i18n.t("Thành tiền", { ns: 'legacy', keySeparator: false })}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -924,7 +929,7 @@ const DeliveriesPage = () => {
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, 1)}
                                                             disabled={item.quantity >= MAX_ITEM_QUANTITY}
-                                                            title={item.quantity >= MAX_ITEM_QUANTITY ? translatePageText("Tối đa 50 phần mỗi món") : undefined}
+                                                            title={item.quantity >= MAX_ITEM_QUANTITY ? i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false }) : undefined}
                                                             style={checkoutStage !== 'info' ? { display: 'none' } : (item.quantity >= MAX_ITEM_QUANTITY ? { opacity: 0.4, cursor: 'not-allowed' } : undefined)}
                                                             className="w-6 h-6 rounded-full border border-red-600 text-red-600 font-bold flex items-center justify-center hover:bg-red-600 hover:text-white transition"
                                                         >
@@ -933,15 +938,15 @@ const DeliveriesPage = () => {
                                                     </div>
                                                 </td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                    {(item.price * item.quantity).toLocaleString('vi-VN')}{translatePageText("đ") + " "}</td>
+                                                    {(item.price * item.quantity).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                     <tfoot>
                                         <tr>
-                                            <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-gray-300">{translatePageText("Tổng cộng:")}</td>
+                                            <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-gray-300">{i18n.t("Tổng cộng:", { ns: 'legacy', keySeparator: false })}</td>
                                             <td className="py-2 px-3 text-right font-bold text-lg text-red-600 border border-gray-300">
-                                                {cartTotal.toLocaleString('vi-VN')}{translatePageText("đ") + " "}</td>
+                                                {cartTotal.toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -949,7 +954,7 @@ const DeliveriesPage = () => {
                                     onClick={() => setDeleteOrderModalOpen(true)}
                                     className="mt-4 px-4 py-2 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
                                     style={checkoutStage !== 'info' ? { display: 'none' } : undefined}
-                                >{translatePageText("Xóa đơn hàng") + " "}</button>
+                                >{i18n.t("Xóa đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}</button>
                             </div>
                             <div>
                                 <>
@@ -959,14 +964,14 @@ const DeliveriesPage = () => {
                                 >
                                     <form onSubmit={handleConfirmInfo} className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-semibold mb-1">{translatePageText("Địa chỉ giao hàng")}</label>
+                                            <label className="block text-sm font-semibold mb-1">{i18n.t("Địa chỉ giao hàng", { ns: 'legacy', keySeparator: false })}</label>
                                             <input
                                                 type="text"
                                                 required
                                                 value={address}
                                                 onChange={e => setAddress(e.target.value)}
                                                 className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
-                                                placeholder={translatePageText("Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)...")}
+                                                placeholder={i18n.t("Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)...", { ns: 'legacy', keySeparator: false })}
                                             />
                                             <button
                                                 type="button"
@@ -975,12 +980,12 @@ const DeliveriesPage = () => {
                                                 className="mt-2 text-sm font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-50 flex items-center gap-1"
                                             >
                                                 <i className={`fas ${gpsLoading ? 'fa-spinner fa-spin' : 'fa-location-crosshairs'}`}></i>
-                                                {gpsLoading ? translatePageText("Đang lấy vị trí...") : translatePageText("Tự động lấy vị trí hiện tại")}
+                                                {gpsLoading ? i18n.t("Đang lấy vị trí...", { ns: 'legacy', keySeparator: false }) : i18n.t("Tự động lấy vị trí hiện tại", { ns: 'legacy', keySeparator: false })}
                                             </button>
                                         </div>
 
                                         {shippingLoading && (
-                                            <p className="text-sm text-gray-500">{translatePageText("Đang kiểm tra địa chỉ...")}</p>
+                                            <p className="text-sm text-gray-500">{i18n.t("Đang kiểm tra địa chỉ...", { ns: 'legacy', keySeparator: false })}</p>
                                         )}
 
                                         {!shippingLoading && shippingError && (
@@ -990,16 +995,16 @@ const DeliveriesPage = () => {
                                         {checkoutStage === 'info' && !shippingLoading && shippingPreview && previewedAddress === address.trim() && (
                                             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm space-y-1">
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">{translatePageText("Khoảng cách:")}</span>
+                                                    <span className="text-gray-600">{i18n.t("Khoảng cách:", { ns: 'legacy', keySeparator: false })}</span>
                                                     <span className="font-semibold">{shippingPreview.distance_km} km</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">{translatePageText("Thời gian giao dự kiến:")}</span>
-                                                    <span className="font-semibold">{shippingPreview.duration_minutes}{" " + translatePageText("phút")}</span>
+                                                    <span className="text-gray-600">{i18n.t("Thời gian giao dự kiến:", { ns: 'legacy', keySeparator: false })}</span>
+                                                    <span className="font-semibold">{shippingPreview.duration_minutes}{" " + i18n.t("phút", { ns: 'legacy', keySeparator: false })}</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">{translatePageText("Phí ship (thu riêng khi nhận hàng):")}</span>
-                                                    <span className="font-bold text-red-600">{shippingPreview.shipping_fee.toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                                                    <span className="text-gray-600">{i18n.t("Phí ship (thu riêng khi nhận hàng):", { ns: 'legacy', keySeparator: false })}</span>
+                                                    <span className="font-bold text-red-600">{shippingPreview.shipping_fee.toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -1007,16 +1012,16 @@ const DeliveriesPage = () => {
                                         {checkoutStage !== 'info' && orderSummary && (
                                             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm space-y-1">
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">{translatePageText("Khoảng cách:")}</span>
+                                                    <span className="text-gray-600">{i18n.t("Khoảng cách:", { ns: 'legacy', keySeparator: false })}</span>
                                                     <span className="font-semibold">{orderSummary.distance_km} km</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">{translatePageText("Thời gian giao dự kiến:")}</span>
-                                                    <span className="font-semibold">{orderSummary.duration_minutes}{" " + translatePageText("phút")}</span>
+                                                    <span className="text-gray-600">{i18n.t("Thời gian giao dự kiến:", { ns: 'legacy', keySeparator: false })}</span>
+                                                    <span className="font-semibold">{orderSummary.duration_minutes}{" " + i18n.t("phút", { ns: 'legacy', keySeparator: false })}</span>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <span className="text-gray-600">{translatePageText("Phí ship (thu riêng khi nhận hàng):")}</span>
-                                                    <span className="font-bold text-red-600">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                                                    <span className="text-gray-600">{i18n.t("Phí ship (thu riêng khi nhận hàng):", { ns: 'legacy', keySeparator: false })}</span>
+                                                    <span className="font-bold text-red-600">{Number(orderSummary.shipping_fee ?? 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                                                 </div>
                                             </div>
                                         )}
@@ -1024,17 +1029,17 @@ const DeliveriesPage = () => {
                                         <div className="flex flex-wrap items-start justify-between gap-4 pt-3">
                                             <div>
                                                 <div className="flex items-center gap-3">
-                                                    <span className="font-semibold text-gray-700">{translatePageText("Thời điểm giao hàng mong muốn")}</span>
+                                                    <span className="font-semibold text-gray-700">{i18n.t("Thời điểm giao hàng mong muốn", { ns: 'legacy', keySeparator: false })}</span>
                                                     <button
                                                         type="button"
                                                         onClick={() => setPreferredDeliveryEnabled(value => !value)}
                                                         className={`relative inline-flex items-center w-14 h-7 rounded-full border-2 border-white shadow-inner transition-colors duration-200 flex-shrink-0 ${preferredDeliveryEnabled ? 'bg-green-500' : 'bg-gray-400'}`}
-                                                        aria-label={translatePageText("Bật thời điểm giao hàng mong muốn")}
+                                                        aria-label={i18n.t("Bật thời điểm giao hàng mong muốn", { ns: 'legacy', keySeparator: false })}
                                                     >
                                                         <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${preferredDeliveryEnabled ? 'translate-x-8' : 'translate-x-1'}`} />
                                                     </button>
                                                 </div>
-                                                <p className="mt-1 text-xs text-gray-500">{translatePageText("Bạn muốn hàng được giao tới lúc mấy giờ?")}</p>
+                                                <p className="mt-1 text-xs text-gray-500">{i18n.t("Bạn muốn hàng được giao tới lúc mấy giờ?", { ns: 'legacy', keySeparator: false })}</p>
                                             </div>
                                             {preferredDeliveryEnabled && (
                                                 <div>
@@ -1043,7 +1048,7 @@ const DeliveriesPage = () => {
                                                         <span className="font-bold text-gray-500">:</span>
                                                         <input type="text" maxLength="2" inputMode="numeric" placeholder="30" value={preferredTimeM} onChange={e => setPreferredTimeM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                                     </div>
-                                                    <p className="mt-1 text-xs text-gray-500">{translatePageText("Sớm nhất:") + " "}{getMinimumPreferredTime()}{" " + translatePageText("— muộn nhất: 22:00")}</p>
+                                                    <p className="mt-1 text-xs text-gray-500">{i18n.t("Sớm nhất:", { ns: 'legacy', keySeparator: false }) + " "}{getMinimumPreferredTime()}{" " + i18n.t("— muộn nhất: 22:00", { ns: 'legacy', keySeparator: false })}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -1052,27 +1057,27 @@ const DeliveriesPage = () => {
                                             type="submit"
                                             disabled={!address.trim() || deliveryCart.length === 0 || !shippingPreview || previewedAddress !== address.trim() || shippingLoading || scheduleTimeRef.current !== previewPreferredTime}
                                             className="w-full bg-red-600 text-white font-bold py-3 rounded hover:bg-red-700 transition disabled:opacity-50 mt-4"
-                                        >{translatePageText("Xác nhận thông tin đặt hàng") + " "}</button>
+                                        >{i18n.t("Xác nhận thông tin đặt hàng", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     </form>
                                 </fieldset>
                                 <Modal
                                     isOpen={checkoutStage === 'payment'}
-                                    title={translatePageText("Thanh toán đơn hàng")}
+                                    title={i18n.t("Thanh toán đơn hàng", { ns: 'legacy', keySeparator: false })}
                                     onClose={closePaymentModal}
                                     showHeaderClose
                                     showFooterClose={false}
                                 >
                                     <div className="space-y-4">
                                         <div className="text-center">
-                                            <h3 className="font-bold text-lg mb-2">{translatePageText("Thanh toán đơn hàng")}</h3>
-                                            <p className="text-gray-600 text-sm mb-4">{translatePageText("Mọi thông tin đã được chốt. Vui lòng tiến hành thanh toán để hoàn tất.")}</p>
+                                            <h3 className="font-bold text-lg mb-2">{i18n.t("Thanh toán đơn hàng", { ns: 'legacy', keySeparator: false })}</h3>
+                                            <p className="text-gray-600 text-sm mb-4">{i18n.t("Mọi thông tin đã được chốt. Vui lòng tiến hành thanh toán để hoàn tất.", { ns: 'legacy', keySeparator: false })}</p>
                                         </div>
                                         {renderOrderSummary()}
                                         {saleOffEvent && (
                                             <div className="flex items-center justify-between mb-2 px-1">
                                                 <div>
-                                                    <p className="font-semibold text-gray-700 text-sm">{translatePageText("Sử dụng giảm giá của sự kiện")}</p>
-                                                    <p className="text-xs text-gray-500">{translatePageText("Giảm") + " "}{Number(saleOffEvent.sale_off_percentage)}{translatePageText("% — còn") + " "}{getEffectiveTotal().toLocaleString('vi-VN')}{translatePageText("đ") + " "}</p>
+                                                    <p className="font-semibold text-gray-700 text-sm">{i18n.t("Sử dụng giảm giá của sự kiện", { ns: 'legacy', keySeparator: false })}</p>
+                                                    <p className="text-xs text-gray-500">{i18n.t("Giảm", { ns: 'legacy', keySeparator: false }) + " "}{Number(saleOffEvent.sale_off_percentage)}{i18n.t("% — còn", { ns: 'legacy', keySeparator: false }) + " "}{getEffectiveTotal().toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</p>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -1097,9 +1102,9 @@ const DeliveriesPage = () => {
                                                 }`}
                                         >
                                             {payingWith === 'vnpay' ? (
-                                                <><i className="fas fa-spinner fa-spin"></i>{" " + translatePageText("Đang xử lý...")}</>
+                                                <><i className="fas fa-spinner fa-spin"></i>{" " + i18n.t("Đang xử lý...", { ns: 'legacy', keySeparator: false })}</>
                                             ) : (
-                                                <><i className="fas fa-credit-card"></i>{" " + translatePageText("Thanh toán bằng VNPay")}</>
+                                                <><i className="fas fa-credit-card"></i>{" " + i18n.t("Thanh toán bằng VNPay", { ns: 'legacy', keySeparator: false })}</>
                                             )}
                                         </button>
                                         {/* Nút Điểm */}
@@ -1114,9 +1119,9 @@ const DeliveriesPage = () => {
                                                 }`}
                                         >
                                             {payingWith === 'points' ? (
-                                                <><i className="fas fa-spinner fa-spin"></i>{" " + translatePageText("Đang xử lý...")}</>
+                                                <><i className="fas fa-spinner fa-spin"></i>{" " + i18n.t("Đang xử lý...", { ns: 'legacy', keySeparator: false })}</>
                                             ) : (
-                                                <><i className="fas fa-coins"></i>{" " + translatePageText("Thanh toán bằng Điểm")}</>
+                                                <><i className="fas fa-coins"></i>{" " + i18n.t("Thanh toán bằng Điểm", { ns: 'legacy', keySeparator: false })}</>
                                             )}
                                         </button>
                                         {/* Nút quay lại - chỉ khi chưa bấm thanh toán */}
@@ -1126,7 +1131,7 @@ const DeliveriesPage = () => {
                                                     try {
                                                         await orderService.deleteOrder(createdOrderId);
                                                     } catch (err) {
-                                                        console.warn(translatePageText("Không thể xóa đơn cũ khi sửa thông tin:"), err);
+                                                        console.warn(i18n.t("Không thể xóa đơn cũ khi sửa thông tin:", { ns: 'legacy', keySeparator: false }), err);
                                                     }
                                                 }
                                                 clearCheckoutSession();
@@ -1135,7 +1140,7 @@ const DeliveriesPage = () => {
                                             }}
                                             disabled={!!payingWith}
                                             className="w-full mt-2 text-gray-500 hover:text-red-600 text-sm font-bold py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                                        >{translatePageText("Quay lại sửa thông tin") + " "}</button>
+                                        >{i18n.t("Quay lại sửa thông tin", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     </div>
                                 </Modal>
                             </>
@@ -1145,17 +1150,17 @@ const DeliveriesPage = () => {
                 </div>
 
                 <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">{translatePageText("Các đơn đã đặt")}</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">{i18n.t("Các đơn đã đặt", { ns: 'legacy', keySeparator: false })}</h2>
                     <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
-                        <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{translatePageText("Tìm theo mã hóa đơn")}</span>
+                        <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{i18n.t("Tìm theo mã hóa đơn", { ns: 'legacy', keySeparator: false })}</span>
                         <input
                             type="text"
                             value={searchBillId}
                             onChange={e => setSearchBillId(e.target.value)}
-                            placeholder={translatePageText("Nhập mã hóa đơn...")}
+                            placeholder={i18n.t("Nhập mã hóa đơn...", { ns: 'legacy', keySeparator: false })}
                             className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                         />
-                        <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="delivery-created-date">{translatePageText("Ngày:") + " "}</label>
+                        <label className="text-sm font-medium text-gray-600 whitespace-nowrap" htmlFor="delivery-created-date">{i18n.t('common.dateLabel')} </label>
                         <input
                             id="delivery-created-date"
                             type="date"
@@ -1175,21 +1180,21 @@ const DeliveriesPage = () => {
                         onMouseUp={handleTimeWarningBackdropMouseUp}
                     >
                         <div className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto">
-                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{translatePageText("Thông báo") + " "}</div>
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{i18n.t("Thông báo", { ns: 'legacy', keySeparator: false }) + " "}</div>
                             <div className="p-6">
-                                <p className="text-gray-700 mb-6">{translatePageText("Đơn hàng này được dự kiến là không thể hoàn tất giao trước 10h tối.") + " "}<br /><br />{translatePageText("Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng") + " "}<strong className="text-red-600">{getNextMorningLabel()}</strong>{" " + translatePageText("thì chúng tôi mới bắt đầu chuẩn bị đơn hàng cho quý khách.") + " "}<br /><br />{translatePageText("Thời điểm bắt đầu chuẩn bị đơn giao hàng của mỗi ngày là từ 7h30 sáng.") + " "}</p>
+                                <p className="text-gray-700 mb-6">{i18n.t("Đơn hàng này được dự kiến là không thể hoàn tất giao trước 10h tối.", { ns: 'legacy', keySeparator: false }) + " "}<br /><br />{i18n.t("Quý khách vui lòng đổi địa chỉ giao hàng hoặc đợi đến sáng", { ns: 'legacy', keySeparator: false }) + " "}<strong className="text-red-600">{getNextMorningLabel()}</strong>{" " + i18n.t("thì chúng tôi mới bắt đầu chuẩn bị đơn hàng cho quý khách.", { ns: 'legacy', keySeparator: false }) + " "}<br /><br />{i18n.t("Thời điểm bắt đầu chuẩn bị đơn giao hàng của mỗi ngày là từ 7h30 sáng.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                                 <div className="flex gap-4">
                                     <button
                                         onClick={() => setShowTimeWarningModal(false)}
                                         className="flex-1 bg-white border border-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-100"
-                                    >{translatePageText("Đóng") + " "}</button>
+                                    >{i18n.t("Đóng", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     <button
                                         onClick={() => {
                                             setShowTimeWarningModal(false);
                                             setIsConfirmModalOpen(true);
                                         }}
                                         className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
-                                    >{translatePageText("Tiếp tục đặt hàng") + " "}</button>
+                                    >{i18n.t("Tiếp tục đặt hàng", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                 </div>
                             </div>
                         </div>
@@ -1206,15 +1211,15 @@ const DeliveriesPage = () => {
                             className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto"
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{translatePageText("Thông báo") + " "}</div>
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{i18n.t("Thông báo", { ns: 'legacy', keySeparator: false }) + " "}</div>
                             <div className="p-6">
                                 {preferredTimeModalType === 'after-closing' ? (
-                                    <p className="text-gray-700">{translatePageText("Nhà hàng chúng tôi đóng cửa lúc 22h và không thực hiện giao hàng sau giờ đóng cửa. Quý khách vẫn có thể tiếp tục đặt hàng, nhà hàng sẽ bắt đầu chuẩn bị đơn hàng cho quý khách vào 7h30 sáng") + " "}<strong className="text-red-600">{getNextMorningLabel()}</strong>.
+                                    <p className="text-gray-700">{i18n.t("Nhà hàng chúng tôi đóng cửa lúc 22h và không thực hiện giao hàng sau giờ đóng cửa. Quý khách vẫn có thể tiếp tục đặt hàng, nhà hàng sẽ bắt đầu chuẩn bị đơn hàng cho quý khách vào 7h30 sáng", { ns: 'legacy', keySeparator: false }) + " "}<strong className="text-red-600">{getNextMorningLabel()}</strong>.
                                     </p>
                                 ) : preferredTimeModalType === 'invalid' ? (
-                                    <p className="text-gray-700">{translatePageText("Vui lòng nhập thời gian giao hàng hợp lệ trong khoảng từ 00:00 đến 23:59.") + " "}</p>
+                                    <p className="text-gray-700">{i18n.t("Vui lòng nhập thời gian giao hàng hợp lệ trong khoảng từ 00:00 đến 23:59.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                                 ) : (
-                                    <p className="text-gray-700">{translatePageText("Thời điểm bạn chọn quá sớm. Hàng của bạn sẽ tới sớm nhất là") + " "}<strong className="text-red-600">{getMinimumPreferredTime()}</strong>
+                                    <p className="text-gray-700">{i18n.t("Thời điểm bạn chọn quá sớm. Hàng của bạn sẽ tới sớm nhất là", { ns: 'legacy', keySeparator: false }) + " "}<strong className="text-red-600">{getMinimumPreferredTime()}</strong>
                                     </p>
                                 )}
                                 <div className="flex justify-end gap-3 mt-6">
@@ -1222,7 +1227,7 @@ const DeliveriesPage = () => {
                                         <button
                                             onClick={() => setShowPreferredTimeErrorModal(false)}
                                             className="px-5 py-2 bg-white border border-gray-300 text-gray-800 rounded font-bold hover:bg-gray-100"
-                                        >{translatePageText("Quay lại") + " "}</button>
+                                        >{i18n.t("Quay lại", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     )}
                                     <button
                                         onClick={() => {
@@ -1233,7 +1238,7 @@ const DeliveriesPage = () => {
                                         }}
                                         className="px-5 py-2 bg-red-600 text-white rounded font-bold hover:bg-red-700"
                                     >
-                                        {preferredTimeModalType === 'after-closing' ? translatePageText("Tiếp tục") : translatePageText("Đóng")}
+                                        {preferredTimeModalType === 'after-closing' ? i18n.t("Tiếp tục", { ns: 'legacy', keySeparator: false }) : i18n.t("Đóng", { ns: 'legacy', keySeparator: false })}
                                     </button>
                                 </div>
                             </div>
@@ -1244,25 +1249,25 @@ const DeliveriesPage = () => {
                 {/* Confirm Modal */}
                 <Modal
                     isOpen={isConfirmModalOpen}
-                    title={translatePageText("Xác nhận đặt hàng")}
+                    title={i18n.t("Xác nhận đặt hàng", { ns: 'legacy', keySeparator: false })}
                     onClose={() => setIsConfirmModalOpen(false)}
                     onConfirm={confirmOrder}
                     confirmText="Đồng ý đặt hàng"
                 >
-                    <p className="text-gray-700">{translatePageText("Bạn có chắc chắn muốn đặt hàng?") + " "}<br />
-                        <span className="font-semibold text-red-600">{translatePageText("Lưu ý:")}</span>{" " + translatePageText("Sau khi đồng ý sẽ không thể thay đổi thông tin đơn hàng.") + " "}</p>
+                    <p className="text-gray-700">{i18n.t("Bạn có chắc chắn muốn đặt hàng?", { ns: 'legacy', keySeparator: false }) + " "}<br />
+                        <span className="font-semibold text-red-600">{i18n.t("Lưu ý:", { ns: 'legacy', keySeparator: false })}</span>{" " + i18n.t("Sau khi đồng ý sẽ không thể thay đổi thông tin đơn hàng.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                 </Modal>
 
                 {/* Delete Order Confirm Modal */}
                 <Modal
                     isOpen={deleteOrderModalOpen}
-                    title={translatePageText("Xóa đơn hàng")}
+                    title={i18n.t("Xóa đơn hàng", { ns: 'legacy', keySeparator: false })}
                     onClose={() => setDeleteOrderModalOpen(false)}
                     onConfirm={confirmDeleteOrder}
                     confirmText="Xóa đơn hàng"
                     cancelText="Hủy"
                 >
-                    <p className="text-gray-700">{translatePageText("Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món và đơn hàng hiện tại.") + " "}</p>
+                    <p className="text-gray-700">{i18n.t("Bạn có chắc muốn xóa đơn hàng? Hành động này sẽ xóa toàn bộ món và đơn hàng hiện tại.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                 </Modal>
 
                 {/* Points Modal: Insufficient */}
@@ -1275,8 +1280,8 @@ const DeliveriesPage = () => {
                             >
                                 <i className="fas fa-times text-xl"></i>
                             </button>
-                            <h3 className="text-xl font-bold text-red-600 mb-4 text-center">{translatePageText("Không đủ điểm")}</h3>
-                            <p className="text-gray-700 text-center mb-6">{translatePageText("Bạn không có đủ điểm để thanh toán hóa đơn này.") + " "}<br />{translatePageText("Hiện bạn đang có") + " "}<strong className="text-red-600">{currentPoints}</strong>{" " + translatePageText("điểm.") + " "}</p>
+                            <h3 className="text-xl font-bold text-red-600 mb-4 text-center">{i18n.t("Không đủ điểm", { ns: 'legacy', keySeparator: false })}</h3>
+                            <p className="text-gray-700 text-center mb-6">{i18n.t("Bạn không có đủ điểm để thanh toán hóa đơn này.", { ns: 'legacy', keySeparator: false }) + " "}<br />{i18n.t("Hiện bạn đang có", { ns: 'legacy', keySeparator: false }) + " "}<strong className="text-red-600">{currentPoints}</strong>{" " + i18n.t("điểm.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                             <button
                                 onClick={() => setPointsModalType(null)}
                                 className="w-full bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
@@ -1297,20 +1302,20 @@ const DeliveriesPage = () => {
                             >
                                 <i className="fas fa-times text-xl"></i>
                             </button>
-                            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">{translatePageText("Xác nhận thanh toán")}</h3>
-                            <p className="text-gray-700 text-center mb-4">{translatePageText("Bạn có chắc muốn dùng điểm để thanh toán hóa đơn này?") + " "}<br />{translatePageText("Hiện bạn đang có") + " "}<strong className="text-red-600">{currentPoints}</strong>{" " + translatePageText("điểm.") + " "}</p>
+                            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">{i18n.t("Xác nhận thanh toán", { ns: 'legacy', keySeparator: false })}</h3>
+                            <p className="text-gray-700 text-center mb-4">{i18n.t("Bạn có chắc muốn dùng điểm để thanh toán hóa đơn này?", { ns: 'legacy', keySeparator: false }) + " "}<br />{i18n.t("Hiện bạn đang có", { ns: 'legacy', keySeparator: false }) + " "}<strong className="text-red-600">{currentPoints}</strong>{" " + i18n.t("điểm.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                             {checkMembershipDowngrade() && (
-                                <p className="text-yellow-700 bg-yellow-50 border border-yellow-200 p-2 rounded text-sm text-center mb-4">{translatePageText("⚠️ Thanh toán hóa đơn này có thể khiến bạn bị hạ bậc thành viên.") + " "}</p>
+                                <p className="text-yellow-700 bg-yellow-50 border border-yellow-200 p-2 rounded text-sm text-center mb-4">{i18n.t("⚠️ Thanh toán hóa đơn này có thể khiến bạn bị hạ bậc thành viên.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                             )}
                             <div className="flex gap-4">
                                 <button
                                     onClick={() => setPointsModalType(null)}
                                     className="flex-1 bg-gray-200 text-gray-800 border border-gray-400 font-bold py-2 rounded hover:bg-gray-300"
-                                >{translatePageText("Hủy") + " "}</button>
+                                >{i18n.t("Hủy", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                 <button
                                     onClick={handleConfirmPointsPayment}
                                     className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
-                                >{translatePageText("Xác nhận") + " "}</button>
+                                >{i18n.t("Xác nhận", { ns: 'legacy', keySeparator: false }) + " "}</button>
                             </div>
                         </div>
                     </div>
@@ -1320,10 +1325,10 @@ const DeliveriesPage = () => {
                 {cancelModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                         <div className="bg-white rounded-lg w-full max-w-md max-h-[90dvh] overflow-y-auto">
-                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{translatePageText("Hủy đơn hàng") + " "}</div>
+                            <div className="bg-red-600 text-white font-bold text-lg text-center py-3">{i18n.t("Hủy đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}</div>
                             <div className="p-6">
-                                <p className="text-gray-700 text-center mb-3">{translatePageText("Bạn có chắc muốn hủy đơn hàng") + " "}{cancelingBill?.order_stt || cancelingBill?.order_id}{" " + translatePageText("không?") + " "}</p>
-                                <p className="text-sm text-center mb-6 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{translatePageText("Việc hủy sẽ tiêu hao") + " "}<strong>{translatePageText("1 lượt hủy đơn")}</strong>{" " + translatePageText("trong tuần (hiện còn") + " "}<strong>{cancelAttemptsLeft}</strong>{" " + translatePageText("lượt). Lượt chỉ bị trừ khi đơn đã được hủy và hoàn tiền/điểm xong.") + " "}</p>
+                                <p className="text-gray-700 text-center mb-3">{i18n.t("Bạn có chắc muốn hủy đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}{cancelingBill?.order_stt || cancelingBill?.order_id}{" " + i18n.t("không?", { ns: 'legacy', keySeparator: false }) + " "}</p>
+                                <p className="text-sm text-center mb-6 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{i18n.t("Việc hủy sẽ tiêu hao", { ns: 'legacy', keySeparator: false }) + " "}<strong>{i18n.t("1 lượt hủy đơn", { ns: 'legacy', keySeparator: false })}</strong>{" " + i18n.t("trong tuần (hiện còn", { ns: 'legacy', keySeparator: false }) + " "}<strong>{cancelAttemptsLeft}</strong>{" " + i18n.t("lượt). Lượt chỉ bị trừ khi đơn đã được hủy và hoàn tiền/điểm xong.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                                 <div className="flex gap-4">
                                     <button
                                         onClick={() => {
@@ -1331,11 +1336,11 @@ const DeliveriesPage = () => {
                                             setCancelingBill(null);
                                         }}
                                         className="flex-1 bg-white border border-gray-300 text-gray-800 font-bold py-2 rounded hover:bg-gray-100"
-                                    >{translatePageText("Đóng") + " "}</button>
+                                    >{i18n.t("Đóng", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     <button
                                         onClick={confirmCancelOrder}
                                         className="flex-1 bg-red-600 text-white font-bold py-2 rounded hover:bg-red-700"
-                                    >{translatePageText("Xác nhận") + " "}</button>
+                                    >{i18n.t("Xác nhận", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                 </div>
                             </div>
                         </div>
@@ -1345,7 +1350,7 @@ const DeliveriesPage = () => {
                 {/* Lỗi thanh toán bằng điểm: modal có nút Đóng, không tự ẩn */}
                 <Modal
                     isOpen={!!pointsErrorMessage}
-                    title={translatePageText("Lỗi thanh toán bằng điểm")}
+                    title={i18n.t("Lỗi thanh toán bằng điểm", { ns: 'legacy', keySeparator: false })}
                     onClose={() => setPointsErrorMessage(null)}
                     cancelText="Đóng"
                 >
@@ -1364,7 +1369,7 @@ const DeliveriesPage = () => {
                 {/* Lỗi chỉnh sửa đơn (vd hết lượt) */}
                 <Modal
                     isOpen={!!modifyErrorMessage}
-                    title={translatePageText("Lỗi chỉnh sửa đơn")}
+                    title={i18n.t("Lỗi chỉnh sửa đơn", { ns: 'legacy', keySeparator: false })}
                     onClose={() => setModifyErrorMessage(null)}
                     cancelText="Đóng"
                 >
@@ -1374,7 +1379,7 @@ const DeliveriesPage = () => {
                 {/* Chỉnh sửa đơn thành công */}
                 <Modal
                     isOpen={!!modifySuccessMessage}
-                    title={translatePageText("Thông báo")}
+                    title={i18n.t("Thông báo", { ns: 'legacy', keySeparator: false })}
                     onClose={() => setModifySuccessMessage(null)}
                     cancelText="Đóng"
                 >
@@ -1384,7 +1389,7 @@ const DeliveriesPage = () => {
                 {/* Cancel Order Error Modal - dùng chung component Modal */}
                 <Modal
                     isOpen={!!cancelErrorMessage}
-                    title={translatePageText("Lỗi hủy đơn")}
+                    title={i18n.t("Lỗi hủy đơn", { ns: 'legacy', keySeparator: false })}
                     onClose={() => setCancelErrorMessage(null)}
                     cancelText="Đóng"
                 >
@@ -1410,13 +1415,15 @@ const DeliveriesPage = () => {
                 {filtered.length === 0 ? (
                     <EmptyState
                         icon={deliveries.length === 0 ? "📦" : "🧾"}
-                        title={deliveries.length === 0 ? translatePageText("Không có đơn giao hàng") : translatePageText("Không có đơn hàng")}
+                        title={deliveries.length === 0 ? i18n.t("Không có đơn giao hàng", { ns: 'legacy', keySeparator: false }) : i18n.t("Không có đơn hàng", { ns: 'legacy', keySeparator: false })}
                         description={
                             deliveries.length === 0
-                                ? translatePageText("Bạn chưa có đơn mang về nào.")
+                                ? i18n.t("Bạn chưa có đơn mang về nào.", { ns: 'legacy', keySeparator: false })
                                 : searchBillId.trim()
-                                    ? translatePageText("Không tìm thấy đơn hàng phù hợp với bộ lọc.")
-                                    : `Chưa có đơn với bộ lọc "${DELIVERY_STATUS_FILTERS.find(f => f.id === filter)?.label || filter}"`
+                                    ? i18n.t("Không tìm thấy đơn hàng phù hợp với bộ lọc.", { ns: 'legacy', keySeparator: false })
+                                    : i18n.t('orders.noOrdersWithStatus', {
+                                        status: DELIVERY_STATUS_FILTERS.find(f => f.id === filter)?.label || filter,
+                                    })
                         }
                     />
                 ) : (
@@ -1426,28 +1433,28 @@ const DeliveriesPage = () => {
                                 key={bill.order_id || idx}
                                 title={
                                     <div className="flex items-baseline flex-wrap">
-                                        <span>{`${translatePageText("Đơn hàng")} ${bill.order_stt || bill.order_id || ''} · ${bill.created_at ? new Date(bill.created_at).toLocaleDateString(i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'vi-VN') : '—'}`}</span>
-                                        <span className="sm:ml-[2.5cm] w-full sm:w-auto text-sm font-normal text-gray-500">{translatePageText("Mã hóa đơn:") + " "}{bill.bill_id || '—'}</span>
+                                        <span>{`${i18n.t("Đơn hàng", { ns: 'legacy', keySeparator: false })} ${bill.order_stt || bill.order_id || ''} · ${bill.created_at ? new Date(bill.created_at).toLocaleDateString(i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'vi-VN') : '—'}`}</span>
+                                        <span className="sm:ml-[2.5cm] w-full sm:w-auto text-sm font-normal text-gray-500">{i18n.t("Mã hóa đơn:", { ns: 'legacy', keySeparator: false }) + " "}{bill.bill_id || '—'}</span>
                                     </div>
                                 }
                             >
                                 <div className="grid md:grid-cols-3 gap-4 mb-4">
                                     <div>
-                                        <p className="text-sm text-gray-600">{translatePageText("Địa chỉ")}</p>
+                                        <p className="text-sm text-gray-600">{i18n.t("Địa chỉ", { ns: 'legacy', keySeparator: false })}</p>
                                         <p className="font-semibold">{bill.delivery?.address || '—'}</p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-600">{translatePageText("Ngày đặt")}</p>
+                                        <p className="text-sm text-gray-600">{i18n.t("Ngày đặt", { ns: 'legacy', keySeparator: false })}</p>
                                         <p className="font-semibold">{bill.created_at ? new Date(bill.created_at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}</p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-600">{translatePageText("Phương thức thanh toán")}</p>
+                                        <p className="text-sm text-gray-600">{i18n.t("Phương thức thanh toán", { ns: 'legacy', keySeparator: false })}</p>
                                         <p className="font-bold text-red-600">
-                                            {bill.payment_method === 'Points' ? translatePageText("Điểm") : bill.payment_method === 'vnpay' ? 'VNPay' : (bill.payment_method || '—')}
+                                            {bill.payment_method === 'Points' ? i18n.t("Điểm", { ns: 'legacy', keySeparator: false }) : bill.payment_method === 'vnpay' ? 'VNPay' : (bill.payment_method || '—')}
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-600">{translatePageText("Bắt đầu giao (dự kiến)")}</p>
+                                        <p className="text-sm text-gray-600">{i18n.t("Bắt đầu giao (dự kiến)", { ns: 'legacy', keySeparator: false })}</p>
                                         <p className="font-semibold">
                                             {formatExpectedDateTime(
                                                 bill.delivery?.delivery_started_at || bill.delivery?.automatic_start_at
@@ -1457,7 +1464,7 @@ const DeliveriesPage = () => {
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-gray-600">{translatePageText("Hàng tới (dự kiến)")}</p>
+                                        <p className="text-sm text-gray-600">{i18n.t("Hàng tới (dự kiến)", { ns: 'legacy', keySeparator: false })}</p>
                                         <p className="font-semibold">
                                             {formatExpectedDateTime(getExpectedDeliveryArrival(bill.delivery))}
                                         </p>
@@ -1468,36 +1475,36 @@ const DeliveriesPage = () => {
                                 {bill.subtotal_price != null && (
                                     <div className="mt-2 text-sm space-y-1">
                                         <div className="flex justify-between text-gray-600">
-                                            <span>{translatePageText("Tổng tiền:")}</span>
-                                            <span className="font-semibold">{Number(bill.subtotal_price).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                                            <span>{i18n.t("Tổng tiền:", { ns: 'legacy', keySeparator: false })}</span>
+                                            <span className="font-semibold">{Number(bill.subtotal_price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                                         </div>
                                         {bill.sale_off_percentage != null && (
                                             <div className="flex justify-between text-orange-600">
-                                                <span>{translatePageText("Giảm giá sự kiện:")}</span>
+                                                <span>{i18n.t("Giảm giá sự kiện:", { ns: 'legacy', keySeparator: false })}</span>
                                                 <span className="font-semibold">{Number(bill.sale_off_percentage)}%</span>
                                             </div>
                                         )}
                                         {bill.payment_method === 'Points' ? (
                                             <>
                                                 <div className="flex justify-between text-green-700">
-                                                    <span>{translatePageText("Đã thanh toán bằng điểm")}</span>
+                                                    <span>{i18n.t("Đã thanh toán bằng điểm", { ns: 'legacy', keySeparator: false })}</span>
                                                     <span className="font-semibold">
-                                                        -{Math.floor(Number(bill.sale_off_total_price ?? bill.subtotal_price) / 100).toLocaleString('vi-VN')}{" " + translatePageText("điểm") + " "}</span>
+                                                        -{Math.floor(Number(bill.sale_off_total_price ?? bill.subtotal_price) / 100).toLocaleString('vi-VN')}{" " + i18n.t("điểm", { ns: 'legacy', keySeparator: false }) + " "}</span>
                                                 </div>
                                                 <div className="flex justify-between font-bold text-gray-800">
-                                                    <span>{translatePageText("Số tiền cần trả:")}</span>
-                                                    <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                                                    <span>{i18n.t("Số tiền cần trả:", { ns: 'legacy', keySeparator: false })}</span>
+                                                    <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                                                 </div>
                                             </>
                                         ) : bill.payment_method === 'vnpay' ? (
                                             <div className="flex justify-between font-bold text-gray-800">
-                                                <span>{translatePageText("Số tiền đã trả:")}</span>
-                                                <span className="text-red-600">{Number(bill.sale_off_total_price ?? bill.total_price ?? 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                                                <span>{i18n.t("Số tiền đã trả:", { ns: 'legacy', keySeparator: false })}</span>
+                                                <span className="text-red-600">{Number(bill.sale_off_total_price ?? bill.total_price ?? 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                                             </div>
                                         ) : (
                                             <div className="flex justify-between font-bold text-gray-800">
-                                                <span>{translatePageText("Số tiền cần trả:")}</span>
-                                                <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}{translatePageText("đ")}</span>
+                                                <span>{i18n.t("Số tiền cần trả:", { ns: 'legacy', keySeparator: false })}</span>
+                                                <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
                                             </div>
                                         )}
                                     </div>
@@ -1529,13 +1536,13 @@ const DeliveriesPage = () => {
                                                     onClick={() => handleEditClick(bill)}
                                                     disabled={checkingModify || checkingCancel}
                                                     className="px-4 py-2 bg-white border border-red-600 text-red-600 rounded font-bold text-sm hover:bg-red-600 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >{translatePageText("Chỉnh sửa thông tin") + " "}</button>
+                                                >{i18n.t("Chỉnh sửa thông tin", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                             )}
                                             <button
                                                 onClick={() => handleCancelClick(bill)}
                                                 disabled={checkingCancel || checkingModify}
                                                 className="px-4 py-2 bg-red-600 text-white rounded font-bold text-sm hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                            >{translatePageText("Hủy đơn hàng") + " "}</button>
+                                            >{i18n.t("Hủy đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                         </div>
                                     )}
                                 </div>
@@ -1548,7 +1555,7 @@ const DeliveriesPage = () => {
             {/* Lỗi kho lúc thanh toán: chờ refill hoặc cần giảm số lượng */}
             <Modal
                 isOpen={!!stockError}
-                title={translatePageText("Không đủ nguyên liệu")}
+                title={i18n.t("Không đủ nguyên liệu", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setStockError(null)}
                 cancelText="Đóng"
             >
@@ -1560,12 +1567,12 @@ const DeliveriesPage = () => {
                                 {stockError.suggestions.map((s, i) => (
                                     <li key={i}>
                                         <span className="font-semibold">{translateDishName(s.dish || s)}</span>:{' '}
-                                        {s.max_quantity > 0 ? `tối đa ${s.max_quantity} phần` : translatePageText("hiện đã hết")}
+                                        {s.max_quantity > 0 ? `tối đa ${s.max_quantity} phần` : i18n.t("hiện đã hết", { ns: 'legacy', keySeparator: false })}
                                     </li>
                                 ))}
                             </ul>
                         )}
-                        <p className="mt-3 text-sm text-gray-500">{translatePageText("Hãy bấm \"Quay lại sửa thông tin\" để giảm số lượng món rồi đặt lại.") + " "}</p>
+                        <p className="mt-3 text-sm text-gray-500">{i18n.t("Hãy bấm \"Quay lại sửa thông tin\" để giảm số lượng món rồi đặt lại.", { ns: 'legacy', keySeparator: false }) + " "}</p>
                     </>
                 )}
             </Modal>

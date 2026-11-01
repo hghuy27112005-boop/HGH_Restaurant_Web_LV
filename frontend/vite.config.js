@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'node:url';
+
+const configDir = path.dirname(fileURLToPath(import.meta.url));
 console.log('>>> laravel plugin loaded:', typeof laravel);
 
 // Tự copy .vite/manifest.json -> manifest.json sau MỖI lần build
@@ -12,8 +15,8 @@ function copyManifestPlugin() {
     return {
         name: 'copy-manifest-to-build-root',
         closeBundle() {
-            const src = path.resolve(__dirname, '../backend/public/build/.vite/manifest.json');
-            const dest = path.resolve(__dirname, '../backend/public/build/manifest.json');
+            const src = path.resolve(configDir, '../backend/public/build/.vite/manifest.json');
+            const dest = path.resolve(configDir, '../backend/public/build/manifest.json');
 
             if (fs.existsSync(src)) {
                 fs.copyFileSync(src, dest);
@@ -43,7 +46,7 @@ export default defineConfig(({ mode }) => {
     return {
         resolve: {
             alias: {
-                '@': path.resolve(__dirname, './src'),
+                '@': path.resolve(configDir, './src'),
             },
         },
         plugins: [
@@ -61,8 +64,8 @@ export default defineConfig(({ mode }) => {
             host: '0.0.0.0',
             port: 5173,
             https: {
-                key: fs.readFileSync(path.resolve(__dirname, 'certs/localhost+2-key.pem')),
-                cert: fs.readFileSync(path.resolve(__dirname, 'certs/localhost+2.pem')),
+                key: fs.readFileSync(path.resolve(configDir, 'certs/localhost+2-key.pem')),
+                cert: fs.readFileSync(path.resolve(configDir, 'certs/localhost+2.pem')),
             },
             cors: true,
             // Origin LUÔN là localhost:5173 để Laravel @vite gọi đúng chỗ

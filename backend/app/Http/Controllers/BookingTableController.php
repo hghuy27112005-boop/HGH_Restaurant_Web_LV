@@ -55,7 +55,8 @@ class BookingTableController extends Controller
     
             return response()->json(['status' => 'success']);
         } catch (\Exception $e) {
-            return response()->json(['status' => 'error', 'message' => 'Lỗi kiểm tra trùng lịch: ' . $e->getMessage()], 500);
+            report($e);
+            return response()->json(['status' => 'error', 'code' => 'booking_conflict_check_failed', 'message' => 'Không thể kiểm tra lịch đặt bàn lúc này.'], 500);
         }
     }
 
@@ -86,7 +87,8 @@ class BookingTableController extends Controller
 
             return response()->json(['status' => 'success', 'occupied_tables' => $occupied]);
         } catch (\Exception $e) {
-            return response()->json(['status' => 'error', 'message' => 'Lỗi kiểm tra bàn trống: ' . $e->getMessage()], 500);
+            report($e);
+            return response()->json(['status' => 'error', 'code' => 'table_availability_check_failed', 'message' => 'Không thể kiểm tra bàn trống lúc này.'], 500);
         }
     }
 
@@ -204,7 +206,8 @@ class BookingTableController extends Controller
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'booking_request_failed', 'message' => 'Không thể xử lý yêu cầu đặt bàn lúc này.'], 500);
         }
     }
 
@@ -393,12 +396,17 @@ class BookingTableController extends Controller
         } catch (\Illuminate\Database\QueryException $e) {
             DB::rollBack();
             if ($e->getCode() === '23P01') {
-                return response()->json(['message' => 'Bàn bạn chọn đã bị chiếm dụng trong khung giờ này. Vui lòng chọn lại.'], 422);
+                return response()->json([
+                    'code' => 'table_occupied',
+                    'message' => 'Bàn bạn chọn đã bị chiếm dụng trong khung giờ này. Vui lòng chọn lại.',
+                ], 422);
             }
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'booking_request_failed', 'message' => 'Không thể xử lý yêu cầu đặt bàn lúc này.'], 500);
         } catch (\Exception $e) {
             DB::rollBack();
-            return response()->json(['message' => $e->getMessage()], 500);
+            report($e);
+            return response()->json(['code' => 'booking_request_failed', 'message' => 'Không thể xử lý yêu cầu đặt bàn lúc này.'], 500);
         }
     }
 }
