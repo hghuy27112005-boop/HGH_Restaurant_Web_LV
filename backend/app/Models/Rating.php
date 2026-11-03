@@ -14,6 +14,7 @@ class Rating extends Model
         'dish_id',
         'user_id',
         'order_item_id',
+        'direct_review',
         'rating',
         'comment',
         'ai_response',

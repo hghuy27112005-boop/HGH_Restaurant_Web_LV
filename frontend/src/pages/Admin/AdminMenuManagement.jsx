@@ -80,7 +80,6 @@ const AdminMenuManagement = () => {
     const [search, setSearch] = useState('');
     const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid' | 'rating'
     const [ratingStats, setRatingStats] = useState({}); // { [dish_id]: { review_count, avg_rating } }
-    const [isPickerOpen, setIsPickerOpen] = useState(false); // modal chọn món để xem đánh giá
     const [reviewDish, setReviewDish] = useState(null); // món đang được xem đánh giá chi tiết
     const [reviewList, setReviewList] = useState([]); // các đánh giá đã tải của món đang xem
     const [reviewSummary, setReviewSummary] = useState(null); // { review_count, avg_rating }
@@ -108,6 +107,7 @@ const AdminMenuManagement = () => {
         recipe_instructions: '',
     });
     const [draftIngredients, setDraftIngredients] = useState([]);
+    const pendingIngredientCleanup = useRef(Promise.resolve());
     const [confirmedIngredients, setConfirmedIngredients] = useState([]);
     const [recipePreview, setRecipePreview] = useState(null);
     const [workflowBusy, setWorkflowBusy] = useState(false);
@@ -447,7 +447,7 @@ const AdminMenuManagement = () => {
             } else if (err.response?.data?.code === 'dish_input_rejected') {
                 setImageValidationError('adminDish.imageRejected');
             } else {
-                setImageValidationError('adminDish.analyzeFailed');
+                setImageValidationError(err.response?.status === 503 ? 'adminDish.aiUnavailable' : 'adminDish.analyzeFailed');
             }
         } finally {
             setWorkflowBusy(false);
@@ -457,9 +457,13 @@ const AdminMenuManagement = () => {
 
     const handleConfirmIngredients = async () => {
         if (!draftIngredients.length) return;
+        if (draftIngredients.some(item => !String(item[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi'] || '').trim())) {
+            setAlertMessage('adminDish.emptyIngredient'); return;
+        }
         setWorkflowBusy(true);
         setWorkflowAction('confirm');
         try {
+            await pendingIngredientCleanup.current;
             let confirmed = confirmedIngredients;
             if (confirmed.length === 0) {
                 const response = await adminAPI.dishes.confirmIngredients(
@@ -472,6 +476,7 @@ const AdminMenuManagement = () => {
                 setConfirmedIngredients(confirmed);
             }
             const recipeResponse = await adminAPI.dishes.previewRecipe({
+                ...(editMode ? { dish_id: selectedDishId } : {}),
                 dish_name: formData.dish_name.trim(),
                 ingredient_ids: confirmed.map((ingredient) => ingredient.ingredient_id),
                 ingredient_names: confirmed.map((ingredient) => ({
@@ -485,24 +490,32 @@ const AdminMenuManagement = () => {
             });
             if (editMode) setEditRequiresReconfirmation(false);
         } catch (err) {
-            setAlertMessage('adminDish.confirmFailed');
+            setAlertMessage(err.response?.status === 503 ? 'adminDish.aiUnavailable' : 'adminDish.confirmFailed');
         } finally {
             setWorkflowBusy(false);
             setWorkflowAction('');
         }
     };
 
-    const updateDraftIngredient = (index, field, value) => {
-        void discardNewlyCreatedIngredients();
-        setDraftIngredients((current) => current.map((ingredient, itemIndex) =>
-            itemIndex === index
-                ? { ...ingredient, [field]: value, ...(field === 'name_vi' || field === 'name_en' ? { ingredient_id: null } : {}) }
-                : ingredient
-        ));
+    const changeDraftIngredients = (update) => {
+        const provisional = new Set(confirmedIngredients.filter(item => item.created_in_confirmation).map(item => item.ingredient_id));
+        const staleConfirmed = confirmedIngredients;
+        pendingIngredientCleanup.current = pendingIngredientCleanup.current.then(() => discardNewlyCreatedIngredients(staleConfirmed));
+        setDraftIngredients(current => update(current.map(item => provisional.has(item.ingredient_id)
+            ? { ...item, ingredient_id: null, created_in_confirmation: false } : item)));
         setConfirmedIngredients([]);
         setRecipePreview(null);
         if (editMode) setEditRequiresReconfirmation(true);
     };
+    const updateDraftIngredient = (index, field, value) => changeDraftIngredients(current => current.map((ingredient, itemIndex) =>
+        itemIndex === index ? { ...ingredient, [field]: value, ...(field === 'name_vi' || field === 'name_en' ? { ingredient_id: null } : {}) } : ingredient
+    ));
+    const addDraftIngredient = () => {
+        if (draftIngredients.length >= 40) return;
+        setWorkflowLanguage(workflowLanguage || currentLanguage);
+        changeDraftIngredients(current => [...current, { ingredient_id: null, name: '', name_vi: '', name_en: '', role: 'required_replaceable' }]);
+    };
+    const removeDraftIngredient = index => changeDraftIngredients(current => current.filter((_, itemIndex) => itemIndex !== index));
 
     const handleToggleStatus = (dish) => {
         setConfirmState({
@@ -640,12 +653,7 @@ const AdminMenuManagement = () => {
                 <div className="px-4 py-3 border-b flex flex-wrap items-center justify-between gap-2">
                     <span className="font-semibold text-gray-800">{i18n.t("Danh sách món ăn (", { ns: 'legacy', keySeparator: false })}{visibleDishes.length}{isFiltered ? ` / ${dishes.length}` : ''})
                     </span>
-                    {viewMode === 'rating' && (
-                        <button
-                            onClick={() => setIsPickerOpen(true)}
-                            className="px-3 py-1.5 text-sm font-semibold rounded bg-red-600 text-white hover:bg-red-700 transition"
-                        >{i18n.t("Xem đánh giá của khách hàng", { ns: 'legacy', keySeparator: false }) + " "}</button>
-                    )}
+
                 </div>
 
                 {loading ? (
@@ -657,9 +665,11 @@ const AdminMenuManagement = () => {
                         {visibleDishes.map((dish) => {
                             const stat = ratingStats[dish.dish_id];
                             return (
-                                <div
+                                <button
+                                    type="button"
+                                    onClick={() => setReviewDish(dish)}
                                     key={dish.dish_id}
-                                    className={`bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col ${!dish.is_active ? 'opacity-60' : ''}`}
+                                    className={`text-left hover:border-red-600 focus-visible:ring-2 focus-visible:ring-red-600 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col ${!dish.is_active ? 'opacity-60' : ''}`}
                                 >
                                     <img
                                         src={getImageUrl(dish.image_url)}
@@ -678,7 +688,7 @@ const AdminMenuManagement = () => {
                                             <p className="mt-auto pt-2 text-sm text-gray-400">{i18n.t("Chưa có đánh giá", { ns: 'legacy', keySeparator: false })}</p>
                                         )}
                                     </div>
-                                </div>
+                                </button>
                             );
                         })}
                     </div>
@@ -929,15 +939,17 @@ const AdminMenuManagement = () => {
                                             </button>
                                         </div>
                                         {draftIngredients.map((ingredient, index) => (
-                                            <div key={index} className="grid grid-cols-1 gap-2 rounded border border-gray-200 p-3 sm:grid-cols-[1fr_220px]">
+                                            <div key={index} className="grid grid-cols-[minmax(0,1fr)_2.5rem] gap-2 rounded border border-gray-200 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(17rem,1.35fr)_2.5rem]">
                                                 <input
                                                     aria-label={(workflowLanguage || currentLanguage) === 'en' ? t('adminDish.ingredientNameEn') : t('adminDish.ingredientNameVi')}
-                                                    value={ingredient[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi']}
+                                                    value={ingredient[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi'] || ''}
+                                                    disabled={workflowBusy || busy}
                                                     onChange={(event) => updateDraftIngredient(index, (workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi', event.target.value)}
                                                     className="min-w-0 rounded border border-gray-300 px-3 py-2"
                                                 />
                                                 <select
                                                     aria-label={t('adminDish.ingredientRole')}
+                                                    disabled={workflowBusy || busy}
                                                     value={ingredient.role}
                                                     onChange={(event) => updateDraftIngredient(index, 'role', event.target.value)}
                                                     className="rounded border border-gray-300 px-3 py-2 sm:col-span-1"
@@ -946,8 +958,10 @@ const AdminMenuManagement = () => {
                                                     <option value="required_fixed">{t('adminDish.roleFixed')}</option>
                                                     <option value="optional">{t('adminDish.roleOptional')}</option>
                                                 </select>
+                                                <button type="button" onClick={() => removeDraftIngredient(index)} disabled={workflowBusy || busy} aria-label={t('adminDish.removeIngredient', { count: index + 1 })} className="col-start-2 row-span-2 row-start-1 rounded border border-red-300 text-xl font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 sm:col-start-3 sm:row-span-1">−</button>
                                             </div>
                                         ))}
+                                        <button type="button" onClick={addDraftIngredient} disabled={workflowBusy || busy || draftIngredients.length >= 40} className="inline-flex items-center gap-2 rounded border border-blue-600 px-3 py-2 font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50"><span aria-hidden="true">＋</span>{t('adminDish.addIngredient')}</button>
                                         {draftIngredients.length > 0 && (
                                             <div className="flex flex-wrap items-center gap-3">
                                                 <button
@@ -1091,31 +1105,6 @@ const AdminMenuManagement = () => {
                         )}
                     </>
                 )}
-            </Modal>
-
-            {/* Modal chọn món để xem đánh giá */}
-            <Modal
-                isOpen={isPickerOpen}
-                title={i18n.t("Chọn món muốn xem đánh giá", { ns: 'legacy', keySeparator: false })}
-                className="max-w-3xl"
-                onClose={() => setIsPickerOpen(false)}
-                cancelText="Quay lại"
-            >
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {dishes.map((dish) => (
-                        <div
-                            key={dish.dish_id}
-                            onClick={() => {
-                                setReviewDish(dish);
-                                setIsPickerOpen(false);
-                            }}
-                            className="cursor-pointer rounded-lg border-2 border-transparent hover:border-red-600 overflow-hidden transition"
-                        >
-                            <img src={getImageUrl(dish.image_url)} alt={translateDishName(dish)} className="w-full h-20 object-cover" />
-                            <p className="text-xs p-1 truncate">{translateDishName(dish)}</p>
-                        </div>
-                    ))}
-                </div>
             </Modal>
 
             {/* Modal thông báo (thay cho alert) */}

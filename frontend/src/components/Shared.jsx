@@ -79,7 +79,7 @@ const translateModalContent = (node) => {
     return node;
 };
 
-export const Modal = ({ isOpen, title, titleClassName = '', className = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng', onSecondary, secondaryText = 'Quay lại', secondaryClassName = '', onTertiary, tertiaryText = 'Quay lại', tertiaryClassName = '', showHeaderClose = false, showFooterClose = true, confirmDisabled = false }) => {
+export const Modal = ({ isOpen, title, titleClassName = '', className = '', children, onClose, onConfirm, confirmText = 'Xác nhận', cancelText = 'Đóng', onSecondary, secondaryText = 'Quay lại', secondaryClassName = '', onTertiary, tertiaryText = 'Quay lại', tertiaryClassName = '', showHeaderClose = false, showFooterClose = true, confirmDisabled = false, footerStart = null }) => {
     const [zIndex, setZIndex] = useState(50);
     const mouseDownOnBackdrop = useRef(false);
 
@@ -125,6 +125,7 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
                 </h2>
                 <div className="mb-6 min-h-0 flex-1 overflow-y-auto">{translateModalContent(children)}</div>
                 <div className="flex flex-wrap shrink-0 gap-2 justify-end">
+                    {footerStart && <div className="mr-auto flex items-center">{footerStart}</div>}
                     {onSecondary && (
                         <button
                             onClick={onSecondary}

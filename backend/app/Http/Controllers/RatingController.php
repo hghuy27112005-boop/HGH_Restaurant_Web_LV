@@ -5,8 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Rating;
-use App\Models\OrderItem;
-use App\Models\Order;
 use App\Models\RecommendationExclusion;
 use App\Services\GeminiChatbotService;
 use App\Services\ContentModerationService;
@@ -19,71 +17,27 @@ class RatingController extends Controller
         private ContentModerationService $moderation
     ) {}
 
-    /**
-     * Danh sách các món đã từng đặt (thuộc đơn đã có hóa đơn), kèm đánh giá cũ
-     * nếu có, để trang "Đánh giá dịch vụ" hiển thị cho khách chấm điểm.
-     */
-    public function ratableItems(Request $request)
+    public function byDish(Request $request, $dishId)
     {
-        $userId = Auth::id();
-        $language = PreferredLanguage::fromRequest($request);
-        $moderationStatus = $this->moderation->status($userId);
-
-        $orders = Order::where('user_id', $userId)
-            ->whereHas('bill')
-            ->with(['bill', 'items.dish', 'items.review'])
-            ->orderByDesc('created_at')
-            ->limit(100)
-            ->get();
-
-        $data = $orders->map(function ($order) use ($language) {
-            return [
-                'order_id' => $order->order_id,
-                'order_stt' => $order->order_stt,
-                'bill_id' => $order->bill->bill_id,
-                'created_at' => $order->created_at,
-                'items' => $order->items->map(fn($item) => [
-                    'order_item_id' => $item->order_item_id,
-                    'dish_id' => $item->dish_id,
-                    'dish_name' => $item->dish?->dish_name,
-                    'dish_name_en' => $item->dish?->dish_name_en,
-                    'dish_image' => $item->dish?->image_url,
-                    'quantity' => $item->quantity,
-                    'existing_rating' => $item->review ? [
-                        'rating' => $item->review->rating,
-                        'comment' => $item->review->comment,
-                        'ai_response' => $language === 'en'
-                            ? $this->englishRatingResponse((int) $item->review->rating)
-                            : ($item->review->ai_response
-                                ?? $this->vietnameseRatingResponse((int) $item->review->rating)),
-                    ] : null,
-                ]),
-            ];
-        })->values();
-
-        return response()->json(['data' => $data, 'moderation' => $moderationStatus]);
+        $response = app(\App\Http\Controllers\Admin\Admin_RatingController::class)->byDish($request, $dishId);
+        $data = $response->getData(true);
+        $data['my_review'] = Rating::where('dish_id', $dishId)->where('user_id', Auth::id())
+            ->where('direct_review', 1)->first(['rating', 'comment']);
+        return response()->json($data);
     }
 
-    /**
-     * Tạo mới hoặc sửa lại đánh giá cho 1 lần đặt món cụ thể (order_item).
-     * Mỗi order_item chỉ được đánh giá 1 lần (unique constraint ở DB) - gọi
-     * lại endpoint này với cùng order_item_id sẽ cập nhật đè lên đánh giá cũ.
-     */
     public function store(Request $request)
     {
         $request->validate([
-            'order_item_id' => 'required|exists:order_items,order_item_id',
+            'dish_id' => 'required|exists:dishes,dish_id',
             'rating' => 'required|integer|min:1|max:5',
             'comment' => 'nullable|string|max:2000',
         ]);
 
-        $orderItem = OrderItem::with('order')->find($request->order_item_id);
-
-        if (!$orderItem || !$orderItem->order || $orderItem->order->user_id !== Auth::id()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Bạn chỉ có thể đánh giá món đã từng đặt.',
-            ], 403);
+        $dish = \App\Models\Dish::where('is_active', true)->findOrFail($request->dish_id);
+        $status = $this->moderation->status(Auth::id());
+        if ($status['blocked'] ?? false) {
+            return response()->json(['blocked' => true, 'message' => PreferredLanguage::fromRequest($request) === 'en' ? 'Reviews are suspended until the end of today.' : 'Bạn đã bị tạm khóa đánh giá trong hôm nay.'], 403);
         }
 
         if ($request->filled('comment')) {
@@ -107,28 +61,27 @@ class RatingController extends Controller
             $language
         );
 
-        $review = Rating::firstOrNew(['order_item_id' => $orderItem->order_item_id]);
         $storedResponse = $language === 'en'
             ? $this->vietnameseRatingResponse($rating)
             : $aiResponse;
-        $review->fill([
-            'dish_id' => $orderItem->dish_id,
+        $review = Rating::updateOrCreate(
+            ['dish_id' => $dish->dish_id, 'user_id' => Auth::id(), 'direct_review' => 1], [
+            'dish_id' => $dish->dish_id,
             'user_id' => Auth::id(),
             'rating' => $rating,
             'comment' => $request->comment,
             'ai_response' => $storedResponse,
         ]);
-        $review->save();
         $review->setAttribute('ai_response', $aiResponse);
 
         if ($rating <= 3) {
             RecommendationExclusion::firstOrCreate([
                 'user_id' => Auth::id(),
-                'dish_id' => $orderItem->dish_id,
+                'dish_id' => $dish->dish_id,
             ]);
         } else {
             RecommendationExclusion::where('user_id', Auth::id())
-                ->where('dish_id', $orderItem->dish_id)
+                ->where('dish_id', $dish->dish_id)
                 ->delete();
         }
 
@@ -148,13 +101,6 @@ class RatingController extends Controller
             'message' => 'Đã lưu đánh giá của bạn!',
             'data' => $review,
         ]);
-    }
-
-    private function englishRatingResponse(int $rating): string
-    {
-        return $rating >= 4
-            ? 'Thank you for supporting our restaurant. We are delighted to hear you enjoyed the dish.'
-            : 'Thank you for your feedback. We will take it into consideration as we work to improve the dish.';
     }
 
     private function vietnameseRatingResponse(int $rating): string

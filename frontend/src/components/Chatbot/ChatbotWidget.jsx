@@ -530,9 +530,13 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         const text = inputText.trim();
         if (textSendRef.current.text !== text) textSendRef.current = { running: false, text, id: crypto.randomUUID() };
         textSendRef.current.running = true;
+        const localMessageId = `text-${textSendRef.current.id}`;
         const interfaceLanguage = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi';
         replyLangRef.current = detectReplyLanguage(text, interfaceLanguage);
         setLoading(true);
+        setInputText('');
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+        setMessages((prev) => [...prev, { local_id: localMessageId, sender: 'user', content: text, created_at: new Date().toISOString() }]);
 
         try {
             const res = await chatbotAPI.interact({
@@ -545,12 +549,8 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 page_path: location.pathname,
                 theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
             });
-            // Only publish the customer's bubble after server-side moderation accepts it.
             textSendRef.current.text = null;
             setModerationMessage('');
-            setInputText('');
-            if (inputRef.current) inputRef.current.style.height = 'auto';
-            setMessages((prev) => [...prev, { sender: 'user', content: text, created_at: new Date().toISOString() }]);
             appendBotMessages(res.data.matched_id, res.data.reply, res.data.invoice_image_url, res.data.invoice_image_filename);
             if (res.data.navigate_to) navigate(res.data.navigate_to);
 
@@ -573,6 +573,9 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             }
         } catch (err) {
             const data = err.response?.data;
+            setMessages((prev) => prev.filter((message) => message.local_id !== localMessageId));
+            setInputText(text);
+            requestAnimationFrame(autoResizeTextarea);
             if (data?.warning || data?.blocked) {
                 setModerationMessage(data.message);
                 setModerationBlocked(Boolean(data.blocked));
@@ -659,6 +662,14 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                     color: var(--chat-input-placeholder);
                 }
 
+                .chatbot-window textarea {
+                    scrollbar-width: none;
+                }
+
+                .chatbot-window textarea::-webkit-scrollbar {
+                    display: none;
+                }
+
                 @keyframes pageSlideIn {
                     from {
                         opacity: 0.35;
@@ -670,47 +681,56 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                     }
                 }
 
-                @media (max-width: 1279px) {
+                .chatbot-launcher {
+                    right: max(16px, env(safe-area-inset-right));
+                    bottom: max(16px, env(safe-area-inset-bottom));
+                }
+
+                .chatbot-window {
+                    right: max(24px, env(safe-area-inset-right));
+                    bottom: max(24px, env(safe-area-inset-bottom));
+                    width: min(640px, calc(100vw - 48px));
+                    height: min(78dvh, 720px);
+                    animation: chatBubbleIn 180ms ease-out;
+                }
+
+                @media (min-width: 768px) {
                     .chatbot-window {
-                        inset: auto 0 0 0 !important;
-                        width: 100% !important;
-                        max-width: 760px !important;
-                        margin: 0 auto !important;
-                        height: clamp(300px, 50vh, 560px) !important;
-                        height: clamp(300px, 50dvh, 560px) !important;
-                        border-left: none !important;
-                        border-top: 1px solid #e5e7eb !important;
-                        border-radius: 14px 14px 0 0 !important;
-                        box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.15) !important;
-                        z-index: 45 !important;
+                        --chat-message-size: 16px;
+                        --chat-control-size: 15px;
+                        --chat-message-line-height: 1.6;
+                        --chat-input-line-height: 24px;
                     }
-                    .chatbot-window textarea {
-                        font-size: 16px !important;
+                }
+
+                @media (min-width: 768px) and (max-width: 1023px) {
+                    .chatbot-window {
+                        width: min(540px, calc(100vw - 48px));
                     }
+                }
+
+                @keyframes chatBubbleIn {
+                    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
+                }
+
+                @keyframes chatMicPulse {
+                    50% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0.18); }
                 }
 
                 @media (max-width: 767px) {
                     .chatbot-window {
-                        max-width: none !important;
-                        margin: 0 !important;
-                        border-top: none !important;
-                        border-radius: 0 !important;
-                        z-index: 1000 !important;
+                        right: max(8px, env(safe-area-inset-right));
+                        bottom: max(8px, env(safe-area-inset-bottom));
+                        width: calc(100% - max(8px, env(safe-area-inset-left)) - max(8px, env(safe-area-inset-right)));
+                        height: calc(100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
+                        border-radius: 18px !important;
                     }
+                    .chatbot-window textarea { font-size: 16px !important; }
                 }
 
-                @media (max-width: 767px) {
-                    .chatbot-window {
-                        inset: 0 auto auto 0 !important;
-                        width: 100% !important;
-                        height: 100vh !important;
-                        height: 100dvh !important;
-                        border-left: none !important;
-                        box-shadow: none !important;
-                    }
-                    .chatbot-window textarea {
-                        font-size: 16px !important;
-                    }
+                @media (prefers-reduced-motion: reduce) {
+                    .chatbot-window { animation: none; }
                 }
 
                 @keyframes pageSlideOut {
@@ -725,12 +745,12 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 }
             `}</style>
             {!isOpen && (
-                <button style={styles.bubble} onClick={() => setIsOpen(true)} aria-label={i18n.t("Mở chat hỗ trợ", { ns: 'legacy', keySeparator: false })}>
+                <button type="button" className="chatbot-launcher" style={styles.bubble} aria-expanded={false} aria-controls="chatbot-window" onClick={() => setIsOpen(true)} aria-label={i18n.t("Mở chat hỗ trợ", { ns: 'legacy', keySeparator: false })}>
                     <img src="/pics/chatbot.png" alt="" style={styles.bubbleIcon} />
                 </button>
             )}
             {isOpen && (
-            <div className="chatbot-window" style={styles.window}
+            <div id="chatbot-window" className="chatbot-window" role="region" aria-label={i18n.t("Mở chat hỗ trợ", { ns: 'legacy', keySeparator: false })} style={styles.window}
                 onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer.types.includes('Files')) setDragging(true); }}
                 onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }}
                 onDrop={(event) => { event.preventDefault(); setDragging(false); addPendingImages(event.dataTransfer.files); }}>
@@ -756,7 +776,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         </span>
                     </button>
                 </div>
-                <button style={styles.closeBtn} onClick={() => setIsOpen(false)}>✕</button>
+                <button type="button" style={styles.closeBtn} aria-label={t('common.close')} onClick={() => setIsOpen(false)}>✕</button>
             </div>
 
             {showDaysMenu ? (
@@ -1059,15 +1079,15 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
 
 const styles = {
     bubble: {
-        position: 'fixed', bottom: '24px', right: '24px', width: '62px', height: '62px',
+        position: 'fixed', width: '62px', height: '62px',
         borderRadius: '50%', backgroundColor: '#dc2626', color: 'white', border: 'none',
         cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.25)', zIndex: 45,
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
     },
     bubbleIcon: { width: '100%', height: '100%', objectFit: 'contain', filter: 'hue-rotate(135deg) saturate(1.35)' },
     window: {
-        position: 'fixed', inset: '0 0 0 auto', width: 'clamp(320px, 24vw, 420px)',
-        backgroundColor: 'var(--chat-surface)', color: 'var(--chat-text)', borderLeft: '1px solid var(--chat-border)', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
+        position: 'fixed', minHeight: 0, maxHeight: '100dvh', boxSizing: 'border-box', borderRadius: '24px',
+        backgroundColor: 'var(--chat-surface)', color: 'var(--chat-text)', border: '1px solid var(--chat-border)', boxShadow: '0 16px 64px rgba(0,0,0,0.24)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000,
     },
     dropOverlay: {
@@ -1080,7 +1100,7 @@ const styles = {
         color: 'var(--chat-text)', textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
     },
     dropTitle: { fontSize: '18px', fontWeight: 700, marginBottom: '8px' },
-    dropDescription: { fontSize: '13px', lineHeight: 1.5, color: 'var(--chat-muted-text)' },
+    dropDescription: { fontSize: 'var(--chat-control-size, 13px)', lineHeight: 1.5, color: 'var(--chat-muted-text)' },
     header: {
         backgroundColor: 'var(--chat-surface)', color: '#dc2626', padding: '12px 16px',
         borderBottom: '1px solid var(--chat-border)',
@@ -1102,18 +1122,18 @@ const styles = {
     botMsgRow: { display: 'flex', justifyContent: 'flex-start' },
     userMsg: {
         backgroundColor: '#dc2626', color: 'white', padding: '8px 12px',
-        borderRadius: '12px 12px 0 12px', maxWidth: '75%', fontSize: '14px', whiteSpace: 'pre-line',
+        borderRadius: '12px 12px 0 12px', maxWidth: '75%', fontSize: 'var(--chat-message-size, 14px)', lineHeight: 'var(--chat-message-line-height, normal)', overflowWrap: 'anywhere', whiteSpace: 'pre-line',
     },
     botMsg: {
         backgroundColor: 'var(--chat-bot-bubble)', color: 'var(--chat-text)', padding: '8px 12px',
-        borderRadius: '12px 12px 12px 0', maxWidth: '75%', fontSize: '14px', whiteSpace: 'pre-line',
+        borderRadius: '12px 12px 12px 0', maxWidth: '75%', fontSize: 'var(--chat-message-size, 14px)', lineHeight: 'var(--chat-message-line-height, normal)', overflowWrap: 'anywhere', whiteSpace: 'pre-line',
     },
     chatImage: { display: 'block', width: 'min(240px, 100%)', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' },
     chatImagePreviewButton: { display: 'block', maxWidth: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
     optionsWrap: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' },
     optionBtn: {
         backgroundColor: 'var(--chat-surface)', border: '1.5px solid #dc2626', color: '#dc2626',
-        borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer', textAlign: 'left',
+        borderRadius: '8px', padding: '8px 10px', fontSize: 'var(--chat-control-size, 13px)', cursor: 'pointer', textAlign: 'left',
     },
     inputRow: { display: 'flex', alignItems: 'flex-end', backgroundColor: 'var(--chat-surface)', borderTop: '1px solid var(--chat-border-soft)', padding: '8px', gap: '6px' },
     hiddenInput: { display: 'none' },
@@ -1138,8 +1158,8 @@ const styles = {
     input: { flex: 1, border: '1px solid var(--chat-border)', borderRadius: '8px', padding: '8px 10px', fontSize: '14px' },
     textarea: {
         flex: 1, border: '1px solid var(--chat-border)', borderRadius: '8px', padding: '8px 10px',
-        fontSize: '14px', fontFamily: 'inherit', resize: 'none', maxHeight: '110px',
-        overflowY: 'auto', lineHeight: '18px',
+        fontSize: 'var(--chat-message-size, 14px)', fontFamily: 'inherit', resize: 'none', maxHeight: '110px',
+        overflowY: 'auto', lineHeight: 'var(--chat-input-line-height, 18px)',
     },
     menuBtn: {
         background: 'var(--chat-surface)', border: '2px solid #dc2626', color: '#dc2626',
@@ -1155,18 +1175,18 @@ const styles = {
     historyList: { display: 'flex', flexDirection: 'column' },
     imageHistoryList: { marginBottom: '22px' },
     imageDayGroup: { marginBottom: '14px' },
-    imageDayTitle: { color: 'var(--chat-muted-text)', fontSize: '13px', fontWeight: 600, padding: '4px 6px 8px' },
+    imageDayTitle: { color: 'var(--chat-muted-text)', fontSize: 'var(--chat-control-size, 13px)', fontWeight: 600, padding: '4px 6px 8px' },
     imageGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px', padding: '0 6px' },
     historyImageButton: { display: 'block', width: '100%', padding: 0, border: 'none', borderRadius: '7px', background: 'transparent', cursor: 'pointer' },
     historyImage: { display: 'block', width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: '7px', border: '1px solid #e5e7eb' },
-    emptyHistory: { color: 'var(--chat-muted-text)', fontSize: '13px', padding: '8px 6px' },
+    emptyHistory: { color: 'var(--chat-muted-text)', fontSize: 'var(--chat-control-size, 13px)', padding: '8px 6px' },
     dayItem: {
         position: 'relative', display: 'flex', alignItems: 'center', gap: '4px', borderRadius: '8px',
         borderBottom: '1px solid var(--chat-border-soft)',
     },
-    dayLabel: { flex: 1, background: 'none', border: 'none', color: 'var(--chat-text)', textAlign: 'left', padding: '10px 6px', fontSize: '13px', cursor: 'pointer' },
+    dayLabel: { flex: 1, background: 'none', border: 'none', color: 'var(--chat-text)', textAlign: 'left', padding: '10px 6px', fontSize: 'var(--chat-control-size, 13px)', cursor: 'pointer' },
     moreBtn: { background: 'none', border: 'none', color: '#dc2626', fontSize: '22px', lineHeight: 1, padding: '4px 8px', cursor: 'pointer' },
-    deleteHistoryAction: { position: 'absolute', right: '8px', top: '38px', zIndex: 3, background: 'var(--chat-surface)', border: '1px solid #dc2626', borderRadius: '8px', boxShadow: '0 5px 14px rgba(0, 0, 0, 0.18)', color: '#dc2626', fontSize: '13px', padding: '10px 14px', cursor: 'pointer', whiteSpace: 'nowrap' },
+    deleteHistoryAction: { position: 'absolute', right: '8px', top: '38px', zIndex: 3, background: 'var(--chat-surface)', border: '1px solid #dc2626', borderRadius: '8px', boxShadow: '0 5px 14px rgba(0, 0, 0, 0.18)', color: '#dc2626', fontSize: 'var(--chat-control-size, 13px)', padding: '10px 14px', cursor: 'pointer', whiteSpace: 'nowrap' },
     historyBanner: {
         backgroundColor: 'var(--chat-warning-bg)', color: 'var(--chat-warning-text)', fontSize: '12px', padding: '6px 10px',
         borderRadius: '6px', textAlign: 'center', marginBottom: '4px',

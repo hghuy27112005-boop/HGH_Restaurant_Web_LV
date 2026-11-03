@@ -13,6 +13,8 @@ class DishCustomization extends Model
         'user_id',
         'dish_id',
         'recipe_name',
+        'recipe_name_en',
+        'seed_key',
         'ingredients',
         'recipe_instructions',
         'recipe_instructions_en',

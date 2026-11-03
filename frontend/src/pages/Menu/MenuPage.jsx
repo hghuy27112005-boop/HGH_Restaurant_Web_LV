@@ -8,7 +8,7 @@ import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from './DishDetailPage';
 import { getCartKey } from '../../utils/cartStorage';
-import { translateDishName } from '../../dishTranslations';
+import { translateDishName, translateRecipeName } from '../../dishTranslations';
 import i18n from '../../i18n';
 import FavoriteRecommendations from './FavoriteRecommendations';
 
@@ -433,7 +433,7 @@ const MenuPage = () => {
                                     onClick={() => setSelectedCustomization(recipe)}
                                     className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
                                 >
-                                    {i18n.t(recipe.recipe_name, { ns: 'legacy', keySeparator: false })}
+                                    {translateRecipeName(recipe)}
                                 </button>
                             ))}
                         </div>

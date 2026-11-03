@@ -6,7 +6,7 @@ import { useAuthContext } from '../../context/AuthContext';
 const TABS = [
     { get label() { return i18n.t("Thông tin", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Trang cá nhân", { ns: 'legacy', keySeparator: false }); }, path: '/profile', end: true },
     { get label() { return i18n.t("Lịch sử giao dịch", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Lịch sử giao dịch", { ns: 'legacy', keySeparator: false }); }, path: '/profile/orders', end: false },
-    { get label() { return i18n.t("Đánh giá dịch vụ", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Đánh giá dịch vụ", { ns: 'legacy', keySeparator: false }); }, path: '/profile/ratings', end: false },
+    { get label() { return i18n.t("Đánh giá món ăn", { ns: 'legacy', keySeparator: false }); }, get title() { return i18n.t("Đánh giá món ăn", { ns: 'legacy', keySeparator: false }); }, path: '/profile/ratings', end: false },
 ];
 
 // Khung chung của Trang cá nhân: tiêu đề + thanh tab, bên dưới là trang con.

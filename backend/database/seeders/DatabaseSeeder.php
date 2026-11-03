@@ -182,6 +182,7 @@ class DatabaseSeeder extends Seeder
         $this->call(SaleOffEventSeeder::class);
         $this->call(OrdersSeeder::class);
         $this->call(ReviewsSeeder::class);
+        $this->call(CommunityRecipesSeeder::class);
 
         app(\App\Services\DishRankingService::class)->recompute();
 

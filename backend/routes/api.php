@@ -103,8 +103,13 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
     Route::delete('/chatbot/messages-by-date', [ChatbotController::class, 'deleteMessagesByDate']);
     Route::get('/chatbot/moderation-status', [ChatbotController::class, 'moderationStatus']);
 
-    // Ratings (đánh giá dịch vụ)
-    Route::get('/ratings/ratable-items', [\App\Http\Controllers\RatingController::class, 'ratableItems']);
+    // Dish ratings and community recipes
+    Route::get('/ratings/dish/{dishId}', [\App\Http\Controllers\RatingController::class, 'byDish']);
+    Route::get('/community-recipes/{dishId}', [\App\Http\Controllers\CommunityRecipeController::class, 'index']);
+    Route::post('/community-recipes/{dishId}', [\App\Http\Controllers\CommunityRecipeController::class, 'store']);
+    Route::post('/community-recipes/{recipeId}/like', [\App\Http\Controllers\CommunityRecipeController::class, 'like']);
+    Route::post('/community-recipes/{recipeId}/comments', [\App\Http\Controllers\CommunityRecipeController::class, 'comment']);
+    Route::post('/community-recipes/{recipeId}/save', [\App\Http\Controllers\CommunityRecipeController::class, 'save']);
     Route::post('/ratings', [\App\Http\Controllers\RatingController::class, 'store']);
 
 });

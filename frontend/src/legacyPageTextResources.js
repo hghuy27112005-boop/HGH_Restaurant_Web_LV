@@ -599,7 +599,7 @@ const englishPageText = new Map([
     ['Thông tin', 'Information'],
     ['Trang cá nhân', 'Profile'],
     ['Lịch sử giao dịch', 'Transaction history'],
-    ['Đánh giá dịch vụ', 'Rating'],
+    ['Đánh giá món ăn', 'Rating'],
     ['Rất tệ', 'Terrible'],
     ['Chưa tốt', 'Poor'],
     ['Bình thường', 'Average'],

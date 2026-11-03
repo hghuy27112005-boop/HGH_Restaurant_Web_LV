@@ -74,7 +74,7 @@ function App() {
               <Route path="/menu" element={<LocaleAwarePage><MenuPage /></LocaleAwarePage>} />
               <Route path="/dish-details/:id?" element={<ProtectedRoute><LocaleAwarePage><DishDetailPage /></LocaleAwarePage></ProtectedRoute>} />
 
-              {/* User Routes: Trang cá nhân + Lịch sử giao dịch + Đánh giá dịch vụ */}
+              {/* User Routes: Trang cá nhân + Lịch sử giao dịch + Đánh giá món ăn */}
               <Route path="/profile" element={<ProtectedRoute><LocaleAwarePage><ProfileLayout /></LocaleAwarePage></ProtectedRoute>}>
                 <Route index element={<LocaleAwarePage><ProfilePage /></LocaleAwarePage>} />
                 <Route path="orders" element={<LocaleAwarePage><OrdersPage /></LocaleAwarePage>} />

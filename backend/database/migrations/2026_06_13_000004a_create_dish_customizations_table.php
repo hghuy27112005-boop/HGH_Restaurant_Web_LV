@@ -13,6 +13,8 @@ return new class extends Migration
             $table->foreignId('user_id')->constrained('users', 'user_id')->cascadeOnDelete();
             $table->foreignId('dish_id')->constrained('dishes', 'dish_id')->cascadeOnDelete();
             $table->string('recipe_name', 255)->default('Công thức thay thế 1');
+            $table->string('recipe_name_en')->nullable();
+            $table->string('seed_key')->nullable()->unique();
             $table->text('ingredients');
             $table->text('recipe_instructions');
             $table->text('recipe_instructions_en')->nullable();

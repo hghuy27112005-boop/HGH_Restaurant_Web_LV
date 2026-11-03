@@ -1,5 +1,5 @@
 import { formatCurrency } from '../../utils/formatCurrency.js';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { dishAPI, dishCustomizationAPI, cartAPI } from '../../services/api';
@@ -8,7 +8,7 @@ import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { getCartKey } from '../../utils/cartStorage';
 import i18n from '../../i18n';
-import { translateDishName } from '../../dishTranslations';
+import { translateDishName, translateRecipeName } from '../../dishTranslations';
 
 // Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
 const MAX_ORDER_QTY = 50;
@@ -340,6 +340,9 @@ const DishDetailPage = () => {
         add_on_ingredient_ids: [],
     });
     const [replacementSlot, setReplacementSlot] = useState(null);
+    const optionsRequest = useRef(0);
+    const [recipeToDelete, setRecipeToDelete] = useState(null);
+    const [deletingRecipe, setDeletingRecipe] = useState(false);
     const [loadingRecipeOptions, setLoadingRecipeOptions] = useState(false);
     const [draftRecipe, setDraftRecipe] = useState(null);
     const [savingRecipe, setSavingRecipe] = useState(false);
@@ -484,38 +487,50 @@ const DishDetailPage = () => {
         setRecipeModalOpen(true);
     };
 
-    const loadRecipeOptions = async () => {
+    const loadRecipeOptions = async (templateKey, selection = recipeSelection) => {
+        const requestId = ++optionsRequest.current;
         setLoadingRecipeOptions(true);
         setRecipeOptionsError('');
         try {
-            const response = await dishCustomizationAPI.getOptions(selectedDish.dish_id);
+            const response = await dishCustomizationAPI.getOptions(selectedDish.dish_id, templateKey, selection);
+            if (requestId !== optionsRequest.current) return null;
             setRecipeOptions(response.data.options);
             return response.data.options;
         } catch (optionsError) {
+            if (requestId !== optionsRequest.current) return null;
             setRecipeOptionsError(optionsError.response?.data?.message || i18n.t("Không thể tải danh sách nguyên liệu. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
             return null;
         } finally {
-            setLoadingRecipeOptions(false);
+            if (requestId === optionsRequest.current) setLoadingRecipeOptions(false);
         }
     };
 
+    useEffect(() => {
+        if (!recipeModalOpen || recipeModalView !== 'ingredients' || !recipeOptions) return undefined;
+        setLoadingRecipeOptions(true);
+        const timer = setTimeout(() => { void loadRecipeOptions(recipeSelection.template_key, recipeSelection); }, 250);
+        return () => clearTimeout(timer);
+    }, [recipeSelection, recipeModalView, recipeModalOpen]);
+
     const startCreateRecipe = async () => {
         setRecipeName('');
+        setSelectedRecipe(null);
         setShowAddOns(false);
         setRecipeSelection({ replacements: [], removed_ingredient_ids: [], add_on_ingredient_ids: [] });
         setDraftRecipe(null);
         setRecipeOptions(null);
         setRecipeModalView('ingredients');
-        await loadRecipeOptions();
+        await loadRecipeOptions(null, { replacements: [], removed_ingredient_ids: [], add_on_ingredient_ids: [] });
     };
 
     const startEditRecipe = async (recipe) => {
         setSelectedRecipe(recipe);
         setRecipeName(recipe.recipe_name);
         setDraftRecipe(recipe);
+        setRecipeSelection(recipe.selection || { replacements: [], removed_ingredient_ids: [], add_on_ingredient_ids: [] });
         setRecipeOptions(null);
         setRecipeModalView('ingredients');
-        const options = await loadRecipeOptions();
+        const options = await loadRecipeOptions(recipe.selection?.template_key, recipe.selection || {});
         if (!options) return;
         const sameIngredientName = (left, right) => String(left || '').trim().toLocaleLowerCase()
             === String(right || '').trim().toLocaleLowerCase();
@@ -561,6 +576,7 @@ const DishDetailPage = () => {
                 .map((ingredient) => ingredient.ingredient_id);
         setShowAddOns(Boolean(addOnIds.length));
         setRecipeSelection({
+            template_key: storedSelection?.template_key || null,
             replacements: [...replacementsBySlot.values()],
             removed_ingredient_ids: [...new Set(removedIds.map(Number))],
             add_on_ingredient_ids: [...new Set(addOnIds.map(Number))],
@@ -568,18 +584,29 @@ const DishDetailPage = () => {
         setRecipeModalView('ingredients');
     };
 
+    const selectedIngredientId = (slot, selection = recipeSelection) => (
+        selection.replacements.find(item => item.slot_key === slot.slot_key)?.to_ingredient_id ?? slot.ingredient.ingredient_id
+    );
+    const replacementChoices = slot => {
+        const used = new Set((recipeOptions?.required || []).map(item => selectedIngredientId(item)));
+        recipeSelection.add_on_ingredient_ids.forEach(id => used.add(id));
+        return slot.alternatives.filter(item => !used.has(item.ingredient_id));
+    };
     const chooseReplacement = (slot, ingredient) => {
-        setRecipeSelection((current) => ({
+        setRecipeSelection(current => ({
             ...current,
             replacements: [
-                ...current.replacements.filter((replacement) => replacement.slot_key !== slot.slot_key),
-                {
+                ...current.replacements.filter(item => item.slot_key !== slot.slot_key),
+                ...(ingredient.ingredient_id === slot.ingredient.ingredient_id ? [] : [{
                     slot_key: slot.slot_key,
                     from_ingredient_id: slot.ingredient.ingredient_id,
                     to_ingredient_id: ingredient.ingredient_id,
-                },
+                }]),
             ],
+            removed_ingredient_ids: [...new Set([...current.removed_ingredient_ids, ...(recipeOptions?.optional.some(item => item.ingredient_id === ingredient.ingredient_id) ? [ingredient.ingredient_id] : [])])],
+            add_on_ingredient_ids: current.add_on_ingredient_ids.filter(id => id !== ingredient.ingredient_id),
         }));
+        setDraftRecipe(current => current ? { ...current, preview_token: null } : current);
         setReplacementSlot(null);
     };
 
@@ -602,6 +629,7 @@ const DishDetailPage = () => {
     };
 
     const confirmRecipeIngredients = async () => {
+        if (loadingRecipeOptions || recipeOptionsError) return;
         if (!recipeName.trim()) {
             setAlertMessage(i18n.t("Vui lòng nhập tên công thức.", { ns: 'legacy', keySeparator: false }));
             return;
@@ -611,7 +639,7 @@ const DishDetailPage = () => {
             (replacement) => replacement.from_ingredient_id !== replacement.to_ingredient_id
         ) || recipeSelection.removed_ingredient_ids.length > 0
             || recipeSelection.add_on_ingredient_ids.length > 0;
-        if (!hasIngredientChanges) {
+        if (!hasIngredientChanges && !recipeSelection.template_key) {
             setAlertMessage(i18n.t("Vui lòng thay đổi ít nhất một nguyên liệu trước khi tạo công thức.", { ns: 'legacy', keySeparator: false }));
             return;
         }
@@ -625,6 +653,7 @@ const DishDetailPage = () => {
             });
         });
         const previewSelection = {
+            template_key: recipeSelection.template_key || null,
             replacements: [...replacementsBySlot.values()],
             removed_ingredient_ids: [...new Set(recipeSelection.removed_ingredient_ids.map(Number))],
             add_on_ingredient_ids: [...new Set(recipeSelection.add_on_ingredient_ids.map(Number))],
@@ -647,7 +676,7 @@ const DishDetailPage = () => {
                 return normalizeIngredientSet(splitIngredients(recipe.ingredients)) === newSetKey;
             });
             if (duplicate) {
-                setAlertMessage(i18n.t('dishDetail.duplicateIngredients', { recipe: duplicate.recipe_name }));
+                setAlertMessage(t('recipeEditing.saveDuplicate', { recipe: translateRecipeName(duplicate) }));
                 return;
             }
 
@@ -703,11 +732,29 @@ const DishDetailPage = () => {
             setRecipeModalView('list');
             setSelectedRecipe(null);
             setDraftRecipe(null);
+            setAlertMessage(t('dishCommunity.recipeSaved'));
         } catch (saveError) {
-            setAlertMessage(saveError.response?.data?.message || i18n.t("Không thể lưu công thức thay thế. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
+            setAlertMessage(saveError.response?.data?.code === 'recipe_save_duplicate'
+                ? t('recipeEditing.saveDuplicate', { recipe: translateRecipeName(saveError.response.data.duplicate) })
+                : saveError.response?.data?.message || i18n.t("Không thể lưu công thức thay thế. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
         } finally {
             setSavingRecipe(false);
         }
+    };
+
+    const deleteSavedRecipe = async () => {
+        if (!recipeToDelete || deletingRecipe) return;
+        setDeletingRecipe(true);
+        try {
+            const id = recipeToDelete.dish_customization_id;
+            await dishCustomizationAPI.remove(selectedDish.dish_id, id);
+            setDishes(current => current.map(item => item.dish_id === selectedDish.dish_id
+                ? { ...item, custom_recipes: (item.custom_recipes || []).filter(recipe => recipe.dish_customization_id !== id) } : item));
+            if (selectedCustomization?.dish_customization_id === id) setSelectedCustomization(null);
+            setSelectedRecipe(null); setDraftRecipe(null); setReplacementSlot(null);
+            setRecipeToDelete(null); setRecipeModalView('list');
+        } catch (error) { setAlertMessage(error.response?.data?.message || t('recipeEditing.deleteFailed')); }
+        finally { setDeletingRecipe(false); }
     };
 
     if (loading) return <Loading />;
@@ -805,7 +852,7 @@ const DishDetailPage = () => {
                                     onClick={() => setSelectedCustomization(recipe)}
                                     className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
                                 >
-                                    {i18n.t(recipe.recipe_name, { ns: 'legacy', keySeparator: false })}
+                                    {translateRecipeName(recipe)}
                                 </button>
                             ))}
                         </div>
@@ -858,7 +905,7 @@ const DishDetailPage = () => {
             <Modal
                 isOpen={recipeModalOpen}
                 className="max-w-3xl"
-                title={recipeModalView === 'list' ? i18n.t("Công thức thay thế", { ns: 'legacy', keySeparator: false }) : recipeModalView === 'detail' ? selectedRecipe?.recipe_name : recipeModalView === 'preview' ? i18n.t("Công thức mới", { ns: 'legacy', keySeparator: false }) : draftRecipe ? i18n.t("Chỉnh sửa công thức", { ns: 'legacy', keySeparator: false }) : i18n.t("Tạo công thức", { ns: 'legacy', keySeparator: false })}
+                title={recipeModalView === 'list' ? i18n.t("Công thức thay thế", { ns: 'legacy', keySeparator: false }) : recipeModalView === 'detail' ? translateRecipeName(selectedRecipe) : recipeModalView === 'preview' ? i18n.t("Công thức mới", { ns: 'legacy', keySeparator: false }) : draftRecipe ? i18n.t("Chỉnh sửa công thức", { ns: 'legacy', keySeparator: false }) : i18n.t("Tạo công thức", { ns: 'legacy', keySeparator: false })}
                 onClose={() => {
                     setRecipeModalOpen(false);
                     setReplacementSlot(null);
@@ -868,6 +915,9 @@ const DishDetailPage = () => {
                 secondaryClassName={recipeModalView === 'detail' ? 'font-semibold !border-amber-600 !text-amber-700 hover:!bg-amber-50' : ''}
                 onTertiary={recipeModalView === 'detail' ? () => setRecipeModalView('list') : undefined}
                 tertiaryText="Quay lại"
+                footerStart={recipeModalView === 'detail' && selectedRecipe?.dish_customization_id ? (
+                    <button type="button" disabled={deletingRecipe} onClick={() => setRecipeToDelete(selectedRecipe)} className="rounded border border-red-600 px-3 py-2 font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50">{t('recipeEditing.deleteRecipe')}</button>
+                ) : null}
                 onConfirm={recipeModalView === 'preview' && draftRecipe ? saveRecipe : undefined}
                 confirmText={savingRecipe ? i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false }) : i18n.t("Lưu công thức", { ns: 'legacy', keySeparator: false })}
             >
@@ -877,7 +927,7 @@ const DishDetailPage = () => {
                             <p className="text-gray-600">{i18n.t("Món ăn này chưa có công thức thay thế.", { ns: 'legacy', keySeparator: false })}</p>
                         ) : customRecipes.map((recipe) => (
                             <button key={recipe.dish_customization_id} onClick={() => { setSelectedRecipe(recipe); setRecipeModalView('detail'); }} className="self-start rounded border border-gray-300 px-4 py-3 text-left font-semibold hover:border-amber-600 hover:bg-amber-50">
-                                {i18n.t(recipe.recipe_name, { ns: 'legacy', keySeparator: false })}
+                                {translateRecipeName(recipe)}
                             </button>
                         ))}
                         <button onClick={startCreateRecipe} className="self-start rounded bg-amber-600 px-4 py-2 font-semibold text-white hover:bg-amber-700">{i18n.t("Tạo công thức mới", { ns: 'legacy', keySeparator: false }) + " "}</button>
@@ -937,7 +987,7 @@ const DishDetailPage = () => {
                         ) : recipeOptionsError ? (
                             <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                                 <p>{recipeOptionsError}</p>
-                                <button type="button" onClick={loadRecipeOptions} className="mt-2 font-semibold underline">
+                                <button type="button" onClick={() => loadRecipeOptions(recipeSelection.template_key)} className="mt-2 font-semibold underline">
                                     {i18n.t("Thử tải lại", { ns: 'legacy', keySeparator: false })}
                                 </button>
                             </div>
@@ -956,16 +1006,23 @@ const DishDetailPage = () => {
                                             return (
                                                 <div key={slot.slot_key} className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 p-3">
                                                     <span className="text-gray-800">{ingredientOptionLabel(selected || slot.ingredient)}</span>
-                                                    {slot.replaceable && (
-                                                        <button type="button" onClick={() => setReplacementSlot(slot)} className="rounded border border-amber-600 px-3 py-1 text-sm font-semibold text-amber-700 hover:bg-amber-50">
-                                                            {i18n.t("Thay đổi", { ns: 'legacy', keySeparator: false })}
-                                                        </button>
-                                                    )}
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {replacement && (
+                                                            <button type="button" onClick={() => chooseReplacement(slot, slot.ingredient)} className="rounded border border-gray-300 px-3 py-1 text-sm hover:border-red-600 hover:text-red-600">
+                                                                {t('recipeEditing.backToOriginal')}
+                                                            </button>
+                                                        )}
+                                                        {slot.replaceable && (
+                                                            <button type="button" onClick={() => setReplacementSlot(slot)} className="rounded border border-amber-600 px-3 py-1 text-sm font-semibold text-amber-700 hover:bg-amber-50">
+                                                                {i18n.t("Thay đổi", { ns: 'legacy', keySeparator: false })}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             );
                                         })}
                                     </div>
-                                    <p className="mt-2 text-sm text-gray-500">{i18n.t("Mỗi nguyên liệu tối thiểu phải được giữ lại; quý khách chỉ có thể thay thế bằng nguyên liệu cùng loại.", { ns: 'legacy', keySeparator: false })}</p>
+                                    <p className="mt-2 text-sm text-gray-500">{t('recipeEditing.ruleHint')}</p>
                                 </section>
 
                                 <section>
@@ -978,6 +1035,7 @@ const DishDetailPage = () => {
                                                     <input
                                                         type="checkbox"
                                                         checked={included}
+                                                        disabled={recipeOptions.required.some(slot => selectedIngredientId(slot) === ingredient.ingredient_id)}
                                                         onChange={() => toggleOptionalRemoval(ingredient.ingredient_id)}
                                                     />
                                                     <span>{ingredientOptionLabel(ingredient)}</span>
@@ -1000,7 +1058,7 @@ const DishDetailPage = () => {
                                     </button>
                                     {showAddOns && (
                                         <div id="recipe-add-ons" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                            {recipeOptions.add_ons.map((ingredient) => (
+                                            {recipeOptions.add_ons.filter(ingredient => !recipeOptions.required.some(slot => selectedIngredientId(slot) === ingredient.ingredient_id)).map((ingredient) => (
                                                 <label key={ingredient.ingredient_id} className="flex cursor-pointer items-center gap-2 rounded border border-gray-200 p-2">
                                                     <input
                                                         type="checkbox"
@@ -1044,6 +1102,9 @@ const DishDetailPage = () => {
                     </div>
                 )}
             </Modal>
+            <Modal isOpen={!!recipeToDelete} title={t('recipeEditing.deleteRecipe')} onClose={() => { if (!deletingRecipe) setRecipeToDelete(null); }} onConfirm={deleteSavedRecipe} confirmDisabled={deletingRecipe} confirmText={t('recipeEditing.deleteRecipe')}>
+                <p>{t('recipeEditing.deleteConfirm', { recipe: translateRecipeName(recipeToDelete) })}</p>
+            </Modal>
             <Modal
                 isOpen={Boolean(replacementSlot)}
                 title={i18n.t("Chọn nguyên liệu thay thế", { ns: 'legacy', keySeparator: false })}
@@ -1053,7 +1114,12 @@ const DishDetailPage = () => {
             >
                 {replacementSlot && (
                     <div className="flex flex-col gap-2">
-                        {replacementSlot.alternatives.map((ingredient) => (
+                        {recipeSelection.replacements.some(item => item.slot_key === replacementSlot.slot_key) && (
+                            <button type="button" onClick={() => chooseReplacement(replacementSlot, replacementSlot.ingredient)} className="rounded border border-red-600 px-3 py-2 text-left font-semibold text-red-600 hover:bg-red-50">
+                                {t('recipeEditing.backToOriginal')}: {ingredientOptionLabel(replacementSlot.ingredient)}
+                            </button>
+                        )}
+                        {replacementChoices(replacementSlot).map((ingredient) => (
                             <button
                                 key={ingredient.ingredient_id}
                                 type="button"
@@ -1063,7 +1129,7 @@ const DishDetailPage = () => {
                                 {ingredientOptionLabel(ingredient)}
                             </button>
                         ))}
-                        {replacementSlot.alternatives.length === 0 && (
+                        {replacementChoices(replacementSlot).length === 0 && (
                             <p className="text-sm text-gray-600">{i18n.t("Chưa có nguyên liệu cùng loại để thay thế.", { ns: 'legacy', keySeparator: false })}</p>
                         )}
                     </div>

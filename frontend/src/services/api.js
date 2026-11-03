@@ -29,7 +29,8 @@ const API_ERROR_KEYS = {
     dish_not_found: 'apiErrors.orderRequestFailed',
     rate_limited: 'apiErrors.serverError',
     admin_forbidden: 'apiErrors.serverError',
-    recipe_preview_unavailable: 'apiErrors.serverError',
+    recipe_preview_unavailable: 'adminDish.aiUnavailable',
+    ingredient_options_unavailable: 'recipeEditing.optionsUnavailable',
 };
 
 // Add token to request if exists
@@ -151,7 +152,7 @@ export const dishAPI = {
 export const dishCustomizationAPI = {
     getAll: () => axiosInstance.get('/dish-customizations'),
     getByDish: (dishId) => axiosInstance.get(`/dish-customizations/${dishId}`),
-    getOptions: (dishId) => axiosInstance.get(`/dish-customizations/${dishId}/options`),
+    getOptions: (dishId, templateKey, selection = {}) => axiosInstance.get(`/dish-customizations/${dishId}/options`, { params: { ...selection, template_key: templateKey || undefined } }),
     save: (dishId, data) => axiosInstance.put(`/dish-customizations/${dishId}`, data),
     remove: (dishId, customizationId) => axiosInstance.delete(`/dish-customizations/${dishId}/${customizationId}`),
     preview: (dishId, data) => axiosInstance.post(`/dish-customizations/${dishId}/preview`, data),
@@ -162,9 +163,9 @@ export const recommendationAPI = {
     getRecommendations: (favoriteDishIds) => axiosInstance.post('/recommendations', { favorite_dish_ids: favoriteDishIds }),
 };
 
-// Ratings API (đánh giá dịch vụ - món ăn đã đặt)
+// Dish ratings and community recipes
 export const ratingAPI = {
-    getRatableItems: () => axiosInstance.get('/ratings/ratable-items'),
+    getByDish: (id, page = 1) => axiosInstance.get(`/ratings/dish/${id}`, { params: { page } }),
     submit: (data) => axiosInstance.post('/ratings', data),
 };
 
@@ -324,3 +325,11 @@ export const vnpayService = {
 };
 
 export default axiosInstance;
+
+export const communityRecipeAPI = {
+    list: id => axiosInstance.get(`/community-recipes/${id}`),
+    share: (id, customization_id) => axiosInstance.post(`/community-recipes/${id}`, { customization_id }),
+    like: id => axiosInstance.post(`/community-recipes/${id}/like`),
+    comment: (id, comment) => axiosInstance.post(`/community-recipes/${id}/comments`, { comment }),
+    save: id => axiosInstance.post(`/community-recipes/${id}/save`),
+};

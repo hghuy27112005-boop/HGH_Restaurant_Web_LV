@@ -142,8 +142,8 @@ return [
         'price' => 30000,
         'is_bestseller' => false,
         'is_active' => true,
-        'ingredients' => 'Thịt nạm bò, gân bò, cà rốt, hành tây, sả, bột bò kho, hoa hồi, thảo quả, quế, màu điều, nước dừa, bột năng, bánh mì, rau thơm, gia vị cơ bản',
-        'ingredients_en' => 'Beef flank, Beef tendon, Carrot, Onion, Lemongrass, Beef stew seasoning, Star anise, Amomum fruit, Cinnamon, Annatto oil, Coconut water, Tapioca starch, Baguette, Fresh herbs, Basic seasonings',
+        'ingredients' => 'Nạm bò, gân bò, cà rốt, hành tây, sả, bột bò kho, hoa hồi, thảo quả, quế, màu điều, nước dừa, bột năng, bánh mì, rau thơm, gia vị cơ bản',
+        'ingredients_en' => 'Beef brisket, Beef tendon, Carrot, Onion, Lemongrass, Beef stew seasoning, Star anise, Amomum fruit, Cinnamon, Annatto oil, Coconut water, Tapioca starch, Baguette, Fresh herbs, Basic seasonings',
         'recipe_instructions' => '1. Thịt bò cắt khối vuông, ướp bột bò kho, tỏi, sả băm, màu điều, nước mắm, đường.
 2. Rang thơm hoa hồi, quế, thảo quả và đập dập các cọng sả.
 3. Xào săn thịt bò, đổ nước dừa tươi vào ngập thịt. Thêm sả và gia vị thảo mộc hầm lửa nhỏ đến khi bò mềm.
@@ -619,15 +619,15 @@ return [
     ],
     [
         'dish_id' => 29,
-        'dish_name' => 'Phở bò',
-        'dish_name_en' => 'Beef Pho',
+        'dish_name' => 'Phở nạm bò',
+        'dish_name_en' => 'Beef Brisket Pho',
         'type_id' => 2,
         'image_url' => '29.jpg',
         'price' => 30000,
         'is_bestseller' => false,
         'is_active' => true,
         'ingredients' => 'Bánh phở, nạm bò, xương bò, hành tây, hành lá, ngò rí, húng quế, giá đỗ, hoa hồi, thảo quả, quế, gừng, tỏi ngâm, tương đen, tương ớt, chanh',
-        'ingredients_en' => 'Pho rice noodles, Beef flank, Beef bones, Onion, Green onion, Cilantro, Thai basil, Bean sprouts, Star anise, Amomum fruit, Cinnamon, Ginger, Pickled garlic, Hoisin sauce, Chili sauce, Lime',
+        'ingredients_en' => 'Pho rice noodles, Beef brisket, Beef bones, Onion, Green onion, Cilantro, Thai basil, Bean sprouts, Star anise, Amomum fruit, Cinnamon, Ginger, Pickled garlic, Hoisin sauce, Chili sauce, Lime',
         'recipe_instructions' => '1. Nướng thơm gừng, hành tây, hoa hồi, thảo quả, quế. Hầm xương bò 6-8 tiếng hớt bọt trong.
 2. Thả gia vị nướng vào túi lọc đun cùng nước hầm xương. Nêm nước mắm, đường phèn, muối hột.
 3. Luộc chín nạm bò rồi thái lát mỏng.
@@ -635,7 +635,7 @@ return [
 5. Rắc hành lá và ngò rí nếu thích; ăn kèm húng quế, giá đỗ, tỏi ngâm, tương đen, tương ớt và chanh.',
         'recipe_instructions_en' => '1. Toast ginger, onion, star anise, amomum fruit, and cinnamon. Simmer beef bones for 6-8 hours, skimming constantly for clarity.
 2. Place the toasted aromatics in a spice bag and simmer them in the broth. Season with fish sauce, rock sugar, and salt.
-3. Cook the beef flank until tender, then slice it thinly.
+3. Cook the beef brisket until tender, then slice it thinly.
 4. Blanch the pho noodles, arrange the beef on top, and ladle over the boiling broth.
 5. Add scallions and cilantro if desired. Serve with Thai basil, bean sprouts, pickled garlic, hoisin sauce, chili sauce, and lime.',
     ],

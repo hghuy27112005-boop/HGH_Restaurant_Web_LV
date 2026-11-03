@@ -41,7 +41,7 @@ class BilingualRecipeIngredientSeeder extends Seeder
         26 => ['bột bánh xèo', 'bột nghệ', 'nước cốt dừa'],
         27 => ['bột năng', 'bột tàn mì'],
         28 => ['bún tươi', 'mắm ruốc', 'sả', 'ớt sa tế'],
-        29 => ['bánh phở', 'xương bò', 'hành tây', 'hoa hồi', 'thảo quả', 'quế', 'gừng'],
+        29 => ['xương bò', 'hành tây', 'hoa hồi', 'thảo quả', 'quế', 'gừng'],
         30 => ['vỏ hoành thánh', 'nước hầm xương'],
     ];
 
@@ -51,7 +51,7 @@ class BilingualRecipeIngredientSeeder extends Seeder
         3 => ['tôm', 'thịt heo ba chỉ'],
         5 => ['thịt heo thăn'],
         6 => ['thịt gà'],
-        7 => ['thịt nạm bò', 'gân bò'],
+        7 => ['nạm bò', 'gân bò'],
         8 => ['lạp xưởng', 'chả lụa', 'tôm'],
         9 => ['thịt gà xé'],
         10 => ['thịt heo băm'],
@@ -67,7 +67,7 @@ class BilingualRecipeIngredientSeeder extends Seeder
         26 => ['thịt ba chỉ', 'tôm'],
         27 => ['tôm', 'thịt heo'],
         28 => ['bắp bò', 'gân bò', 'giò heo', 'chả cua'],
-        29 => ['nạm bò'],
+        29 => ['bánh phở', 'nạm bò'],
         30 => ['thịt heo', 'tôm'],
     ];
 
@@ -99,7 +99,7 @@ class BilingualRecipeIngredientSeeder extends Seeder
         27 => ['hành phi', 'rau răm'],
         28 => ['ngò gai', 'giá đỗ', 'rau muống chẻ', 'hoa chuối', 'chanh'],
         29 => ['hành lá', 'ngò rí', 'húng quế', 'giá đỗ', 'tỏi ngâm', 'tương đen', 'tương ớt', 'chanh'],
-        30 => ['hẹ', 'giá đỗ', 'hành phi', 'ngò rí'],
+        30 => ['xá xíu', 'hẹ', 'giá đỗ', 'hành phi', 'ngò rí'],
     ];
 
     private const EXTRA_TOPPINGS = [
@@ -221,7 +221,7 @@ class BilingualRecipeIngredientSeeder extends Seeder
 
     private function normalizeIngredientName(string $name): string
     {
-        $name = Str::ascii(Str::lower(trim($name)));
+        $name = Str::ascii(\App\Support\IngredientIdentity::key($name));
         $name = preg_replace('/\\b(?:chopped|diced|shredded|sliced|minced|ground|finely|roughly|fresh|kernels|meat)\\b/u', ' ', $name);
         $name = preg_replace('/\\b(?:thai hat luu|thai soi|thai lat|bam nho|cat nho|xe soi|bao soi|tuoi)\\b/u', ' ', $name);
         $name = preg_replace('/^(?:thit )(?=(?:ga|heo|bo|vit)\\b)/u', '', $name);

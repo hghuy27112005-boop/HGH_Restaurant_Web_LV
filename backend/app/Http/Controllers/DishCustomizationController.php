@@ -34,16 +34,17 @@ class DishCustomizationController extends Controller
         ]);
     }
 
-    public function options($dishId, DishCustomizationService $service)
+    public function options(Request $request, $dishId, DishCustomizationService $service)
     {
         try {
             return response()->json([
                 'success' => true,
-                'options' => $service->options(Dish::findOrFail($dishId)),
+                'options' => $service->options(Dish::findOrFail($dishId), $request->validate(['template_key' => 'nullable|string|max:40', 'replacements' => 'sometimes|array|max:40', 'replacements.*.slot_key' => 'required|string|max:80', 'replacements.*.from_ingredient_id' => 'required|integer', 'replacements.*.to_ingredient_id' => 'required|integer', 'removed_ingredient_ids' => 'sometimes|array|max:40', 'removed_ingredient_ids.*' => 'integer', 'add_on_ingredient_ids' => 'sometimes|array|max:40', 'add_on_ingredient_ids.*' => 'integer']), true),
             ]);
         } catch (RuntimeException|ConnectionException|RequestException $exception) {
             report($exception);
             return response()->json([
+                'code' => 'ingredient_options_unavailable',
                 'message' => 'Chưa thể phân tích danh sách nguyên liệu. Vui lòng thử lại sau.',
             ], 503);
         }
@@ -53,6 +54,7 @@ class DishCustomizationController extends Controller
     {
         $data = $request->validate([
             'selection' => 'required|array',
+            'selection.template_key' => 'nullable|string|max:40',
             'selection.replacements' => 'sometimes|array',
             'selection.replacements.*.slot_key' => 'required|string|max:80',
             'selection.replacements.*.from_ingredient_id' => 'required|integer',
@@ -73,10 +75,14 @@ class DishCustomizationController extends Controller
                 return response()->json(['message' => 'Món ăn chưa có công thức gốc để tạo công thức mới.'], 422);
             }
 
-            $revised = $gemini->generateRecipeTranslations(
-                $dish->recipe_instructions,
-                $resolved['ingredients']
-            );
+            $template = ($data['selection']['template_key'] ?? null)
+                ? \App\Models\DishCustomization::where('dish_id', $dish->dish_id)
+                    ->where('seed_key', 'pho:' . $data['selection']['template_key'])->first()
+                : null;
+            $unchangedTemplate = $template && empty($data['selection']['replacements']) && empty($data['selection']['removed_ingredient_ids']) && empty($data['selection']['add_on_ingredient_ids']);
+            $revised = $unchangedTemplate
+                ? ['vi' => $template->recipe_instructions, 'en' => $template->recipe_instructions_en]
+                : $gemini->generateRecipeTranslations($template?->recipe_instructions ?? $dish->recipe_instructions, $resolved['ingredients']);
         } catch (RuntimeException|ConnectionException|RequestException $exception) {
             report($exception);
             return response()->json([
@@ -117,6 +123,7 @@ class DishCustomizationController extends Controller
             'customization_id' => 'nullable|integer',
             'preview_token' => 'required|string|uuid',
             'selection' => 'required|array',
+            'selection.template_key' => 'nullable|string|max:40',
             'selection.replacements' => 'sometimes|array',
             'selection.replacements.*.slot_key' => 'required|string|max:80',
             'selection.replacements.*.from_ingredient_id' => 'required|integer',
@@ -160,7 +167,7 @@ class DishCustomizationController extends Controller
     public function destroy($dishId, $customizationId)
     {
         Dish::findOrFail($dishId);
-        Auth::user()->dishCustomizations()->where('dish_id', $dishId)->whereKey($customizationId)->delete();
+        Auth::user()->dishCustomizations()->where('dish_id', $dishId)->whereKey($customizationId)->firstOrFail()->delete();
 
         return response()->json(['success' => true]);
     }

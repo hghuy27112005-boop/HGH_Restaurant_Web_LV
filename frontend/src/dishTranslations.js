@@ -8,3 +8,9 @@ export const translateDishName = (dishOrName) => {
         ? dishOrName.dish_name_en || dishOrName.name_en || dishOrName.dish_name || dishOrName.name || ''
         : dishOrName.dish_name || dishOrName.name_vi || dishOrName.name || '';
 };
+
+export const translateRecipeName = (recipe) => (
+    i18n.resolvedLanguage?.startsWith('en')
+        ? recipe?.recipe_name_en || recipe?.recipe_name || ''
+        : recipe?.recipe_name || ''
+);

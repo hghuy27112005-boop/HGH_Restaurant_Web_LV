@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
 class IngredientStock extends Model
 {
@@ -39,7 +38,7 @@ class IngredientStock extends Model
 
     public static function keyFor(string $name): string
     {
-        return Str::lower(trim($name));
+        return \App\Support\IngredientIdentity::key($name);
     }
 
     public static function getOrCreateForDate(string $name, string $date, string $language = 'vi'): self
@@ -51,7 +50,9 @@ class IngredientStock extends Model
             ? ['ingredient_name' => null, 'ingredient_name_vi' => $name]
             : ['ingredient_name' => $name];
 
-        $ingredient = Ingredient::firstOrCreate(
+        $ingredient = Ingredient::where('ingredient_key', $key)->first() ?? Ingredient::query()->get()->first(fn ($item) => collect([
+            $item->ingredient_key, $item->ingredient_name, $item->ingredient_name_vi, ...($item->aliases ?? []),
+        ])->filter()->contains(fn ($label) => self::keyFor($label) === $key)) ?? Ingredient::firstOrCreate(
             ['ingredient_key' => $key],
             $ingredientNameAttributes
         );

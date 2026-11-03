@@ -139,6 +139,18 @@ class DishController extends Controller
                     return $this->dishNameInvalidResponse();
                 }
             }
+            if ($dish && trim((string) $dish->ingredients) !== '' && trim((string) $dish->recipe_instructions) !== '') {
+                $service = app(\App\Services\DishCustomizationService::class);
+                $service->createRequiredRulesFromDishIngredients($dish);
+                $sourceNames = array_map('trim', explode(',', (string) ($language === 'en' ? $dish->ingredients_en : $dish->ingredients)));
+                $ingredients = $dish->ingredientRules()->with('ingredient')->orderBy('sort_order')->get()->values()->map(function ($rule, $index) use ($language, $sourceNames) {
+                    $name = $sourceNames[$index] ?? $this->canonicalIngredientName($rule->ingredient, $language);
+                    return ['ingredient_id' => (int) $rule->ingredient_id, 'name' => $name,
+                        'name_vi' => $rule->ingredient->ingredient_name_vi, 'name_en' => $rule->ingredient->ingredient_name,
+                        $language === 'en' ? 'name_en' : 'name_vi' => $name, 'role' => $rule->role];
+                });
+                return response()->json(['success' => true, 'language' => $language, 'ingredients' => $ingredients, 'source' => 'stored']);
+            }
             $image = $request->file('image');
             if (!$image && $dish) {
                 $imagePath = public_path('dishes/' . basename((string) $dish->getRawOriginal('image_url')));
@@ -333,6 +345,7 @@ class DishController extends Controller
     public function previewDishRecipe(Request $request, GeminiChatbotService $gemini)
     {
         $data = $request->validate([
+            'dish_id' => 'nullable|integer|exists:dishes,dish_id',
             'dish_name' => 'required|string|max:255',
             'language' => 'nullable|in:vi,en',
             'ingredient_ids' => 'required|array|min:1|max:40',
@@ -362,6 +375,19 @@ class DishController extends Controller
         $ingredientNames = $ingredients->map(fn (Ingredient $ingredient): string =>
             trim((string) ($submittedNames->get((int) $ingredient->ingredient_id)['name'] ?? $this->canonicalIngredientName($ingredient, $language) ?? $ingredient->ingredient_name))
         );
+
+        $dish = isset($data['dish_id']) ? Dish::findOrFail($data['dish_id']) : null;
+        $storedIds = $dish?->ingredientRules()->orderBy('sort_order')->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all() ?? [];
+        $storedNames = $dish ? array_map('trim', explode(',', (string) ($language === 'en' ? $dish->ingredients_en : $dish->ingredients))) : [];
+        $submittedIds = array_map('intval', $data['ingredient_ids']);
+        $namesUnchanged = collect($submittedIds)->every(fn ($id) =>
+            !isset($submittedNames[$id]) || trim($submittedNames[$id]['name']) === ($storedNames[array_search($id, $storedIds, true)] ?? null)
+        );
+        $sameIds = count($storedIds) === count($submittedIds) && !array_diff($storedIds, $submittedIds);
+        $storedRecipe = $dish ? ($language === 'en' ? $dish->recipe_instructions_en : $dish->recipe_instructions) : null;
+        if ($dish && $sameIds && $namesUnchanged && trim((string) $storedRecipe) !== '') {
+            return response()->json(['success' => true, 'ingredients' => $ingredients, 'recipe_instructions' => $storedRecipe, 'source' => 'stored']);
+        }
 
         try {
             $recipe = $gemini->generateRecipe(
@@ -702,7 +728,7 @@ class DishController extends Controller
 
     private function normalizeIngredientName(string $name): string
     {
-        $name = Str::ascii(Str::lower(trim($name)));
+        $name = Str::ascii(\App\Support\IngredientIdentity::key($name));
         $name = preg_replace('/\\b(?:chopped|diced|shredded|sliced|minced|ground|finely|roughly|fresh|kernels|meat)\\b/u', ' ', $name);
         $name = preg_replace('/\\b(?:thai hat luu|thai soi|thai lat|bam nho|cat nho|xe soi|bao soi|tuoi)\\b/u', ' ', $name);
         $name = preg_replace('/^(?:thit )(?=(?:ga|heo|bo|vit)\\b)/u', '', $name);
@@ -893,7 +919,7 @@ class DishController extends Controller
             ->keyBy(fn (array $item) => (int) $item['ingredient_id']);
         $ingredients = Ingredient::query()
             ->whereIn('ingredient_id', $selected->keys())
-            ->orderBy('ingredient_id')->get();
+            ->get()->sortBy(fn ($ingredient) => $selected->keys()->search((int) $ingredient->ingredient_id))->values();
         if ($ingredients->count() !== $selected->count()) {
             return response()->json([
                 'code' => 'ingredient_list_invalid',
@@ -915,7 +941,15 @@ class DishController extends Controller
         }
 
         try {
-            $translated = $gemini->translateDishContent($dishName, $sourceIngredients, $sourceRecipe, $language);
+            $sourceColumn = $language === 'en' ? 'ingredients_en' : 'ingredients';
+            $recipeColumn = $language === 'en' ? 'recipe_instructions_en' : 'recipe_instructions';
+            $targetColumn = $language === 'en' ? 'ingredients' : 'ingredients_en';
+            $targetRecipeColumn = $language === 'en' ? 'recipe_instructions' : 'recipe_instructions_en';
+            $unchanged = $sourceIngredients === $dish->{$sourceColumn} && $sourceRecipe === $dish->{$recipeColumn}
+                && trim((string) $dish->{$targetColumn}) !== '' && trim((string) $dish->{$targetRecipeColumn}) !== '';
+            $translated = $unchanged
+                ? ['dish_name' => $language === 'en' ? $dish->dish_name : $dish->dish_name_en, 'ingredients' => $dish->{$targetColumn}, 'recipe_instructions' => $dish->{$targetRecipeColumn}]
+                : $gemini->translateDishContent($dishName, $sourceIngredients, $sourceRecipe, $language);
             $missingIngredientTranslations = $this->translateMissingIngredientNames(
                 $ingredients,
                 $sourceIngredientNames->all(),

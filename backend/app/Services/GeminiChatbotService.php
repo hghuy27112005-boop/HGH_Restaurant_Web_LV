@@ -22,6 +22,7 @@ class GeminiChatbotService
 
     public function __construct()
     {
+        $this->model = (string) config('services.gemini.model', $this->model);
         $this->apiKey = (string) config('services.gemini.api_key', '');
     }
 
@@ -581,14 +582,14 @@ Use exactly these ingredients and no others:
 {$ingredientList}
 
 Rules:
-- Write a complete, practical recipe in English, keeping the original dish's style where applicable.
+- Write complete, practical cooking instructions in both English and Vietnamese, preserving the same steps and ingredient meanings in both languages.
 - You may create appropriate preparation and cooking steps for selected ingredients that were not present in the original recipe.
 - Never mention or use an ingredient outside the final list above. Do not silently omit any listed ingredient; integrate it sensibly or explain its use in a step.
 - Do not invent quantities; this restaurant uses one portion of each listed ingredient per serving.
 - Include every listed ingredient in the recipe and do not include any other food ingredient.
 - Format each cooking step on its own line, without numbering or bullet markers. The website will display the steps as a numbered list.
 - Return JSON only in this exact shape:
-{"recipe_instructions":"Complete English cooking steps, one step per line","used_ingredients":["ingredient label copied exactly from the final list"]}
+{"recipe_instructions_en":"Complete English cooking steps, one step per line","recipe_instructions_vi":"The same cooking steps in Vietnamese, one step per line","used_ingredients":["ingredient label copied exactly from the final list"]}
 PROMPT;
 
         $result = $this->requestRecipeJson($prompt);
@@ -598,20 +599,11 @@ PROMPT;
             ->filter(static fn ($ingredient): bool => is_string($ingredient))
             ->map(fn ($ingredient) => Str::lower(trim((string) $ingredient)))
             ->filter()->unique()->sort()->values()->all();
-        $englishRecipe = $this->normalizeGeminiText($result['recipe_instructions'] ?? null);
-        if ($englishRecipe === '' || $usedIngredients !== $expectedIngredients) {
+        $englishRecipe = $this->normalizeGeminiText($result['recipe_instructions_en'] ?? null);
+        $vietnameseRecipe = $this->normalizeGeminiText($result['recipe_instructions_vi'] ?? null);
+        if ($englishRecipe === '' || $vietnameseRecipe === '' || $usedIngredients !== $expectedIngredients) {
             throw new RuntimeException('Gemini recipe output did not preserve the selected ingredient list.');
         }
-
-        $translationPrompt = <<<PROMPT
-Translate the following English cooking instructions into natural, clear Vietnamese. Preserve every instruction, ingredient meaning, and step order. Do not add or remove content.
-
-{$englishRecipe}
-
-Return only the Vietnamese translation.
-PROMPT;
-
-        $vietnameseRecipe = $this->requestRecipeText($translationPrompt);
 
         return [
             'en' => $englishRecipe,
@@ -785,7 +777,8 @@ PROMPT;
             throw new RuntimeException('Gemini ingredient analysis failed with HTTP ' . $response->status() . '.');
         }
 
-        $payload = json_decode((string) $response->json('candidates.0.content.parts.0.text', ''), true);
+        $text = collect($response->json('candidates.0.content.parts', []))->pluck('text')->filter()->implode("\n");
+        $payload = $this->decodeGeminiJsonObject($text);
         if (
             !is_array($payload)
             || !is_bool($payload['is_valid'] ?? null)
@@ -1143,7 +1136,8 @@ PROMPT;
         string $dishName,
         array $inventory,
         array $replaceableSlots,
-        array $optionalIngredientIds
+        array $optionalIngredientIds,
+        array $context = []
     ): array {
         if (trim($this->apiKey) === '') {
             throw new RuntimeException('Gemini API key is not configured.');
@@ -1152,6 +1146,7 @@ PROMPT;
         $inventoryJson = $this->jsonForPrompt($inventory);
         $slotsJson = $this->jsonForPrompt($replaceableSlots);
         $optionalJson = $this->jsonForPrompt(array_values($optionalIngredientIds));
+        $contextJson = $this->jsonForPrompt($context);
         $prompt = <<<PROMPT
 Suggest ingredient alternatives and suitable serving accompaniments for the customer's recipe.
 Dish name: {$dishName}
@@ -1162,13 +1157,15 @@ Replaceable required slots:
 {$slotsJson}
 Ingredients that the administrator marked optional (customers may remove these):
 {$optionalJson}
-Available pantry inventory:
+Current recipe and selections (evaluate suitability against these, including any replacements and removals):
+{$contextJson}
+Available pantry inventory from the live warehouse database, not a seed list:
 {$inventoryJson}
 
 Rules:
 - Suggest alternatives with the same culinary function, not merely similar names.
 - Never suggest an ingredient already in the same slot or already required by this dish.
-- Add-ons are optional condiments, seasonings, sauces, fresh accompaniments, or side toppings that are commonly served with this kind of dish and can be taken from the pantry list.
+- Add-ons can include suitable noodles, starches, proteins, vegetables, condiments, or serving accompaniments. For example hu tieu rice noodles can be added to bo kho beef stew when that exact noodle item exists in this inventory. Do not restrict suggestions to predefined recipe or seed ingredient families.
 - Match the actual pantry product, not just a broad flavor category. For example, suggest "Ớt sa tế" only when that exact catalog item exists and is suitable; do not invent or infer variants such as "Sa tế ớt tắc" or "Sa tế tôm" from a generic request for satay.
 - Prefer familiar, dish-appropriate serving accompaniments over ingredients that would change the dish into a different recipe. Do not suggest arbitrary pantry ingredients just because they are available.
 - Add-ons are distinct from replacements: they supplement the prepared dish and never replace a required ingredient. Do not invent ingredients or IDs outside the supplied inventory.
@@ -1226,14 +1223,15 @@ PROMPT;
         // including one retry and its backoff, below PHP's usual 60s limit.
         $retryDelays = config('services.gemini.retry_delays', [1]);
         $maxAttempts = 2;
-        // Recipe preview makes two Gemini requests in sequence, so keep those at
-        // 10s each. A single image-analysis request can use a little more budget.
-        $requestTimeout = min($timeout, $operation === 'analyzeDishIngredients' ? 15 : 10);
+        // Bound retries while allowing image/recipe generation enough time to finish.
+        $requestTimeout = min($timeout, max(5, (int) config('services.gemini.request_timeout', 45)));
+        $deadline = microtime(true) + 55;
 
         for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             try {
                 $response = Http::withHeaders(['x-goog-api-key' => $this->apiKey])
-                    ->timeout($requestTimeout)
+                    ->connectTimeout(8)
+                    ->timeout(max(1, min($requestTimeout, (int) ($deadline - microtime(true)))))
                     ->post($url, $payload);
             } catch (ConnectionException $exception) {
                 if ($attempt < $maxAttempts) {

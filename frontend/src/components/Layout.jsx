@@ -89,7 +89,7 @@ const Layout = ({ children }) => {
             )}
 
             <div
-                className={`flex flex-col flex-1 min-h-screen transition-all duration-300 ${isAdmin ? '' : 'min-w-0 overflow-x-clip'} ${chatbotOpen ? 'xl:mr-[clamp(320px,24vw,420px)] md:max-xl:pb-[clamp(300px,50dvh,560px)]' : ''}`}
+                className={`flex flex-col flex-1 min-h-screen transition-all duration-300 ${isAdmin ? '' : 'min-w-0 overflow-x-clip'}`}
             >
                 {!isAdmin && (
                     <Navbar
