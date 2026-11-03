@@ -594,23 +594,38 @@ class VnpayController extends Controller
             }
         }
 
-        // Kiểm tra delivery/booking record
-        [$record, $paidField, $statusField, $nextStatus] = $this->resolveOrderRecord($order);
-
-        if (!$record) {
-            Log::warning('VNPay IPN delivery/booking record not found', ['order_id' => $orderId]);
-            return response()->json(['RspCode' => '01', 'Message' => 'Order record not found']);
-        }
-
-        if (in_array($record->{$paidField}, ['paid', 'refunded'], true)) {
-            Log::info('VNPay IPN order already paid', ['order_id' => $orderId]);
-            return response()->json(['RspCode' => '02', 'Message' => 'Order already confirmed']);
-        }
-
         DB::beginTransaction();
         try {
+            // Serialize success callbacks on the order before reading payment state.
+            $order = Order::where('order_id', $orderId)->lockForUpdate()->first();
+            if (!$order) {
+                DB::rollBack();
+                return response()->json(['RspCode' => '01', 'Message' => 'Order not found']);
+            }
+            $order->load('user', 'delivery', 'booking');
+
+            // Lock the payable row too. A simultaneous IPN must observe the committed status.
+            if ($order->order_type === 'delivery') {
+                $record = \App\Models\Delivery::where('order_id', $orderId)->lockForUpdate()->first();
+                $order->setRelation('delivery', $record);
+            } else {
+                $record = \App\Models\BookingTable::where('order_id', $orderId)->lockForUpdate()->first();
+                $order->setRelation('booking', $record);
+            }
+            [$record, $paidField] = $this->resolveOrderRecord($order);
+            if (!$record) {
+                DB::rollBack();
+                Log::warning('VNPay IPN delivery/booking record not found', ['order_id' => $orderId]);
+                return response()->json(['RspCode' => '01', 'Message' => 'Order record not found']);
+            }
+            if (in_array($record->{$paidField}, ['paid', 'refunded'], true)) {
+                DB::commit();
+                Log::info('VNPay IPN order already paid', ['order_id' => $orderId]);
+                return response()->json(['RspCode' => '02', 'Message' => 'Order already confirmed']);
+            }
+
             // 🔑 STEP 1: Tạo Bill nếu chưa tồn tại
-            $bill = Bill::where('order_id', $orderId)->first();
+            $bill = Bill::where('order_id', $orderId)->lockForUpdate()->first();
             if (!$bill) {
                 $bill = $this->createBillForOrder($order, $vnpAmount, $vnp_TxnRef);
                 Log::info('VNPay IPN created new Bill', ['bill_id' => $bill->bill_id, 'order_id' => $orderId]);
@@ -642,7 +657,7 @@ class VnpayController extends Controller
 
     private function processPaymentConfirmation($billId, $vnpAmount): bool
     {
-        $bill = Bill::with('order.user')->where('bill_id', $billId)->first();
+        $bill = Bill::with('order.user')->where('bill_id', $billId)->lockForUpdate()->first();
         if (!$bill || !$bill->order) {
             return false;
         }
@@ -657,7 +672,11 @@ class VnpayController extends Controller
             ? round((float) $order->subtotal_price * (1 - $saleOffPercentage / 100), 2)
             : (float) $order->subtotal_price;
 
-        if ((float) $vnpAmount > $expectedAmount + 0.01) {
+        // VNPAY receives an integer VND amount: compare against the same rounding
+        // rule used when creating the payment URL, and reject both under- and overpayment.
+        $expectedVnpAmount = (int) round($expectedAmount);
+        if (abs((float) $vnpAmount - round((float) $vnpAmount)) > 0.001
+            || (int) round((float) $vnpAmount) !== $expectedVnpAmount) {
             return false;
         }
 
@@ -677,7 +696,6 @@ class VnpayController extends Controller
             return true; // Consider it success if already paid
         }
 
-        DB::beginTransaction();
         try {
             $record->{$paidField}   = 'paid';
             $record->{$statusField} = $nextStatus;
@@ -702,17 +720,14 @@ class VnpayController extends Controller
 
             $this->awardPointsAndStats($bill, $bill->order);
 
-            DB::commit();
             return true;
         } catch (\App\Exceptions\StockUnavailableException $e) {
-            DB::rollBack();
             Log::critical('VNPay đã thu tiền nhưng kho không còn đủ, cần hoàn tiền thủ công', [
                 'bill_id' => $billId,
                 'order_id' => $order->order_id,
             ]);
             return false;
         } catch (\Throwable $e) {
-            DB::rollBack();
             Log::error('VNPay payment update failed', [
                 'bill_id' => $billId,
                 'error'   => $e->getMessage(),

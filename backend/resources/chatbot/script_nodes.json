@@ -1,0 +1,338 @@
+{
+  "root": {
+    "intentSummary": "Chào ngắn gọn và hỏi khách cần hỗ trợ gì về món ăn, đặt bàn hay giao hàng. Không đọc lại toàn bộ nút lựa chọn.",
+    "options": [
+      {
+        "id": "order_food",
+        "labelKey": "chatbot.options.orderFood",
+        "intent": "Khách muốn đặt món ăn, đặt bàn hoặc đặt ship"
+      },
+      {
+        "id": "modify_dish",
+        "labelKey": "chatbot.options.modifyDish",
+        "intent": "Khách muốn biết cách bỏ bớt nguyên liệu không thích để tạo công thức riêng cho món ăn"
+      },
+      {
+        "id": "view_history",
+        "labelKey": "chatbot.options.viewHistory",
+        "intent": "Khách muốn xem lại lịch sử các đơn hàng đã đặt, hoặc xem/xuất hóa đơn",
+        "action": {
+          "type": "navigate",
+          "path": "/profile/orders"
+        }
+      },
+      {
+        "id": "cancel_order",
+        "labelKey": "chatbot.options.cancelOrder",
+        "intent": "Khách muốn hủy 1 đơn hàng đã đặt"
+      },
+      {
+        "id": "view_profile",
+        "labelKey": "chatbot.options.viewProfile",
+        "intent": "Khách muốn xem hoặc chỉnh sửa thông tin tài khoản cá nhân",
+        "action": {
+          "type": "navigate",
+          "path": "/profile"
+        }
+      },
+      {
+        "id": "logout",
+        "labelKey": "chatbot.options.logout",
+        "intent": "Khách muốn đăng xuất khỏi tài khoản"
+      }
+    ]
+  },
+  "modify_dish": {
+    "intentSummary": "Ở chi tiết món, bạn có thể xem các nguyên liệu được phép thay, bỏ nguyên liệu tùy chọn hoặc thêm món kèm có sẵn; xem trước rồi đặt tên và lưu công thức riêng để dùng lại. Nguyên liệu cố định không bỏ được.",
+    "options": [
+      {
+        "id": "modify_dish.goto_menu",
+        "labelKey": "chatbot.options.gotoMenuTry",
+        "intent": "Khách muốn qua trang menu để bắt đầu tạo công thức riêng",
+        "action": {
+          "type": "navigate",
+          "path": "/menu"
+        }
+      },
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính"
+      }
+    ]
+  },
+  "modify_dish.goto_menu": {
+    "intentSummary": "Ở Thực đơn, bạn chọn món rồi mở chi tiết để xem các lựa chọn tùy chỉnh nguyên liệu và lưu công thức riêng.",
+    "options": [
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính"
+      }
+    ]
+  },
+  "order_food": {
+    "intentSummary": "Chỉ hỏi: Bạn muốn đặt bàn tại quán hay giao món tận nơi? Không hướng dẫn nhiều bước khi chưa biết hình thức.",
+    "options": [
+      {
+        "id": "order_food.booking",
+        "labelKey": "chatbot.options.orderBooking",
+        "intent": "Khách muốn đặt bàn ăn tại quán"
+      },
+      {
+        "id": "order_food.delivery",
+        "labelKey": "chatbot.options.orderDelivery",
+        "intent": "Khách muốn đặt đồ ăn giao tận nơi, không tới quán"
+      },
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính, không đặt món nữa"
+      }
+    ]
+  },
+  "order_food.booking": {
+    "intentSummary": "Hỏi một câu: Bạn đã chọn món ở Thực đơn chưa? Không lặp hướng dẫn tùy chỉnh món hoặc tự gửi thêm tin.",
+    "options": [
+      {
+        "id": "order_food.booking.goto_menu",
+        "labelKey": "chatbot.options.notYetGoMenu",
+        "intent": "Khách chưa chọn món, chưa đặt món ở trang menu",
+        "action": {
+          "type": "navigate",
+          "path": "/menu"
+        }
+      },
+      {
+        "id": "order_food.booking.goto_table",
+        "labelKey": "chatbot.options.doneChoosing",
+        "intent": "Khách đã chọn món xong ở trang menu rồi",
+        "action": {
+          "type": "navigate",
+          "path": "/cart/bookings"
+        }
+      }
+    ]
+  },
+  "order_food.booking.ask_menu_done": {
+    "intentSummary": "Hỏi khách đã thực hiện bước chọn món ở trang menu hay chưa, để biết hướng dẫn tiếp từ bước nào.",
+    "options": [
+      {
+        "id": "order_food.booking.goto_menu",
+        "labelKey": "chatbot.options.notYetGoMenu",
+        "intent": "Khách chưa chọn món, chưa đặt món ở trang menu",
+        "action": {
+          "type": "navigate",
+          "path": "/menu"
+        }
+      },
+      {
+        "id": "order_food.booking.goto_table",
+        "labelKey": "chatbot.options.doneChoosing",
+        "intent": "Khách đã chọn món xong ở trang menu rồi",
+        "action": {
+          "type": "navigate",
+          "path": "/cart/bookings"
+        }
+      }
+    ]
+  },
+  "order_food.booking.goto_menu": {
+    "intentSummary": "Ở trang Thực đơn, bạn có thể chọn món và số lượng. Chọn xong, bấm nút bên dưới để tiếp tục hoàn tất đơn.",
+    "options": [
+      {
+        "id": "order_food.booking.goto_table",
+        "labelKey": "chatbot.options.doneChoosingShort",
+        "intent": "Khách xác nhận đã hoàn tất chọn món ở trang menu",
+        "action": {
+          "type": "navigate",
+          "path": "/cart/bookings"
+        }
+      }
+    ]
+  },
+  "order_food.booking.goto_table": {
+    "intentSummary": "Ở Đặt bàn, bạn kiểm tra món, chọn ngày giờ và bàn rồi xác nhận, thanh toán theo các bước bên dưới.",
+    "stepsKeys": [
+      "chatbot.script.stepEditQty",
+      "chatbot.script.stepPickDateTime",
+      "chatbot.script.stepPickTables",
+      "chatbot.script.stepConfirmBooking",
+      "chatbot.script.stepPay"
+    ],
+    "options": [
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính"
+      }
+    ]
+  },
+  "order_food.delivery": {
+    "intentSummary": "Hỏi một câu: Bạn đã chọn món ở Thực đơn chưa? Không lặp hướng dẫn tùy chỉnh món hoặc tự gửi thêm tin.",
+    "options": [
+      {
+        "id": "order_food.delivery.goto_menu",
+        "labelKey": "chatbot.options.notYetGoMenu",
+        "intent": "Khách chưa chọn món, chưa đặt món ở trang menu",
+        "action": {
+          "type": "navigate",
+          "path": "/menu"
+        }
+      },
+      {
+        "id": "order_food.delivery.goto_delivery",
+        "labelKey": "chatbot.options.doneChoosing",
+        "intent": "Khách đã chọn món xong ở trang menu rồi",
+        "action": {
+          "type": "navigate",
+          "path": "/cart/deliveries"
+        }
+      }
+    ]
+  },
+  "order_food.delivery.ask_menu_done": {
+    "intentSummary": "Hỏi khách đã thực hiện bước chọn món ở trang menu hay chưa, để biết hướng dẫn tiếp từ bước nào.",
+    "options": [
+      {
+        "id": "order_food.delivery.goto_menu",
+        "labelKey": "chatbot.options.notYetGoMenu",
+        "intent": "Khách chưa chọn món, chưa đặt món ở trang menu",
+        "action": {
+          "type": "navigate",
+          "path": "/menu"
+        }
+      },
+      {
+        "id": "order_food.delivery.goto_delivery",
+        "labelKey": "chatbot.options.doneChoosing",
+        "intent": "Khách đã chọn món xong ở trang menu rồi",
+        "action": {
+          "type": "navigate",
+          "path": "/cart/deliveries"
+        }
+      }
+    ]
+  },
+  "order_food.delivery.goto_menu": {
+    "intentSummary": "Ở trang Thực đơn, bạn có thể chọn món và số lượng. Chọn xong, bấm nút bên dưới để tiếp tục hoàn tất đơn.",
+    "options": [
+      {
+        "id": "order_food.delivery.goto_delivery",
+        "labelKey": "chatbot.options.doneChoosingShort",
+        "intent": "Khách xác nhận đã hoàn tất chọn món ở trang menu",
+        "action": {
+          "type": "navigate",
+          "path": "/cart/deliveries"
+        }
+      }
+    ]
+  },
+  "order_food.delivery.goto_delivery": {
+    "intentSummary": "Ở Đặt ship, bạn kiểm tra món, nhập địa chỉ, xem phí và ngày giờ giao dự kiến rồi xác nhận, thanh toán theo các bước bên dưới.",
+    "stepsKeys": [
+      "chatbot.script.stepEditQty",
+      "chatbot.script.stepAddress",
+      "chatbot.script.stepPickDeliveryTime",
+      "chatbot.script.stepConfirmDelivery",
+      "chatbot.script.stepPay"
+    ],
+    "options": [
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính"
+      }
+    ]
+  },
+  "view_history": {
+    "intentSummary": "Hướng dẫn khách: ở mục Lịch sử giao dịch trong trang cá nhân. Cho khách biết ở đây có thể xem lại tất cả đơn hàng đã đặt, đồng thời xem và xuất hóa đơn PDF cho từng đơn.",
+    "options": [
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính"
+      }
+    ]
+  },
+  "cancel_order": {
+    "intentSummary": "Khách muốn hủy đơn hàng nhưng chưa nói rõ là đơn đặt bàn hay đơn đặt ship. Cần hỏi rõ khách muốn hủy đơn nào.",
+    "options": [
+      {
+        "id": "cancel_order.booking",
+        "labelKey": "chatbot.options.cancelBooking",
+        "intent": "Khách muốn hủy đơn đặt bàn tại quán",
+        "action": {
+          "type": "navigate",
+          "path": "/cart/bookings"
+        }
+      },
+      {
+        "id": "cancel_order.delivery",
+        "labelKey": "chatbot.options.cancelDelivery",
+        "intent": "Khách muốn hủy đơn đặt ship đồ ăn",
+        "action": {
+          "type": "navigate",
+          "path": "/cart/deliveries"
+        }
+      },
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính, không hủy đơn nữa"
+      }
+    ]
+  },
+  "cancel_order.booking": {
+    "intentSummary": "Ở Đặt bàn, bạn tìm đơn và chọn Hủy nếu còn đủ điều kiện: trước giờ đến ít nhất 60 phút và còn lượt hủy. Chỉ xác nhận hủy sau khi đọc thông tin hoàn tiền hoặc điểm trên màn hình.",
+    "options": [
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính"
+      }
+    ]
+  },
+  "cancel_order.delivery": {
+    "intentSummary": "Ở Đặt ship, bạn tìm đơn và chọn Hủy khi chưa đến giờ chuẩn bị và còn lượt hủy. Đơn đã chuẩn bị hoặc đang giao không còn hủy được.",
+    "options": [
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính"
+      }
+    ]
+  },
+  "view_profile": {
+    "intentSummary": "Hướng dẫn khách: ở trang cá nhân. Cho khách biết ngoài việc xem các thông tin cơ bản, khách cũng có thể xem điểm tích lũy và bậc thành viên hiện tại ngay ở trang này, và chuyển sang các mục Lịch sử giao dịch, Đánh giá dịch vụ.",
+    "options": [
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.backToRoot",
+        "intent": "Khách muốn quay lại danh sách chức năng chính"
+      }
+    ]
+  },
+  "logout": {
+    "intentSummary": "Xác nhận khách muốn đăng xuất khỏi tài khoản.",
+    "options": [
+      {
+        "id": "root",
+        "labelKey": "chatbot.options.noBackToRoot",
+        "intent": "Khách đổi ý, không muốn đăng xuất nữa"
+      },
+      {
+        "id": "logout.confirm",
+        "labelKey": "chatbot.options.confirmLogout",
+        "intent": "Khách xác nhận chắc chắn muốn đăng xuất",
+        "action": {
+          "type": "logout"
+        }
+      }
+    ]
+  },
+  "logout.confirm": {
+    "intentSummary": "Đã đăng xuất thành công, tạm biệt khách.",
+    "options": []
+  }
+}

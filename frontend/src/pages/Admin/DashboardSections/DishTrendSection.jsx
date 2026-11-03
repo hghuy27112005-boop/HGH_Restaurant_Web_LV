@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../../utils/formatCurrency.js';
 import i18n from '../../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../../services/api';
@@ -21,7 +22,7 @@ const CONFIG = {
         leftLabel: () => document.documentElement.lang === 'en' ? 'servings' : 'số phần',
         rightLabel: () => document.documentElement.lang === 'en' ? 'revenue' : 'doanh thu',
         fmtLeft: (v) => `${nf(v)} ${document.documentElement.lang === 'en' ? 'servings' : 'phần'}`,
-        fmtRight: (v) => `${nf(v)} ${document.documentElement.lang === 'en' ? 'VND' : 'VNĐ'}`,
+        fmtRight: (v) => formatCurrency(v),
         leftDomain: [0, 'auto'],
         rightTick: (v) => nf(v),
         rightWidth: 90,

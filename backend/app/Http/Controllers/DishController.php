@@ -61,6 +61,16 @@ class DishController extends Controller
             abort(404);
         }
 
+        if (!$dish->is_active) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'code' => 'dish_not_found',
+                    'message' => 'Không tìm thấy món ăn',
+                ], 404);
+            }
+            abort(404);
+        }
+
         if ($request->expectsJson()) {
             $reviewStats = $this->reviewStatsForDishIds([(int) $dish->dish_id]);
             $this->applyReviewStats($dish, $reviewStats);
@@ -77,7 +87,7 @@ class DishController extends Controller
             return response()->json($payload);
         }
 
-        $allDishes = Dish::orderBy('dish_id', 'asc')->get();
+        $allDishes = Dish::where('is_active', true)->orderBy('dish_id', 'asc')->get();
 
         return view('dish-detail', [
             'mon' => $dish,

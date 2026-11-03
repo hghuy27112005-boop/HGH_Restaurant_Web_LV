@@ -21,6 +21,7 @@ class AdminMiddleware
 
         if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json([
+                'code' => 'admin_forbidden',
                 'success' => false,
                 'message' => 'Bạn không có quyền truy cập vào trang quản trị!'
             ], 403);

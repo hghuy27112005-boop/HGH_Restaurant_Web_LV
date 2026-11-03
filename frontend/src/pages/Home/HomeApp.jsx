@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import i18n from '../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -99,7 +100,7 @@ export default function HomeApp() {
                                     <div className="px-1 pb-1 pt-3 text-center">
                                         <h3 className="text-lg font-semibold text-gray-800">{translateDishName(dish)}</h3>
                                         <p className="mt-1 text-xl font-bold text-red-600">
-                                            {Number(dish.price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</p>
+                                            {formatCurrency(Number(dish.price))}</p>
                                     </div>
                                 </div>
                             ))}

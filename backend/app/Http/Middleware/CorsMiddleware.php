@@ -29,12 +29,15 @@ class CorsMiddleware
         $origin = $request->header('Origin');
 
         if (in_array($origin, $allowedOrigins)) {
-            return $next($request)
-                ->header('Access-Control-Allow-Origin', $origin)
-                ->header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH')
-                ->header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
-                ->header('Access-Control-Allow-Credentials', 'true')
-                ->header('Access-Control-Max-Age', '3600');
+            $response = $next($request);
+            foreach ([
+                'Access-Control-Allow-Origin' => $origin,
+                'Access-Control-Allow-Methods' => 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
+                'Access-Control-Allow-Headers' => 'Content-Type, Authorization, X-Requested-With, Accept',
+                'Access-Control-Allow-Credentials' => 'true',
+                'Access-Control-Max-Age' => '3600',
+            ] as $name => $value) $response->headers->set($name, $value);
+            return $response;
         }
 
         return $next($request);

@@ -19,6 +19,7 @@ return new class extends Migration
             $table->json('removed_ingredients')->nullable();
             $table->json('replacements')->nullable();
             $table->json('add_on_ingredients')->nullable();
+            $table->json('selection')->nullable();
             $table->timestamps();
             $table->unique(['user_id', 'dish_id', 'recipe_name'], 'uq_dish_customization_user_dish_name');
         });

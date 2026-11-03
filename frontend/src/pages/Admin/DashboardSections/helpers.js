@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../../utils/formatCurrency.js';
 export const RED = '#dc2626';
 export const LINE_COLORS = { total: '#16a34a', booking: '#2563eb', ship: '#d97706' };
 
@@ -6,10 +7,7 @@ export const YEAR_OPTIONS = [thisYear, thisYear - 1];
 export const DISH_COLORS = ['#dc2626', '#2563eb', '#16a34a', '#d97706', '#7c3aed'];
 export const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 
-export const fmtMoney = (v) => {
-    const english = document.documentElement.lang === 'en';
-    return `${Number(v || 0).toLocaleString(english ? 'en-US' : 'vi-VN')}${english ? ' VND' : 'đ'}`;
-};
+export const fmtMoney = formatCurrency;
 
 export function extractError(err, fallback) {
     const resp = err?.response;

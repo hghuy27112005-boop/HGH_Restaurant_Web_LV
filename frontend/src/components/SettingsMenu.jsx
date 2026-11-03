@@ -18,6 +18,7 @@ const SettingsMenu = ({
     isDarkMode,
     isDarkAppearance = isDarkMode,
     showThemeToggle = true,
+    showNotificationSettings = true,
     onToggleTheme,
     isAuthenticated,
     placementClass = '',
@@ -201,7 +202,7 @@ const SettingsMenu = ({
                         <span className="text-right text-sm font-semibold text-gray-800">{t('settings.english')}</span>
                     </div>
 
-                    {isAuthenticated && (
+                    {isAuthenticated && showNotificationSettings && (
                         <>
                             <button
                                 type="button"

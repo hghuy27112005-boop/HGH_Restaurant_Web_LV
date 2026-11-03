@@ -9,6 +9,8 @@ use App\Http\Controllers\ChatbotController;
 |--------------------------------------------------------------------------
 */
 
+Route::get('/chatbot/image/{message}', [ChatbotController::class, 'showImage'])->middleware('signed')->name('chatbot.image');
+
 // Authentication (Public)
 Route::post('/register', [\App\Http\Controllers\AuthController::class, 'register']);
 
@@ -92,8 +94,10 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
     //Chatbot
     Route::get('/chatbot/session', [ChatbotController::class, 'getSession']);
     Route::post('/chatbot/interact', [ChatbotController::class, 'interact']);
+    Route::post('/chatbot/invoices/{bill}', [ChatbotController::class, 'saveInvoice']);
     Route::post('/chatbot/images', [ChatbotController::class, 'uploadImage']);
     Route::get('/chatbot/images', [ChatbotController::class, 'imagesByDate']);
+    Route::delete('/chatbot/images', [ChatbotController::class, 'deleteImages']);
     Route::get('/chatbot/chat-days', [ChatbotController::class, 'chatDays']);
     Route::get('/chatbot/messages-by-date', [ChatbotController::class, 'messagesByDate']);
     Route::delete('/chatbot/messages-by-date', [ChatbotController::class, 'deleteMessagesByDate']);

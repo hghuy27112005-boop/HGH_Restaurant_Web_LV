@@ -1,15 +1,18 @@
+import { sendVisualJob, applyVisualRejection } from './sendVisualJob';
+import ImageLibrary from './ImageLibrary';
 import i18n from '../../i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { chatbotAPI } from '@/services/chatbotApi';
 import { useAuthContext } from '@/context/AuthContext';
 import chatbotScripts from '@/data/chatbot_customer_scripts';
 import { useTranslation } from 'react-i18next';
 
 const getNavLabelKey = (route) => {
+    if (route === 'https://nominatim.openstreetmap.org/ui/search.html') return 'chatbot.nav.addressMap';
     if (route === '/menu') return 'chatbot.nav.menu';
     if (/^\/dish-details\//.test(route)) return 'chatbot.nav.dishDetail';
-    if (route === '/profile/orders') return 'chatbot.nav.orders';
+    if (route.split('?')[0] === '/profile/orders') return 'chatbot.nav.orders';
     if (route === '/profile') return 'chatbot.nav.profile';
     return 'chatbot.nav.related';
 };
@@ -32,19 +35,25 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     const { t, i18n } = useTranslation();
     const replyLangRef = useRef(i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi');
     const navigate = useNavigate();
+    const location = useLocation();
     const { logout, isAuthenticated } = useAuthContext();
 
+    const [dragging, setDragging] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [currentNodeId, setCurrentNodeId] = useState('root');
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const [loading, setLoading] = useState(false);
+    const [processingImages, setProcessingImages] = useState(false);
+    const [activeVisualJobId, setActiveVisualJobId] = useState(null);
+    const visualJobsRef = useRef(new Map());
     const [suppressOptions, setSuppressOptions] = useState(false);
     const [suggestedNav, setSuggestedNav] = useState(null); // { route, label } | null
     const [moderationBlocked, setModerationBlocked] = useState(false);
     const [moderationMessage, setModerationMessage] = useState('');
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+    const textSendRef = useRef({ running: false, text: null, id: null });
     const imageInputRef = useRef(null);
     const [pendingImages, setPendingImages] = useState([]);
 
@@ -60,8 +69,18 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     const [deleteDate, setDeleteDate] = useState(null);
     const [deleteLoading, setDeleteLoading] = useState(false);
     const [imageError, setImageError] = useState('');
+    const [textError, setTextError] = useState('');
+    const dismissSendError = () => { setImageError(''); setTextError(''); };
     const [previewIndex, setPreviewIndex] = useState(null);
     const chatBodyRef = useRef(null);
+
+    useEffect(() => {
+        const close = (event) => { if (!event.target.closest('[data-chat-history-menu]')) setActionDate(null); };
+        const escape = (event) => { if (event.key === 'Escape') setActionDate(null); };
+        document.addEventListener('pointerdown', close);
+        document.addEventListener('keydown', escape);
+        return () => { document.removeEventListener('pointerdown', close); document.removeEventListener('keydown', escape); };
+    }, []);
 
     const currentNode = chatbotScripts[currentNodeId];
     const previewImages = Array.from(new Map([
@@ -93,20 +112,48 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     };
 
     useEffect(() => {
+        if (!isOpen || !isAuthenticated) return undefined;
+        const timer = window.setInterval(async () => {
+            try {
+                const { data } = await chatbotAPI.moderationStatus();
+                setModerationBlocked(Boolean(data.moderation?.blocked));
+                if (!data.moderation?.blocked) setModerationMessage('');
+            } catch { /* Retry on the next interval. */ }
+        }, 60000);
+        return () => window.clearInterval(timer);
+    }, [isOpen, isAuthenticated]);
+
+    useEffect(() => {
+        const received = (event) => {
+            setIsOpen(true);
+            setHistoryDate(null);
+            setShowDaysMenu(false);
+            setLoaded(false);
+            setImageGroups([]);
+            setSuppressOptions(true);
+            setSuggestedNav(null);
+        };
+        window.addEventListener('chatbot:invoice-saved', received);
+        return () => window.removeEventListener('chatbot:invoice-saved', received);
+    }, [setIsOpen]);
+
+    useEffect(() => {
         if (isOpen && !loaded && isAuthenticated) {
             chatbotAPI.getSession().then((res) => {
                 const data = res.data;
                 const nodeId = data.current_node_id || 'root';
                 setCurrentNodeId(nodeId);
                 setMessages(data.messages || []);
+                setSuppressOptions(Boolean(data.suppress_options));
+                setSuggestedNav(null);
                 setModerationBlocked(Boolean(data.moderation?.blocked));
                 if (data.moderation?.blocked) {
-                    setModerationMessage(i18n.t("Quý khách đã bị tạm khóa chatbot và đánh giá đến hết ngày do đã vi phạm quy tắc ngôn từ 2 lần trong hôm nay.", { ns: 'legacy', keySeparator: false }));
+                    setModerationMessage(t('chatbot.contentSuspended'));
                 }
                 setLoaded(true);
 
                 // Hôm nay chưa có tin nhắn nào -> để bot chủ động chào trước
-                if (!data.messages || data.messages.length === 0) {
+                if (!data.moderation?.blocked && (!data.messages || data.messages.length === 0)) {
                     handleAutoNext(nodeId);
                 }
             });
@@ -191,11 +238,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
 
     const buildBotMessages = (nodeId, replyText) => {
         const node = chatbotScripts[nodeId];
-        const replyParts = String(replyText || '')
-            .split(/(?<=[.!?。！？])\s+/u)
-            .map((part) => part.trim())
-            .filter(Boolean);
-        const contents = replyParts.length > 0 ? replyParts : [String(replyText || '')];
+        const contents = [String(replyText || '').trim()];
 
         const lng = replyLangRef.current;
         if (node?.stepsKeys?.length) {
@@ -208,13 +251,14 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             contents.push(t(node.afterNoteKey, { lng }));
         }
 
-        return contents.filter(Boolean);
+        return [contents.filter(Boolean).join('\n')].filter(Boolean);
     };
 
-    const appendBotMessages = (nodeId, replyText) => {
+    const appendBotMessages = (nodeId, replyText, imageUrl = null, imageFilename = null) => {
         const botMessages = buildBotMessages(nodeId, replyText).map((content) => ({
             sender: 'bot',
             content,
+            ...(imageUrl ? { image_url: imageUrl, filename: imageFilename } : {}),
             created_at: new Date().toISOString(),
         }));
         setMessages((prev) => [...prev, ...botMessages]);
@@ -231,7 +275,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 selected_label: t('chatbot.script.autoHint', { lng: replyLangRef.current }),
                 lang: replyLangRef.current,
             });
-            appendBotMessages(res.data.matched_id, res.data.reply);
+            appendBotMessages(res.data.matched_id, res.data.reply, res.data.invoice_image_url, res.data.invoice_image_filename);
             setCurrentNodeId(res.data.matched_id);
         } finally {
             setLoading(false);
@@ -300,15 +344,16 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     };
 
     const addPendingImages = (files) => {
+        if (loading || historyDate || moderationBlocked) return;
         const selectedFiles = Array.from(files || []);
-        const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'avif', 'heic', 'heif', 'svg'];
+        const imageExtensions = ['jpg', 'jpeg', 'png', 'webp'];
         const isImageFile = (file) => {
             const extension = file.name?.split('.').pop()?.toLowerCase();
-            return imageExtensions.includes(extension);
+            return imageExtensions.includes(extension) && (!file.type || ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) && file.size <= 10 * 1024 * 1024;
         };
         const invalidFile = selectedFiles.find((file) => !isImageFile(file));
         if (invalidFile) {
-            setImageError(i18n.t("Chỉ có thể nhận hình ảnh trong khung chat.", { ns: 'legacy', keySeparator: false }));
+            setImageError(t('chatbot.dropImages'));
         }
 
         const imageFiles = selectedFiles.filter(isImageFile);
@@ -316,7 +361,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
 
         setPendingImages((current) => [
             ...current,
-            ...imageFiles.map((file) => ({ file, url: URL.createObjectURL(file) })),
+            ...imageFiles.slice(0, Math.max(0, 5 - current.length)).map((file) => ({ file, url: URL.createObjectURL(file) })),
         ]);
     };
 
@@ -327,31 +372,81 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         addPendingImages(files);
     };
 
+    useEffect(() => () => {
+        for (const job of visualJobsRef.current.values()) {
+            for (const image of job.images) if (!image.revoked) URL.revokeObjectURL(image.url);
+        }
+    }, []);
+
+    const runVisualJob = async (job) => {
+        if (job.running) return;
+        job.running = true;
+        setLoading(true);
+        setActiveVisualJobId(job.id);
+        setSuppressOptions(true);
+        setSuggestedNav(null);
+        const updateStatus = (status, error = null) => setMessages((current) => current.map((message) =>
+            message.local_id === job.anchorId ? { ...message, send_status: status, send_error: error } : message));
+        try {
+            const response = await sendVisualJob(job, chatbotAPI, {
+                onStage: (stage) => updateStatus(stage),
+                onUploaded: (image, message) => {
+                    setMessages((current) => current.map((item) => item.local_id === image.localId
+                        ? { ...message, local_id: item.local_id, send_job_id: item.send_job_id, send_status: item.send_status } : item));
+                    URL.revokeObjectURL(image.url);
+                    image.revoked = true;
+                },
+            });
+            updateStatus('sent');
+            replyLangRef.current = job.payload.lang;
+            appendBotMessages(response.data.matched_id, response.data.reply, response.data.invoice_image_url, response.data.invoice_image_filename);
+            setSuggestedNav(response.data.suggested_route ? { route: response.data.suggested_route } : null);
+            visualJobsRef.current.delete(job.id);
+        } catch (error) {
+            const data = error.response?.data;
+            const rejected = Boolean(data?.warning || data?.blocked || data?.code === 'off_topic' || data?.code === 'image_rejected');
+            if (data?.blocked) setModerationBlocked(true);
+            const message = rejected ? data.message : (job.images.every((image) => image.serverId)
+                ? { key: 'chatbot.visualReplyFailed' } : { key: 'chatbot.visualUploadFailed' });
+            if (rejected) {
+                setMessages((current) => applyVisualRejection(current, job, data.message));
+            } else {
+                updateStatus('failed', message);
+            }
+        } finally {
+            job.running = false;
+            setActiveVisualJobId(null);
+            setLoading(false);
+        }
+    };
+
     const sendPendingImage = async () => {
-        if (pendingImages.length === 0 || loading) return;
+        if (pendingImages.length === 0 || loading || moderationBlocked) return;
         if (pendingImages.length > 5) {
             setImageError(i18n.t("Bạn chỉ có thể gửi tối đa 5 hình ảnh trong một lần.", { ns: 'legacy', keySeparator: false }));
             return;
         }
-
-        setLoading(true);
-        try {
-            for (const pendingImage of pendingImages) {
-                const formData = new FormData();
-                formData.append('image', pendingImage.file);
-                formData.append('lang', i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi');
-                const response = await chatbotAPI.uploadImage(formData);
-                setMessages((prev) => [...prev, response.data.message]);
-                setPendingImages((current) => current.filter((item) => item.url !== pendingImage.url));
-                URL.revokeObjectURL(pendingImage.url);
-            }
-        } catch (error) {
-            setImageError(error.response?.status === 422 && error.response?.data?.errors?.image?.[0]
-                ? error.response.data.errors.image[0]
-                : { key: 'chatbot.imageUploadFailed' });
-        } finally {
-            setLoading(false);
-        }
+        const id = crypto.randomUUID();
+        const text = inputText.trim();
+        setTextError('');
+        const interfaceLanguage = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi';
+        const language = text ? detectReplyLanguage(text, interfaceLanguage) : interfaceLanguage;
+        const images = pendingImages.map((image, index) => ({ ...image, localId: `${id}-image-${index}` }));
+        const anchorId = text ? `${id}-caption` : images[images.length - 1].localId;
+        const job = { id, images, anchorId, payload: { type: 'text', user_input: text,
+            current_node_intent: currentNode?.intentSummary || 'root', lang: language,
+            page_path: location.pathname, theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' } };
+        visualJobsRef.current.set(id, job);
+        const bubbles = images.map((image) => ({ sender: 'user', content: '', image_url: image.url,
+            filename: image.file.name, local_id: image.localId, send_job_id: id, created_at: new Date().toISOString() }));
+        if (text) bubbles.push({ sender: 'user', content: text, local_id: anchorId, send_job_id: id, created_at: new Date().toISOString() });
+        bubbles[bubbles.length - 1].send_status = 'uploading';
+        // Show the whole batch immediately; network/model latency never keeps the composer stuck.
+        setMessages((current) => [...current, ...bubbles]);
+        setPendingImages([]);
+        setInputText('');
+        if (inputRef.current) inputRef.current.style.height = 'auto';
+        await runVisualJob(job);
     };
 
     // Gửi cho AI cả các lựa chọn con trực tiếp lẫn "cháu" (con của con),
@@ -420,7 +515,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 lang: replyLangRef.current,
                 target_intent: targetNode?.intentSummary || option.intent,
             });
-            appendBotMessages(res.data.matched_id, res.data.reply);
+            appendBotMessages(res.data.matched_id, res.data.reply, res.data.invoice_image_url, res.data.invoice_image_filename);
             setCurrentNodeId(res.data.matched_id);
             runNodeAction(option);
         } finally {
@@ -430,25 +525,34 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
 
     const handleTextSubmit = async (e) => {
         e.preventDefault();
-        if (loading || historyDate || moderationBlocked || !inputText.trim()) return;
+        if (textSendRef.current.running || loading || historyDate || moderationBlocked || !inputText.trim()) return;
 
         const text = inputText.trim();
+        if (textSendRef.current.text !== text) textSendRef.current = { running: false, text, id: crypto.randomUUID() };
+        textSendRef.current.running = true;
         const interfaceLanguage = i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi';
         replyLangRef.current = detectReplyLanguage(text, interfaceLanguage);
-        setInputText('');
-        if (inputRef.current) inputRef.current.style.height = 'auto';
-        setMessages((prev) => [...prev, { sender: 'user', content: text, created_at: new Date().toISOString() }]);
         setLoading(true);
 
         try {
             const res = await chatbotAPI.interact({
                 type: 'text',
+                client_request_id: textSendRef.current.id,
                 user_input: text,
                 current_node_intent: currentNode?.intentSummary || '',
                 candidate_options: buildCandidateOptions(currentNode),
                 lang: replyLangRef.current,
+                page_path: location.pathname,
+                theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
             });
-            appendBotMessages(res.data.matched_id, res.data.reply);
+            // Only publish the customer's bubble after server-side moderation accepts it.
+            textSendRef.current.text = null;
+            setModerationMessage('');
+            setInputText('');
+            if (inputRef.current) inputRef.current.style.height = 'auto';
+            setMessages((prev) => [...prev, { sender: 'user', content: text, created_at: new Date().toISOString() }]);
+            appendBotMessages(res.data.matched_id, res.data.reply, res.data.invoice_image_url, res.data.invoice_image_filename);
+            if (res.data.navigate_to) navigate(res.data.navigate_to);
 
             if (res.data.matched_id && res.data.matched_id !== 'unclear') {
                 setSuppressOptions(false);
@@ -462,12 +566,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 setSuppressOptions(true);
                 if (res.data.suggested_route) {
                     const route = res.data.suggested_route;
-                    if (route.startsWith('/dish-details/')) {
-                        navigate(route);
-                        setSuggestedNav(null);
-                    } else {
-                        setSuggestedNav({ route });
-                    }
+                    setSuggestedNav({ route });
                 } else {
                     setSuggestedNav(null);
                 }
@@ -483,9 +582,11 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                     created_at: new Date().toISOString(),
                 }]);
             } else {
+                setTextError(err.response?.status >= 500 ? { key: 'chatbot.textSendFailed' } : (err.response?.status === 404 || err.response?.status === 409 ? { key: 'chatbot.visualUnavailable' } : (data?.errors?.user_input?.[0] || data?.message || { key: 'chatbot.textSendFailed' })));
                 console.error('Lỗi gửi tin nhắn chatbot:', err);
             }
         } finally {
+            textSendRef.current.running = false;
             setLoading(false);
         }
     };
@@ -629,7 +730,18 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 </button>
             )}
             {isOpen && (
-            <div className="chatbot-window" style={styles.window}>
+            <div className="chatbot-window" style={styles.window}
+                onDragOver={(event) => { event.preventDefault(); if (event.dataTransfer.types.includes('Files')) setDragging(true); }}
+                onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }}
+                onDrop={(event) => { event.preventDefault(); setDragging(false); addPendingImages(event.dataTransfer.files); }}>
+            {dragging && (
+                <div role="status" aria-live="polite" style={styles.dropOverlay}>
+                    <div style={styles.dropCard}>
+                        <div style={styles.dropTitle}>{t('chatbot.dropTitle')}</div>
+                        <div style={styles.dropDescription}>{t('chatbot.dropImages')}</div>
+                    </div>
+                </div>
+            )}
             <div style={styles.header}>
                 <div style={styles.headerControls}>
                     <button
@@ -665,27 +777,15 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         </div>
                         {imagesExpanded && (
                             <div style={styles.imageHistoryList}>
-                                {imageGroups.length === 0 ? (
-                                    <div style={styles.emptyHistory}>{i18n.t("Chưa có hình ảnh đã gửi.", { ns: 'legacy', keySeparator: false })}</div>
-                                ) : imageGroups.map((group) => (
-                                    <section key={group.date} style={styles.imageDayGroup}>
-                                        <div style={styles.imageDayTitle}>{group.is_today ? t('chatbot.imagesToday') : t('chatbot.imagesDate', { date: group.date.split('-').reverse().join('/') })}</div>
-                                        <div style={styles.imageGrid}>
-                                            {group.images.map((image) => (
-                                                <button
-                                                    key={image.filename}
-                                                    type="button"
-                                                    style={styles.historyImageButton}
-                                                    onClick={() => openImageViewer(image.image_url)}
-                                                    aria-label={t('chatbot.imagePreviewAria', { filename: image.filename })}
-                                                    title={image.filename}
-                                                >
-                                                    <img src={image.image_url} alt={image.filename} style={styles.historyImage} />
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </section>
-                                ))}
+                                <ImageLibrary groups={imageGroups} styles={styles} onPreview={openImageViewer} onDeleted={async () => {
+                                    setPreviewIndex(null);
+                                    setLoaded(false);
+                                    await loadChatDays();
+                                    if (historyDate) {
+                                        const response = await chatbotAPI.getMessagesByDate(historyDate);
+                                        setHistoryMessages(response.data.messages || []);
+                                    }
+                                }} />
                             </div>
                         )}
                         <div style={styles.historyHeading}>{i18n.t("Lịch sử chat", { ns: 'legacy', keySeparator: false })}</div>
@@ -693,7 +793,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                             {chatDays.length === 0 ? (
                                 <div style={styles.emptyHistory}>{i18n.t("Chưa có lịch sử chat.", { ns: 'legacy', keySeparator: false })}</div>
                             ) : chatDays.map((day) => (
-                                <div key={day.date} style={styles.dayItem}>
+                                <div key={day.date} style={styles.dayItem} data-chat-history-menu>
                                     <button style={styles.dayLabel} onClick={() => handleSelectDay(day)}>
                                         {day.is_today ? t('chatbot.historyToday') : t('chatbot.historyDate', { date: day.date.split('-').reverse().join('/') })}
                                     </button>
@@ -742,9 +842,16 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                             <img src={msg.image_url} alt={i18n.t("Ảnh đã gửi", { ns: 'legacy', keySeparator: false })} style={styles.chatImage} />
                                         </button>
                                     )}
-                                    {msg.content && !msg.image_url && (
+                                    {msg.content && (!msg.image_url || msg.sender === 'bot') && (
                                         <div>{msg.labelKey ? t(msg.labelKey) : msg.content}</div>
                                     )}
+                                    {msg.send_status && !['sent', 'rejected'].includes(msg.send_status) && <div role="status" aria-live="polite" style={styles.sendStatus}>
+                                        {msg.send_status === 'uploading' ? t('chatbot.visualUploading') : msg.send_status === 'reading' ? t('chatbot.visualReading')
+                                            : typeof msg.send_error === 'object' ? t(msg.send_error.key) : msg.send_error}
+                                        {msg.send_status === 'failed' && <button type="button" style={styles.retrySendBtn} disabled={loading || moderationBlocked}
+                                            onClick={() => { const job = visualJobsRef.current.get(msg.send_job_id); if (job) runVisualJob(job); }}>{t('chatbot.retrySend')}</button>}
+                                    </div>}
+
                                 </div>
                             </div>
                         ))}
@@ -755,9 +862,9 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                             </div>
                         )}
 
-                        {!historyDate && loading && (
+                        {!historyDate && loading && !activeVisualJobId && (
                             <div style={styles.botMsgRow}>
-                                <div style={styles.botMsg}>...</div>
+                                <div style={styles.botMsg} role="status" aria-live="polite">{processingImages ? t('chatbot.processingImages') : '...'}</div>
                             </div>
                         )}
 
@@ -776,7 +883,11 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 <button
                                     style={styles.optionBtn}
                                     onClick={() => {
-                                        navigate(suggestedNav.route);
+                                        if (suggestedNav.route === 'https://nominatim.openstreetmap.org/ui/search.html') {
+                                            window.open(suggestedNav.route, '_blank', 'noopener,noreferrer');
+                                        } else {
+                                            navigate(suggestedNav.route);
+                                        }
                                         setSuggestedNav(null);
                                     }}
                                 >
@@ -823,7 +934,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                             <input
                                 ref={imageInputRef}
                                 type="file"
-                                accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.bmp,.tif,.tiff,.avif,.heic,.heif,.svg"
+                                accept="image/jpeg,image/png,image/webp"
                                 multiple
                                 onChange={handleImageSelected}
                                 style={styles.hiddenInput}
@@ -883,13 +994,13 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 </div>
             )}
 
-            {imageError && (
-                <div style={styles.imageErrorBackdrop} onClick={() => setImageError('')}>
-                    <div style={styles.imageErrorModal} onClick={(event) => event.stopPropagation()}>
+            {(textError || imageError) && (
+                <div style={styles.imageErrorBackdrop} onClick={dismissSendError}>
+                    <div style={styles.imageErrorModal} role="alertdialog" aria-modal="true" aria-labelledby="chatbot-send-error-title" aria-describedby="chatbot-send-error-description" onClick={(event) => event.stopPropagation()}>
                         <div style={styles.imageErrorIcon}>!</div>
-                        <h2 style={styles.imageErrorTitle}>{i18n.t("Không thể gửi hình ảnh", { ns: 'legacy', keySeparator: false })}</h2>
-                        <p style={styles.imageErrorText}>{typeof imageError === 'object' ? t(imageError.key) : imageError}</p>
-                        <button style={styles.deleteBtn} onClick={() => setImageError('')}>{i18n.t("Đã hiểu", { ns: 'legacy', keySeparator: false })}</button>
+                        <h2 id="chatbot-send-error-title" style={styles.imageErrorTitle}>{textError ? t('chatbot.textSendErrorTitle') : i18n.t("Không thể gửi hình ảnh", { ns: 'legacy', keySeparator: false })}</h2>
+                        <p id="chatbot-send-error-description" style={styles.imageErrorText}>{typeof (textError || imageError) === 'object' ? t((textError || imageError).key) : (textError || imageError)}</p>
+                        <button style={styles.deleteBtn} onClick={dismissSendError}>{i18n.t("Đã hiểu", { ns: 'legacy', keySeparator: false })}</button>
                     </div>
                 </div>
             )}
@@ -959,6 +1070,17 @@ const styles = {
         backgroundColor: 'var(--chat-surface)', color: 'var(--chat-text)', borderLeft: '1px solid var(--chat-border)', boxShadow: '-8px 0 24px rgba(0,0,0,0.15)',
         display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 1000,
     },
+    dropOverlay: {
+        position: 'absolute', inset: 0, zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '24px', background: 'color-mix(in srgb, var(--chat-surface) 75%, transparent)', pointerEvents: 'none',
+    },
+    dropCard: {
+        width: '100%', maxWidth: '280px', padding: '24px 18px', boxSizing: 'border-box',
+        border: '2px dashed #dc2626', borderRadius: '16px', background: 'var(--chat-surface)',
+        color: 'var(--chat-text)', textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+    },
+    dropTitle: { fontSize: '18px', fontWeight: 700, marginBottom: '8px' },
+    dropDescription: { fontSize: '13px', lineHeight: 1.5, color: 'var(--chat-muted-text)' },
     header: {
         backgroundColor: 'var(--chat-surface)', color: '#dc2626', padding: '12px 16px',
         borderBottom: '1px solid var(--chat-border)',
@@ -1053,6 +1175,8 @@ const styles = {
         backgroundColor: 'var(--chat-warning-bg)', color: 'var(--chat-warning-text)', fontSize: '12px', padding: '8px 10px',
         borderRadius: '6px', textAlign: 'center', marginBottom: '4px',
     },
+    sendStatus: { fontSize: '12px', opacity: .9, marginTop: '6px', lineHeight: 1.5 },
+    retrySendBtn: { display: 'block', marginTop: '6px', color: 'inherit', background: 'transparent', border: '1px solid currentColor', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer' },
     sendBtn: {
         backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '50%',
         width: '38px', height: '38px', flexShrink: 0, cursor: 'pointer', fontSize: '16px',

@@ -22,6 +22,11 @@ const getImageUrl = (imageUrl) => {
     return `${API_BASE_URL}/dishes/${cleanPath}`;
 };
 
+const formatMenuCurrency = (amount, language) => {
+    const value = Number(amount ?? 0).toString();
+    return language === 'en' ? `${value} VND` : `${value}đ`;
+};
+
 const STATUS_FILTERS = [
     { id: 'all', get label() { return i18n.t("Tất cả", { ns: 'legacy', keySeparator: false }); } },
     { id: 'active', get label() { return i18n.t("Đang bán", { ns: 'legacy', keySeparator: false }); } },
@@ -661,16 +666,16 @@ const AdminMenuManagement = () => {
                                         alt={translateDishName(dish)}
                                         className="w-full h-36 object-cover"
                                     />
-                                    <div className="p-3">
-                                        <p className="font-semibold text-gray-800 leading-snug line-clamp-2">{translateDishName(dish)}</p>
+                                    <div className="p-3 flex flex-col flex-1">
+                                        <p className="min-h-[2.75rem] font-semibold text-gray-800 leading-snug line-clamp-2">{translateDishName(dish)}</p>
                                         {stat ? (
-                                            <p className="mt-2 text-sm text-gray-700">
+                                            <p className="mt-auto pt-2 text-sm text-gray-700">
                                                 <span className="text-yellow-500">★</span>{' '}
                                                 <span className="font-bold">{Number(stat.avg_rating).toFixed(1)}</span>
                                                 <span className="text-gray-500"> / 5 ({stat.review_count}{" " + i18n.t("đánh giá)", { ns: 'legacy', keySeparator: false })}</span>
                                             </p>
                                         ) : (
-                                            <p className="mt-2 text-sm text-gray-400">{i18n.t("Chưa có đánh giá", { ns: 'legacy', keySeparator: false })}</p>
+                                            <p className="mt-auto pt-2 text-sm text-gray-400">{i18n.t("Chưa có đánh giá", { ns: 'legacy', keySeparator: false })}</p>
                                         )}
                                     </div>
                                 </div>
@@ -678,34 +683,34 @@ const AdminMenuManagement = () => {
                         })}
                     </div>
                 ) : viewMode === 'table' ? (
-                    <div className="overflow-x-auto">
+                    <div className="max-w-[1320px] overflow-x-auto">
                         <table className="w-full min-w-[1000px] table-fixed text-sm text-left">
                             <colgroup>
-                                <col style={{ width: '4%' }} />
-                                <col style={{ width: '7%' }} />
-                                <col style={{ width: '27%' }} />
-                                <col style={{ width: '21%' }} />
+                                <col style={{ width: '6%' }} />
+                                <col style={{ width: '8%' }} />
+                                <col style={{ width: '22%' }} />
+                                <col style={{ width: '22%' }} />
                                 <col style={{ width: '12%' }} />
-                                <col style={{ width: '5%' }} />
-                                <col style={{ width: '9%' }} />
-                                <col style={{ width: '15%' }} />
+                                <col style={{ width: '8%' }} />
+                                <col style={{ width: '8%' }} />
+                                <col style={{ width: '14%' }} />
                             </colgroup>
                             <thead className="bg-red-600 text-white uppercase text-xs">
                                 <tr>
-                                    <th className="px-2 py-2.5">STT</th>
+                                    <th className="px-2 py-2.5 text-center">STT</th>
                                     <th className="px-2 py-2.5">{i18n.t("Hình ảnh", { ns: 'legacy', keySeparator: false })}</th>
                                     <th className="px-3 py-2.5">{i18n.t("Tên món", { ns: 'legacy', keySeparator: false })}</th>
                                     <th className="px-3 py-2.5">{i18n.t("Loại", { ns: 'legacy', keySeparator: false })}</th>
-                                    <th className="px-4 py-2.5">{i18n.t("Giá tiền", { ns: 'legacy', keySeparator: false })}</th>
-                                    <th className="px-1 py-2.5 text-center">{i18n.t("Món bán chạy", { ns: 'legacy', keySeparator: false })}</th>
-                                    <th className="px-2 py-2.5 text-center">{i18n.t("Trạng thái", { ns: 'legacy', keySeparator: false })}</th>
-                                    <th className="px-2 py-2.5 text-center">{i18n.t("Thao tác", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-1 py-2.5 text-center">{i18n.t("Giá tiền", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-1 py-2.5 text-center">Bestseller</th>
+                                    <th className="px-1 py-2.5 text-center">{i18n.t("Trạng thái", { ns: 'legacy', keySeparator: false })}</th>
+                                    <th className="px-1 py-2.5 text-center">{i18n.t("Thao tác", { ns: 'legacy', keySeparator: false })}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {visibleDishes.map((dish, index) => (
                                     <tr key={dish.dish_id} className={`border-b last:border-b-0 hover:bg-gray-50 ${!dish.is_active ? 'opacity-50' : ''}`}>
-                                        <td className="px-2 py-2 text-gray-500">{getStt(dish, index)}</td>
+                                        <td className="px-2 py-2 text-center text-gray-500">{getStt(dish, index)}</td>
                                         <td className="px-2 py-2">
                                             <img
                                                 src={getImageUrl(dish.image_url)}
@@ -713,17 +718,17 @@ const AdminMenuManagement = () => {
                                                 className="w-12 h-12 object-cover rounded shadow-sm"
                                             />
                                         </td>
-                                        <td className="px-3 py-2 font-semibold truncate" title={translateDishName(dish)}>{translateDishName(dish)}</td>
+                                        <td className="px-3 py-2 font-semibold whitespace-normal break-words leading-snug" title={translateDishName(dish)}>{translateDishName(dish)}</td>
                                         <td className="px-3 py-2">
                                             <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
                                         </td>
-                                        <td className="px-4 py-2 font-bold text-red-600">
-                                            {Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                        <td className="px-1 py-2 text-center font-bold text-red-600">
+                                            {formatMenuCurrency(dish.price, currentLanguage)}</td>
                                         <td className="px-1 py-2 text-center">
                                             {dish.is_bestseller ? <span className="text-yellow-500 text-lg">⭐</span> : ''}
                                         </td>
-                                        <td className="px-2 py-2 text-center">{statusBadge(dish)}</td>
-                                        <td className="px-2 py-2 text-center whitespace-nowrap space-x-2">
+                                        <td className="px-1 py-2 text-center">{statusBadge(dish)}</td>
+                                        <td className="px-1 py-2 text-center whitespace-nowrap space-x-2">
                                             <button
                                                 onClick={() => handleOpenModal(dish)}
                                                 className="text-blue-600 hover:text-blue-800 font-medium"
@@ -770,12 +775,14 @@ const AdminMenuManagement = () => {
                                     </div>
                                 </div>
                                 <div className="p-3 flex flex-col flex-1">
-                                    <p className="font-semibold text-gray-800 leading-snug line-clamp-2">{translateDishName(dish)}</p>
-                                    <div className="mt-1">
-                                        <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
+                                    <p className="min-h-[2.75rem] font-semibold text-gray-800 leading-snug line-clamp-2">{translateDishName(dish)}</p>
+                                    <div className="mt-auto">
+                                        <div className="mt-1">
+                                            <Badge variant="info">{getTypeName(dish.type_id)}</Badge>
+                                        </div>
+                                        <p className="mt-2 font-bold text-red-600">{formatMenuCurrency(dish.price, currentLanguage)}</p>
                                     </div>
-                                    <p className="mt-2 font-bold text-red-600">{Number(dish.price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</p>
-                                    <div className="mt-auto pt-3 flex justify-between text-sm">
+                                    <div className="pt-3 flex justify-between text-sm">
                                         <button onClick={() => handleOpenModal(dish)} className="text-blue-600 hover:text-blue-800 font-medium">{i18n.t("Chi tiết", { ns: 'legacy', keySeparator: false })}</button>
                                         <button
                                             onClick={() => handleToggleStatus(dish)}
@@ -853,12 +860,19 @@ const AdminMenuManagement = () => {
 
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-1">{t('adminDish.labelPrice')}</label>
-                                    <input
-                                        type="number" required min="0" step="1000" readOnly={editMode && !isEditing} disabled={busy}
-                                        value={formData.price}
-                                        onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                        className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${NO_SPIN}`}
-                                    />
+                                    <div className="flex w-full items-center rounded border border-gray-300 px-3 focus-within:border-red-500 focus-within:ring-1 focus-within:ring-red-500">
+                                        <input
+                                            type="number" required min="0" step="1000" readOnly={editMode && !isEditing} disabled={busy}
+                                            value={formData.price === '' ? '' : Number(formData.price)}
+                                            onChange={e => setFormData({ ...formData, price: e.target.value })}
+                                            aria-label={`${t('adminDish.labelPrice')} (${currentLanguage === 'en' ? 'VND' : 'đ'})`}
+                                            style={{ width: `${Math.max(String(Number(formData.price) || 0).length + 1, 5)}ch` }}
+                                            className={`min-w-0 max-w-full flex-none py-2 outline-none ${NO_SPIN}`}
+                                        />
+                                        <span aria-hidden="true" className="whitespace-nowrap text-gray-500">
+                                            {currentLanguage === 'en' ? ' VND' : 'đ'}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
 

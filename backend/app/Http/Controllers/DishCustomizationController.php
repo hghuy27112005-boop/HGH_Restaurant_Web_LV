@@ -80,6 +80,7 @@ class DishCustomizationController extends Controller
         } catch (RuntimeException|ConnectionException|RequestException $exception) {
             report($exception);
             return response()->json([
+                'code' => 'recipe_preview_unavailable',
                 'message' => 'Không thể phân tích nguyên liệu hoặc tạo công thức lúc này. Vui lòng thử lại.',
             ], 503);
         }

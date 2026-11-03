@@ -1,7 +1,8 @@
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { dishAPI, recommendationAPI, dishCustomizationAPI, cartAPI } from '../../services/api';
+import { dishAPI, dishCustomizationAPI, cartAPI } from '../../services/api';
 import { Loading, ErrorMessage, EmptyState, Modal } from '../../components/Shared';
 import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
@@ -9,6 +10,7 @@ import { translateIngredients } from './DishDetailPage';
 import { getCartKey } from '../../utils/cartStorage';
 import { translateDishName } from '../../dishTranslations';
 import i18n from '../../i18n';
+import FavoriteRecommendations from './FavoriteRecommendations';
 
 // Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
 const MAX_ORDER_QTY = 50;
@@ -43,12 +45,6 @@ const MenuPage = () => {
     const [selectedRecipeOptions, setSelectedRecipeOptions] = useState([]);
     const [selectedCustomization, setSelectedCustomization] = useState(null);
 
-    // Name-based AI recommendation states
-    const [recommendedDishes, setRecommendedDishes] = useState([]);
-    const [recommendationName, setRecommendationName] = useState('');
-    const [recommendLoading, setRecommendLoading] = useState(false);
-    const [recommendationError, setRecommendationError] = useState('');
-
     useEffect(() => {
         fetchDishes();
         fetchTypes();
@@ -67,29 +63,6 @@ const MenuPage = () => {
     useEffect(() => {
         filterDishes();
     }, [submittedSearch, selectedType, dishes]);
-
-    const handleRecommendationSubmit = async (event) => {
-        event.preventDefault();
-        const name = recommendationName.trim();
-        if (!name) {
-            setRecommendationError('menuRecommend.errorNameRequired');
-            return;
-        }
-        setRecommendLoading(true);
-        setRecommendationError('');
-        try {
-            const response = await recommendationAPI.getRecommendations(name);
-            setRecommendedDishes(response.data?.data || []);
-        } catch (recommendError) {
-            const code = recommendError.response?.data?.code;
-            setRecommendationError(code === 'recommendation_unavailable'
-                ? 'menuRecommend.errorUnavailable'
-                : 'menuRecommend.errorGeneric');
-            setRecommendedDishes([]);
-        } finally {
-            setRecommendLoading(false);
-        }
-    };
 
     const fetchDishes = async () => {
         try {
@@ -316,6 +289,7 @@ const MenuPage = () => {
                                 <input
                                     type="text"
                                     placeholder={i18n.t("Tìm kiếm món ăn...", { ns: 'legacy', keySeparator: false })}
+                                    disabled={selectedType === 'recommended'}
                                     value={search}
                                     onChange={handleSearchChange}
                                     onKeyDown={handleSearchSubmit}
@@ -324,9 +298,9 @@ const MenuPage = () => {
                                             setShowDropdown(false);
                                         }, 200);
                                     }}
-                                    className="w-full border border-gray-300 rounded px-4 py-2 pr-10 focus:outline-none focus:border-red-600"
+                                    className="w-full border border-gray-300 rounded px-4 py-2 pr-10 focus:outline-none focus:border-red-600 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed"
                                 />
-                                {search && (
+                                {search && selectedType !== 'recommended' && (
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -340,7 +314,7 @@ const MenuPage = () => {
                                         ×
                                     </button>
                                 )}
-                                {showDropdown && (
+                                {showDropdown && selectedType !== 'recommended' && (
                                     <div className="absolute z-50 w-full max-h-60 overflow-y-auto bg-white border border-gray-300 rounded mt-1 shadow-lg">
                                         {suggestions.map(dish => (
                                             <div
@@ -381,46 +355,7 @@ const MenuPage = () => {
 
                 {/* Dishes Grid */}
                 {selectedType === 'recommended' ? (
-                    <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-                        <form onSubmit={handleRecommendationSubmit} className="flex flex-col gap-3 sm:flex-row">
-                            <input
-                                value={recommendationName}
-                                onChange={(event) => setRecommendationName(event.target.value)}
-                                maxLength={255}
-                                placeholder={t('menuRecommend.placeholder')}
-                                className="min-w-0 flex-1 rounded border border-gray-300 px-4 py-2 focus:border-red-600 focus:outline-none"
-                            />
-                            <button
-                                type="submit"
-                                disabled={recommendLoading}
-                                className="rounded bg-red-600 px-5 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                            >{recommendLoading ? t('menuRecommend.searching') : t('menuRecommend.submit')}</button>
-                        </form>
-                        {recommendationError && <p role="alert" className="mt-3 text-sm text-red-600">{t(recommendationError)}</p>}
-                        {recommendLoading ? <div className="mt-5"><Loading /></div> : recommendedDishes.length === 0 ? (
-                            <EmptyState
-                                icon="🍽️"
-                                title={t(recommendationName ? 'menuRecommend.emptyTitleNotFound' : 'menuRecommend.emptyTitleNoName')}
-                                description={t('menuRecommend.emptyDescription')}
-                            />
-                        ) : (
-                            <div className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                                {recommendedDishes.map((dish) => (
-                                    <div key={dish.dish_id} className="flex h-full flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-                                        <img onClick={() => navigate(`/dish-details/${dish.dish_id}`)} src={dish.image_url} alt={translateDishName(dish)} className="h-44 w-full cursor-pointer object-cover" />
-                                        <div className="flex flex-grow flex-col p-4">
-                                            <h3 className="mb-1 text-lg font-semibold text-gray-800">{translateDishName(dish)}</h3>
-                                            <p className="mb-3 text-xl font-bold text-red-600">{Number(dish.price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</p>
-                                            <div className="mt-auto flex gap-2">
-                                                <button onClick={() => handleAddToCart(dish, 'mang-ve')} className="flex-1 rounded border border-red-600 px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-600 hover:text-white">{i18n.t("Đặt Ship", { ns: 'legacy', keySeparator: false })}</button>
-                                                <button onClick={() => handleAddToCart(dish, 'dat-ban')} className="flex-1 rounded border border-red-600 px-2 py-2 text-sm font-semibold text-red-600 hover:bg-red-600 hover:text-white">{i18n.t("Đặt Bàn", { ns: 'legacy', keySeparator: false })}</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </section>
+                    <FavoriteRecommendations onAddToCart={handleAddToCart} />
                 ) : filteredDishes.length === 0 ? (
                     <EmptyState
                         icon="🔍"
@@ -440,7 +375,7 @@ const MenuPage = () => {
                                 <div className="p-4 flex flex-col flex-grow">
                                     <h3 className="font-semibold text-lg text-gray-800 mb-1">{translateDishName(dish)}</h3>
                                     <p className="text-red-600 font-bold text-xl mb-3">
-                                        {Number(dish.price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</p>
+                                        {formatCurrency(Number(dish.price))}</p>
                                     <div className="mb-3 flex items-center justify-between gap-3">
                                         <div className="min-w-0 flex flex-1 flex-col items-start gap-2">
                                             {dish.is_bestseller && (

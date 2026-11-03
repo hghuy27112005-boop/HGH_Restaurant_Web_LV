@@ -25,3 +25,7 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 OAuth_client.json
+
+/.runtime/
+
+/public/chat_pictures/

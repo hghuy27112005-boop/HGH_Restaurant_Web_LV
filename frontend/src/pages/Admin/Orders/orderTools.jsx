@@ -243,7 +243,7 @@ export const fetchAllRows = async (fetchPage) => {
 const XLSX_FORMATS = {
     text: '@',
     number: '0',
-    money: '#,##0 "VNĐ"',
+    get money() { return `#,##0 "${i18n.t('đ', { ns: 'legacy', keySeparator: false })}"`; },
     datetime: 'dd/mm/yyyy hh:mm:ss',
 };
 

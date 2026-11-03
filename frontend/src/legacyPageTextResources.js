@@ -97,6 +97,7 @@ const englishPageText = new Map([
     ['Không có dữ liệu', 'No data available'],
     ['· Giữ chỗ:', '· Reserved:'],
     ['Chưa có nhật ký kho trong ngày', 'No stock log for this day'],
+    ['Cập nhật thất bại', 'Update failed'],
     ['Mã hóa đơn:', 'Invoice ID:'],
     ['Người đặt:', 'Placed by:'],
     ['Danh sách món:', 'Item list:'],

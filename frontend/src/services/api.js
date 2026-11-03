@@ -26,6 +26,10 @@ const API_ERROR_KEYS = {
     recommendation_unavailable: 'menuRecommend.errorUnavailable',
     translation_unavailable: 'adminDish.translationUnavailable',
     dish_name_duplicate: 'adminDish.nameDuplicate',
+    dish_not_found: 'apiErrors.orderRequestFailed',
+    rate_limited: 'apiErrors.serverError',
+    admin_forbidden: 'apiErrors.serverError',
+    recipe_preview_unavailable: 'apiErrors.serverError',
 };
 
 // Add token to request if exists
@@ -48,6 +52,20 @@ axiosInstance.interceptors.response.use(
         const translationKey = API_ERROR_KEYS[errorCode];
         if (translationKey && error.response?.data && typeof error.response.data === 'object') {
             error.response.data.message = i18n.t(translationKey);
+        } else if (error.response?.data && typeof error.response.data === 'object') {
+            const message = error.response.data.message;
+            if (typeof message === 'string' && message !== '') {
+                const legacyTranslation = i18n.t(message, {
+                    ns: 'legacy',
+                    keySeparator: false,
+                    defaultValue: message,
+                });
+                if (legacyTranslation !== message) {
+                    error.response.data.message = legacyTranslation;
+                } else if ((error.response.status || 0) >= 500) {
+                    error.response.data.message = i18n.t('apiErrors.serverError');
+                }
+            }
         }
         if (error.response?.status === 401 && !isAuthForm && sessionStorage.getItem('auth_token')) {
             // Token đã bị thu hồi (đăng nhập/đăng xuất ở nơi khác): báo cho useAuth hiện modal
@@ -139,9 +157,9 @@ export const dishCustomizationAPI = {
     preview: (dishId, data) => axiosInstance.post(`/dish-customizations/${dishId}/preview`, data),
 };
 
-// Recommendations API (AI suggestions based on a customer-entered dish name)
+// Recommendations API (one to three currently available favorite dishes)
 export const recommendationAPI = {
-    getRecommendations: (name) => axiosInstance.post('/recommendations', { name }),
+    getRecommendations: (favoriteDishIds) => axiosInstance.post('/recommendations', { favorite_dish_ids: favoriteDishIds }),
 };
 
 // Ratings API (đánh giá dịch vụ - món ăn đã đặt)

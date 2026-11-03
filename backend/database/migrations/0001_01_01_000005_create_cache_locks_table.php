@@ -8,15 +8,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('dish_customizations', function (Blueprint $table) {
-            $table->json('selection')->nullable();
+        Schema::create('cache_locks', function (Blueprint $table) {
+            $table->string('key')->primary();
+            $table->string('owner');
+            $table->integer('expiration')->index();
         });
     }
 
     public function down(): void
     {
-        Schema::table('dish_customizations', function (Blueprint $table) {
-            $table->dropColumn('selection');
-        });
+        Schema::dropIfExists('cache_locks');
     }
 };

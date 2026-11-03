@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id('ingredient_stock_id');
             $table->foreignId('ingredient_id')->constrained('ingredients', 'ingredient_id')->cascadeOnDelete();
             $table->string('ingredient_key', 255);
-            $table->string('ingredient_name', 255);
+            $table->string('ingredient_name', 255)->nullable();
             $table->date('stock_date');
             $table->integer('quantity_start')->default(50);
             $table->integer('quantity_left')->default(50);

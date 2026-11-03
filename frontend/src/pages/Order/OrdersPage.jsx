@@ -1,3 +1,6 @@
+import SaveInvoiceMenu from '../../components/Chatbot/SaveInvoiceMenu';
+import { useSearchParams } from 'react-router-dom';
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import React, { useState, useEffect } from 'react';
 import { billService, extractListData } from '../../services/api';
 import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal } from '../../components/Shared';
@@ -52,7 +55,11 @@ const getTodayDateKey = () => {
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 };
 
+const I18nText = ({ translationKey }) => i18n.t(translationKey);
+
 const OrdersPage = () => {
+    const [searchParams] = useSearchParams();
+    const invoiceCode = searchParams.get('invoice') || '';
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -61,18 +68,25 @@ const OrdersPage = () => {
 
     const [detailBill, setDetailBill] = useState(null); // bill đang xem chi tiết (null = đóng modal)
     const [errorMessage, setErrorMessage] = useState(null);
-    const [searchBillId, setSearchBillId] = useState('');
-    const [dateFilter, setDateFilter] = useState(getTodayDateKey);
+    const [searchBillId, setSearchBillId] = useState(invoiceCode);
+    const [dateFilter, setDateFilter] = useState(() => invoiceCode ? '' : getTodayDateKey());
 
     useEffect(() => {
         fetchOrders();
-    }, []);
+    }, [invoiceCode]);
+
+    useEffect(() => {
+        if (!invoiceCode) return;
+        setSearchBillId(invoiceCode); setDateFilter(''); setTypeFilter('all'); setStatusFilter('all');
+        const bill = orders.find((item) => String(item.bill_id) === invoiceCode);
+        setDetailBill(bill || null);
+    }, [invoiceCode, orders]);
 
     const fetchOrders = async () => {
         try {
             setLoading(true);
             setError(null);
-            const response = await billService.getBills(); // lấy tất cả loại đơn
+            const response = await billService.getBills(invoiceCode ? { invoice: invoiceCode } : undefined); // lấy tất cả loại đơn
             setOrders(extractListData(response));
         } catch (err) {
             if (err.response?.status === 401) return;
@@ -165,12 +179,49 @@ const OrdersPage = () => {
     };
 
     const exportInvoicePdf = async (bill) => {
+        const pdfWindow = window.open('about:blank', '_blank');
         try {
+            if (!pdfWindow) {
+                throw new Error('The browser blocked the invoice tab.');
+            }
+
+            const status = pdfWindow.document.createElement('div');
+            status.textContent = i18n.t('orders.exportingPdf');
+            status.setAttribute('role', 'status');
+            status.setAttribute('aria-live', 'polite');
+            Object.assign(pdfWindow.document.body.style, {
+                alignItems: 'center',
+                background: '#f9fafb',
+                color: '#374151',
+                display: 'flex',
+                fontFamily: 'Arial, sans-serif',
+                justifyContent: 'center',
+                margin: '0',
+                minHeight: '100vh',
+            });
+            Object.assign(status.style, {
+                fontSize: '18px',
+                fontWeight: '600',
+                textAlign: 'center',
+            });
+            pdfWindow.document.body.replaceChildren(status);
+            pdfWindow.document.title = i18n.t('orders.exportingPdf');
+
             const response = await billService.exportPdf(bill.bill_id);
-            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const blob = response.data instanceof Blob
+                ? response.data
+                : new Blob([response.data], { type: 'application/pdf' });
             const url = window.URL.createObjectURL(blob);
-            window.open(url, '_blank');
+            pdfWindow.location.replace(url);
+
+            const cleanupTimer = window.setInterval(() => {
+                if (pdfWindow.closed) {
+                    window.clearInterval(cleanupTimer);
+                    window.URL.revokeObjectURL(url);
+                }
+            }, 1000);
         } catch (err) {
+            pdfWindow?.close();
             setErrorMessage(i18n.t("Không thể xuất hóa đơn PDF. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
             console.error(err);
         }
@@ -308,7 +359,7 @@ const OrdersPage = () => {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-gray-600">{i18n.t("Tổng tiền", { ns: 'legacy', keySeparator: false })}</p>
-                                                    <p className="font-bold text-red-600">{Number(bill.subtotal_price || bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</p>
+                                                    <p className="font-bold text-red-600">{formatCurrency(bill.subtotal_price || bill.total_price || 0)}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-gray-600 mb-1">{i18n.t("Trạng thái", { ns: 'legacy', keySeparator: false })}</p>
@@ -329,7 +380,7 @@ const OrdersPage = () => {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-gray-600">{i18n.t("Tổng tiền", { ns: 'legacy', keySeparator: false })}</p>
-                                                    <p className="font-bold text-red-600">{Number(bill.subtotal_price || bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</p>
+                                                    <p className="font-bold text-red-600">{formatCurrency(bill.subtotal_price || bill.total_price || 0)}</p>
                                                 </div>
                                                 <div>
                                                     <p className="text-sm text-gray-600 mb-1">{i18n.t("Trạng thái", { ns: 'legacy', keySeparator: false })}</p>
@@ -345,10 +396,7 @@ const OrdersPage = () => {
                                                 onClick={() => setDetailBill(bill)}
                                                 className="px-4 py-2 text-sm font-bold rounded border-2 border-red-600 text-red-600 bg-white hover:bg-red-600 hover:text-white transition"
                                             >{i18n.t("Xem chi tiết hóa đơn", { ns: 'legacy', keySeparator: false }) + " "}</button>
-                                            <button
-                                                onClick={() => exportInvoicePdf(bill)}
-                                                className="px-4 py-2 text-sm font-bold rounded bg-red-600 text-white hover:bg-red-700 transition"
-                                            >{i18n.t("Xuất hóa đơn", { ns: 'legacy', keySeparator: false }) + " "}</button>
+                                            <SaveInvoiceMenu billId={bill.bill_id} disabled={!bill.is_paid} onPdf={() => exportInvoicePdf(bill)} onError={setErrorMessage} />
                                         </div>
                                     </Card>
                                 );
@@ -365,7 +413,7 @@ const OrdersPage = () => {
                     title={`${i18n.t("Chi tiết đơn hàng", { ns: 'legacy', keySeparator: false })} ${detailBill.bill_id || detailBill.order_id}`}
                     onClose={() => setDetailBill(null)}
                     showHeaderClose
-                    className="max-w-lg"
+                    className="max-w-3xl"
                 >
                     {detailBill.order_type === 'booking_table' && detailBill.booking_table && (
                         <div className="bg-gray-50 rounded p-3 mb-4 text-sm space-y-1">
@@ -402,15 +450,15 @@ const OrdersPage = () => {
                                     </td>
                                     <td className="py-2 px-3 text-center border border-gray-300">{item.quantity}</td>
                                     <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                        {(Number(item.unit_price) * item.quantity).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                        {formatCurrency(Number(item.unit_price) * item.quantity)}</td>
                                 </tr>
                             ))}
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300">{i18n.t("Tổng cộng:", { ns: 'legacy', keySeparator: false })}</td>
+                                <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300"><I18nText translationKey="orders.total" /></td>
                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                    {Number(detailBill.subtotal_price || detailBill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                    {formatCurrency(detailBill.subtotal_price || detailBill.total_price || 0)}</td>
                             </tr>
                             {detailBill.sale_off_percentage != null && (
                                 <tr>
@@ -424,7 +472,7 @@ const OrdersPage = () => {
                                 <tr>
                                     <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-orange-500">{i18n.t("Giảm giá VNPay:", { ns: 'legacy', keySeparator: false })}</td>
                                     <td className="py-2 px-3 text-right font-bold text-orange-500 border border-gray-300">
-                                        -{Number((detailBill.subtotal_price || 0) - (detailBill.total_price || 0)).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                        -{formatCurrency((detailBill.subtotal_price || 0) - (detailBill.total_price || 0))}</td>
                                 </tr>
                             )}
                             {detailBill.payment_method === 'Points' && (
@@ -439,7 +487,7 @@ const OrdersPage = () => {
                                     {detailBill.payment_method === 'vnpay' ? i18n.t("Số tiền đã trả:", { ns: 'legacy', keySeparator: false }) : i18n.t("Số tiền cần trả:", { ns: 'legacy', keySeparator: false })}
                                 </td>
                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                    {Number(detailBill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                    {formatCurrency(detailBill.total_price || 0)}</td>
                             </tr>
                         </tfoot>
                     </table>

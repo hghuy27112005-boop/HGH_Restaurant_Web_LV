@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import i18n from '../../i18n.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import { deliveryService } from '../../services/api';
@@ -332,7 +333,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                                 </div>
                                 <div className="flex justify-between gap-4">
                                     <span className="text-gray-600">{i18n.t("Phí ship (thu riêng khi nhận hàng):", { ns: 'legacy', keySeparator: false })}</span>
-                                    <span className="font-bold text-red-600">{Number(preview.shipping_fee ?? 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
+                                    <span className="font-bold text-red-600">{formatCurrency(Number(preview.shipping_fee ?? 0))}</span>
                                 </div>
                             </div>
                         )}

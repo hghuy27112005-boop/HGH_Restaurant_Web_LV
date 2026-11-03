@@ -47,7 +47,7 @@ const Layout = ({ children }) => {
     const toggleTheme = () => setTheme((current) => current === 'dark' ? 'light' : 'dark');
 
     return (
-        <div className="flex min-h-screen">
+        <div className={`flex min-h-screen ${isAdmin ? '' : 'customer-layout'}`} data-chatbot-open={!isAdmin && chatbotOpen ? 'true' : 'false'}>
             {isAdmin && <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />}
 
             {/* Nút ☰ mở sidebar, cố định góc trên trái */}
@@ -81,6 +81,7 @@ const Layout = ({ children }) => {
                     isDarkMode={isDarkMode}
                     isDarkAppearance={isDarkMode || isHome}
                     showThemeToggle={!isThemeExcludedPage}
+                    showNotificationSettings={false}
                     onToggleTheme={toggleTheme}
                     isAuthenticated={isAuthenticated}
                     placementClass="fixed right-3 top-3 z-30"

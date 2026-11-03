@@ -1,0 +1,15 @@
+.chat-image-day-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-right: 6px; }
+.chat-image-delete-day { flex-shrink: 0; border: 0; border-radius: 4px; padding: 4px 2px; background: transparent; color: #dc2626; font-size: 13px; cursor: pointer; }
+.chat-image-delete-day:hover:not(:disabled) { background: rgba(220,38,38,.08); }
+.chat-image-delete-day:disabled { opacity: .5; cursor: default; }
+.chat-library-tile { position: relative; border-radius: 7px; overflow: hidden; }
+.chat-library-preview { display: block; width: 100%; padding: 0; border: 0; border-radius: 7px; background: transparent; cursor: pointer; }
+.chat-library-shade { position: absolute; inset: 0; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .16s; pointer-events: none; }
+.chat-library-tile:hover .chat-library-shade, .chat-library-tile:focus-within .chat-library-shade, .chat-library-tile.is-selecting .chat-library-shade { opacity: 1; }
+.chat-library-trash { position: absolute; top: 5px; right: 5px; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 6px; border: 1px solid rgba(255,255,255,.6); background: #dc2626; color: white; cursor: pointer; opacity: 0; transition: opacity .16s; }
+.chat-library-tile:hover .chat-library-trash, .chat-library-tile:focus-within .chat-library-trash { opacity: 1; }
+.chat-library-check { position: absolute; top: 7px; left: 7px; width: 21px; height: 21px; border: 2px solid white; border-radius: 4px; background: rgba(255,255,255,.2); color: white; line-height: 17px; font-size: 17px; font-weight: bold; pointer-events: none; }
+.chat-library-tile.is-selected { outline: 2px solid #dc2626; outline-offset: -2px; }
+.chat-library-tile.is-selected .chat-library-check { background: #dc2626; }
+.chat-library-actions { display: flex; justify-content: space-between; gap: 12px; padding: 14px 6px 4px; }
+@media (hover: none) { .chat-library-trash { opacity: 1; } }

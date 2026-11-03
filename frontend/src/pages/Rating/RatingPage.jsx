@@ -28,6 +28,7 @@ const getTodayDateKey = () => {
 };
 
 const StarPicker = ({ value, onChange }) => {
+    const { t } = useTranslation();
     const [hoverValue, setHoverValue] = useState(0);
     const displayValue = hoverValue || value; // rê chuột thì xem trước, không thì dùng giá trị đã chọn
 

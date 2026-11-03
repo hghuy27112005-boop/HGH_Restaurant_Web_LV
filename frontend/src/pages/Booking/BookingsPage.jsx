@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import React, { useState, useEffect } from 'react';
 import { bookingService, billService, vnpayService, extractListData, userAPI, orderService, serverTimeAPI, promotionAPI } from '../../services/api';
 import { Loading, ErrorMessage, Card, Badge, EmptyState, Modal } from '../../components/Shared';
@@ -978,7 +979,7 @@ const BookingsPage = () => {
                                                     </div>
                                                 </td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                    {(item.price * item.quantity).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                    {formatCurrency((item.price * item.quantity))}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -986,7 +987,7 @@ const BookingsPage = () => {
                                         <tr>
                                             <td colSpan={2} className="py-2 px-3 font-bold text-lg border border-gray-300">{i18n.t("Tổng tiền món:", { ns: 'legacy', keySeparator: false })}</td>
                                             <td className="py-2 px-3 text-right font-bold text-lg text-red-600 border border-gray-300">
-                                                {cartTotal.toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                {formatCurrency(cartTotal)}</td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -1296,7 +1297,7 @@ const BookingsPage = () => {
                                                 <div className="flex items-center justify-between mb-4 px-1">
                                                     <div>
                                                         <p className="font-semibold text-gray-700">{i18n.t("Sử dụng giảm giá của sự kiện", { ns: 'legacy', keySeparator: false })}</p>
-                                                        <p className="text-xs text-gray-500">{i18n.t("Giảm", { ns: 'legacy', keySeparator: false }) + " "}{Number(saleOffEvent.sale_off_percentage)}{i18n.t("% — còn", { ns: 'legacy', keySeparator: false }) + " "}{getEffectiveTotal().toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</p>
+                                                        <p className="text-xs text-gray-500">{i18n.t("Giảm", { ns: 'legacy', keySeparator: false }) + " "}{Number(saleOffEvent.sale_off_percentage)}{i18n.t("% — còn", { ns: 'legacy', keySeparator: false }) + " "}{formatCurrency(getEffectiveTotal())}</p>
                                                     </div>
                                                     <button
                                                         type="button"
@@ -1513,7 +1514,7 @@ const BookingsPage = () => {
                                         <div className="mt-2 text-sm space-y-1">
                                             <div className="flex justify-between text-gray-600">
                                                 <span>{i18n.t("Tổng tiền:", { ns: 'legacy', keySeparator: false })}</span>
-                                                <span className="font-semibold">{Number(bill.subtotal_price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
+                                                <span className="font-semibold">{formatCurrency(Number(bill.subtotal_price))}</span>
                                             </div>
                                             {bill.sale_off_percentage != null && (
                                                 <div className="flex justify-between text-orange-600">
@@ -1530,18 +1531,18 @@ const BookingsPage = () => {
                                                     </div>
                                                     <div className="flex justify-between font-bold text-gray-800">
                                                         <span>{i18n.t("Số tiền cần trả:", { ns: 'legacy', keySeparator: false })}</span>
-                                                        <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
+                                                        <span className="text-red-600">{formatCurrency(Number(bill.total_price || 0))}</span>
                                                     </div>
                                                 </>
                                             ) : bill.payment_method === 'vnpay' ? (
                                                 <div className="flex justify-between font-bold text-gray-800">
                                                     <span>{i18n.t("Số tiền đã trả:", { ns: 'legacy', keySeparator: false })}</span>
-                                                    <span className="text-red-600">{Number(bill.sale_off_total_price ?? bill.total_price ?? 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
+                                                    <span className="text-red-600">{formatCurrency(Number(bill.sale_off_total_price ?? bill.total_price ?? 0))}</span>
                                                 </div>
                                             ) : (
                                                 <div className="flex justify-between font-bold text-gray-800">
                                                     <span>{i18n.t("Số tiền cần trả:", { ns: 'legacy', keySeparator: false })}</span>
-                                                    <span className="text-red-600">{Number(bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>
+                                                    <span className="text-red-600">{formatCurrency(Number(bill.total_price || 0))}</span>
                                                 </div>
                                             )}
                                         </div>

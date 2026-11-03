@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -734,7 +735,7 @@ const DishDetailPage = () => {
                         <img src={selectedDish.image_url} alt={translateDishName(selectedDish)} className="w-full max-w-lg mx-auto h-56 sm:h-72 object-cover rounded-xl" />
                         <div>
                             <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">{translateDishName(selectedDish)}</h2>
-                            <p className="text-red-600 text-2xl font-bold mb-5">{Number(selectedDish.price).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</p>
+                            <p className="text-red-600 text-2xl font-bold mb-5">{formatCurrency(Number(selectedDish.price))}</p>
                             <h3 className="font-semibold text-lg mb-2">{i18n.t("Nguyên liệu nấu", { ns: 'legacy', keySeparator: false })}</h3>
                             <p className="text-gray-700 leading-7">{displayedIngredients ? translateIngredients(displayedIngredients) : i18n.t("Món này chưa có thông tin nguyên liệu.", { ns: 'legacy', keySeparator: false })}</p>
                             <div className="grid grid-cols-2 gap-3 mt-6">

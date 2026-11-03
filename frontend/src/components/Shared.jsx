@@ -109,12 +109,12 @@ export const Modal = ({ isOpen, title, titleClassName = '', className = '', chil
 
     return (
         <div
-            className="fixed inset-0 flex items-center justify-center"
+            className="page-modal-backdrop fixed inset-0 flex items-center justify-center"
             style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)', zIndex }}
             onMouseDown={handleBackdropMouseDown}
             onMouseUp={handleBackdropMouseUp}
         >
-            <div className={`bg-white rounded-lg shadow-lg p-6 w-full mx-4 flex flex-col max-h-[90dvh] ${className || 'max-w-md'}`}>
+            <div className={`page-modal-panel bg-white rounded-lg shadow-lg p-6 w-full mx-4 flex flex-col max-h-[90dvh] ${className || 'max-w-md'}`}>
                 <h2 className={`-mx-6 -mt-6 mb-4 flex shrink-0 items-center justify-between gap-4 rounded-t-lg bg-red-600 px-6 py-4 text-xl font-bold ${titleClassName} text-white`}>
                     <span>{i18n.t(title, { ns: 'legacy', keySeparator: false })}</span>
                     {showHeaderClose && (

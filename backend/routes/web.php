@@ -14,11 +14,6 @@ Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback']);
 Route::get('/auth/facebook/redirect', [FacebookAuthController::class, 'redirect']);
 Route::get('/auth/facebook/callback', [FacebookAuthController::class, 'callback']);
 
-Route::get('/clear', function () {
-    session()->flush();
-    return "Đã dọn dẹp toàn bộ dữ liệu session.";
-});
-
 Route::get('/{any?}', function () {
     return view('layout');
 })->where('any', '^(?!api|vnpay|auth|clear).*$')->name('login');

@@ -13,7 +13,7 @@ return new class extends Migration
             $table->string('order_id', 20);
             $table->foreign('order_id')->references('order_id')->on('orders')->onDelete('cascade');
             $table->foreignId('ingredient_stock_id')->constrained('ingredient_stocks', 'ingredient_stock_id')->onDelete('cascade');
-            $table->string('ingredient_name', 255);
+            $table->string('ingredient_name', 255)->nullable();
             $table->integer('quantity_before');
             $table->integer('quantity_deducted');
             $table->integer('quantity_after');

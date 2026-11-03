@@ -41,21 +41,22 @@ class ContentModerationService
             return null;
         }
 
-        $warning = ContentModerationWarning::create([
-            'user_id' => $userId,
-            'source' => $source,
-            'warning_date' => now()->toDateString(),
-            'content' => $content,
-            'created_at' => now(),
-        ]);
+        return $this->recordViolation($userId, $source, $content);
+    }
 
+    public function recordViolation(int $userId, string $source, string $content, string $lang = 'vi'): array
+    {
+        $warning = ContentModerationWarning::create([
+            'user_id' => $userId, 'source' => $source,
+            'warning_date' => now()->toDateString(),
+            // Do not retain rejected personal/sexual content in the warning log.
+            'content' => '[Content policy violation]', 'created_at' => now(),
+        ]);
         $status = $this->status($userId);
-        return [
-            'blocked' => $status['blocked'],
-            'warning' => true,
-            'message' => $status['blocked'] ? self::BLOCKED_MESSAGE : self::WARNING_MESSAGE,
-            ...$status,
-            'warning_id' => $warning->warning_id,
+        return [...$status, 'warning' => true, 'warning_id' => $warning->warning_id,
+            'message' => $lang === 'en'
+                ? ($status['blocked'] ? 'Chat and reviews are suspended until the end of today after two content-policy violations.' : 'This content violates our policy. A second violation today will suspend chat and reviews for the day.')
+                : ($status['blocked'] ? 'Chatbot và đánh giá bị khóa đến hết hôm nay do vi phạm quy tắc nội dung hai lần.' : 'Nội dung vi phạm quy tắc. Vi phạm lần thứ hai trong hôm nay sẽ khóa chatbot và đánh giá đến hết ngày.'),
         ];
     }
 

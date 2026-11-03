@@ -15,6 +15,7 @@ return new class extends Migration
             $table->enum('sender', ['user', 'bot']);
             $table->text('content');
             $table->string('image_path')->nullable();
+            $table->string('invoice_bill_id', 40)->nullable()->index();
             $table->timestamp('created_at')->useCurrent();
         });
 

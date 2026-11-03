@@ -33,7 +33,7 @@
 
         $language = ($language ?? 'vi') === 'en' ? 'en' : 'vi';
         $isEnglish = $language === 'en';
-        $currency = $isEnglish ? 'VND' : 'VNĐ';
+        $currency = $isEnglish ? 'VND' : 'đ';
         $formatAmount = fn ($amount) => number_format($amount, 0, $isEnglish ? '.' : ',', $isEnglish ? ',' : '.') . ' ' . $currency;
         $customerName = $isEnglish ? 'Customer' : 'Khách hàng';
         try {
@@ -49,7 +49,7 @@
     <div class="invoice-box">
         <div class="header">
             <div class="restaurant-name">HGH RESTAURANT</div>
-            <p>{{ $isEnglish ? 'Address:' : 'Địa chỉ:' }} Số 52, đường số 2, Khu CBGV ĐHCT, Phường An Khánh, Quận Ninh Kiều, TP. Cần Thơ</p>
+            <p>{{ $isEnglish ? 'Address:' : 'Địa chỉ:' }} {{ $isEnglish ? '52, Street 2, Can Tho University Faculty and Staff Housing Area, An Khanh Ward, Ninh Kieu District, Can Tho City' : 'Số 52, đường số 2, Khu CBGV ĐHCT, Phường An Khánh, Quận Ninh Kiều, TP. Cần Thơ' }}</p>
             <p>{{ $isEnglish ? 'Phone:' : 'Điện thoại:' }} 0907106674</p>
         </div>
 
@@ -185,7 +185,7 @@
                 @endif
             @elseif($discount > 0 && $bill->payment_method === 'vnpay')
                 <p style="font-size: 16px; margin-bottom: 5px;">{{ $isEnglish ? 'Subtotal:' : 'Số tiền phải trả:' }} {{ $formatAmount($subtotal) }}</p>
-                <p style="font-size: 14px; color: #E67E22; margin-bottom: 5px;">{{ $isEnglish ? 'VNPay discount:' : 'Hóa đơn đã áp mã giảm giá VNPay. Giảm:' }} {{ number_format($discount, 0, ',', '.') }} {{ $currency }}</p>
+                <p style="font-size: 14px; color: #E67E22; margin-bottom: 5px;">{{ $isEnglish ? 'VNPay discount:' : 'Hóa đơn đã áp mã giảm giá VNPay. Giảm:' }} {{ $formatAmount($discount) }}</p>
                 <p class="total-amount">{{ $isEnglish ? 'Amount due:' : 'Còn:' }} {{ $formatAmount($total) }}</p>
             @else
                 <p style="font-size: 16px; margin-bottom: 5px;">{{ $isEnglish ? 'Subtotal:' : 'Số tiền phải trả:' }} {{ $formatAmount($subtotal) }}</p>

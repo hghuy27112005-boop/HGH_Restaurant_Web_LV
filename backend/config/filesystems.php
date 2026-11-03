@@ -30,6 +30,12 @@ return [
 
     'disks' => [
 
+        'chat_images' => [
+            'driver' => 'local',
+            'root' => public_path('chat_pictures'),
+            'throw' => true,
+        ],
+
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),

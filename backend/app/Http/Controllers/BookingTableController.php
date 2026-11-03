@@ -355,6 +355,8 @@ class BookingTableController extends Controller
 
             if (!empty($addTables)) {
                 $generator = new OrderCodeGenerator();
+                // Use the same transaction-scoped lock as order and booking creation.
+                DB::select('SELECT pg_advisory_xact_lock(6142026)');
                 $prefix = \Carbon\Carbon::parse($startDate)->format('dmy') . '1';
                 $maxSeq = (int) (BookingTable::where('booking_id', 'like', $prefix . '%')
                     ->selectRaw('MAX(CAST(RIGHT(booking_id, 3) AS INTEGER)) as max_seq')

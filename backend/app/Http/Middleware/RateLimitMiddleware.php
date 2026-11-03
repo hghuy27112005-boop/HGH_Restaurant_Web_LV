@@ -24,6 +24,7 @@ class RateLimitMiddleware
 
         if ($this->limiter->tooManyAttempts($key, $limit)) {
             return response()->json([
+                'code' => 'rate_limited',
                 'success' => false,
                 'message' => 'Quá nhiều yêu cầu. Vui lòng thử lại sau ' . $this->limiter->availableIn($key) . ' giây',
             ], 429);
@@ -45,9 +46,15 @@ class RateLimitMiddleware
      */
     protected function resolveRequestSignature($request)
     {
-        return sha1(
-            $request->user()?->id ?: $request->ip()
-        );
+        $userIdentifier = $request->user()?->getAuthIdentifier();
+        $bearerToken = $request->bearerToken();
+        $identity = $userIdentifier !== null
+            ? 'user:' . $userIdentifier
+            : ($bearerToken !== null
+                ? 'token:' . hash('sha256', $bearerToken)
+                : 'ip:' . ($request->ip() ?: 'unknown'));
+
+        return sha1($identity);
     }
 
     /**
@@ -55,8 +62,8 @@ class RateLimitMiddleware
      */
     protected function addRateLimitHeaders($response, $limit, $remaining)
     {
-        return $response
-            ->header('X-RateLimit-Limit', $limit)
-            ->header('X-RateLimit-Remaining', max(0, $remaining));
+        $response->headers->set('X-RateLimit-Limit', $limit);
+        $response->headers->set('X-RateLimit-Remaining', max(0, $remaining));
+        return $response;
     }
 }

@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../../utils/formatCurrency.js';
 import i18n from '../../../i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { adminAPI } from '../../../services/api';
@@ -46,6 +47,7 @@ const formatExpected = (value) => value
         hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric',
     })
     : '—';
+
 
 const AdminDeliveriesTab = () => {
     const [deliveries, setDeliveries] = useState([]);
@@ -446,7 +448,7 @@ const AdminDeliveriesTab = () => {
                                                 </td>
                                                 <td className="py-2 px-3 text-center border border-black">{item.quantity}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                                    {(Number(item.unit_price) * item.quantity).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                    {formatCurrency(Number(item.unit_price) * item.quantity)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -454,7 +456,7 @@ const AdminDeliveriesTab = () => {
                                         <tr>
                                             <td colSpan={2} className="py-2 px-3 font-bold border border-black">{i18n.t("Tổng cộng:", { ns: 'legacy', keySeparator: false })}</td>
                                             <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                                {Number(sd.order?.subtotal_price || 0).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                {formatCurrency(sd.order?.subtotal_price || 0)}</td>
                                         </tr>
                                         {bill?.sale_off_percentage != null && (
                                             <tr>
@@ -468,7 +470,7 @@ const AdminDeliveriesTab = () => {
                                             <tr>
                                                 <td colSpan={2} className="py-2 px-3 font-bold border border-black text-orange-500">{i18n.t("Giảm giá VNPay:", { ns: 'legacy', keySeparator: false })}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-orange-500 border border-black">
-                                                    -{Number(Number(sd.order?.subtotal_price || 0) - Number(bill?.total_price || 0)).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                    -{formatCurrency(Number(sd.order?.subtotal_price || 0) - Number(bill?.total_price || 0))}</td>
                                             </tr>
                                         )}
                                         {bill?.payment_method === 'Points' && (
@@ -483,7 +485,7 @@ const AdminDeliveriesTab = () => {
                                                 {bill?.payment_method === 'vnpay' ? i18n.t("Số tiền đã trả:", { ns: 'legacy', keySeparator: false }) : i18n.t("Số tiền cần trả:", { ns: 'legacy', keySeparator: false })}
                                             </td>
                                             <td className="py-2 px-3 text-right font-bold text-red-600 border border-black">
-                                                {Number(bill?.total_price || 0).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                {formatCurrency(bill?.total_price || 0)}</td>
                                         </tr>
                                     </tfoot>
                                 </table>

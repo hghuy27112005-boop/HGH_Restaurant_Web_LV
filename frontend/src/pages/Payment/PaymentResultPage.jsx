@@ -1,8 +1,9 @@
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import i18n from '../../i18n.js';
 import React, { useEffect, useState, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { myBillsAPI, orderService } from '../../services/api';
-import { domToPng } from 'modern-screenshot';
+import SaveInvoiceMenu from '../../components/Chatbot/SaveInvoiceMenu';
 import { Modal } from '../../components/Shared';
 import { getCartKey, getSessionKey } from '../../utils/cartStorage';
 import { translateDishName } from '../../dishTranslations';
@@ -27,7 +28,6 @@ const PaymentResultPage = () => {
     const [result, setResult] = useState(null);
     const [verifying, setVerifying] = useState(true);
     const [orderType, setOrderType] = useState('delivery');
-    const [saving, setSaving] = useState(false);
     const [errorMessage, setErrorMessage] = useState(null);
     const pollCountRef = useRef(0);
     const captureRef = useRef(null);
@@ -143,29 +143,6 @@ const PaymentResultPage = () => {
         }
     };
 
-    const handleSaveImage = async () => {
-        if (!captureRef.current || saving) return;
-        setSaving(true);
-        try {
-            const dataUrl = await domToPng(captureRef.current, {
-                backgroundColor: '#ffffff',
-                scale: 2,
-            });
-
-            const link = document.createElement('a');
-            link.href = dataUrl;
-            link.download = `hoa-don-${result?.billId}.png`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        } catch (err) {
-            console.error('Lỗi khi lưu ảnh:', err);
-            setErrorMessage(i18n.t("Không thể lưu ảnh. Vui lòng thử chụp màn hình thủ công.", { ns: 'legacy', keySeparator: false }));
-        } finally {
-            setSaving(false);
-        }
-    };
-
     // Chờ đủ dữ liệu trước khi hiện màn hình:
     // - Chưa có result: đang khởi tạo
     // - Thanh toán thành công nhưng còn đang xác minh VÀ chưa có billId: chờ tiếp,
@@ -185,8 +162,8 @@ const PaymentResultPage = () => {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-            <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-                <div ref={captureRef} className="bg-white">
+            <div className="bg-white rounded-lg shadow-lg p-8 max-w-2xl w-full text-center">
+                <div ref={captureRef} className="bg-white p-4">
                     {result.success ? (
                         <>
                             <CircleIcon success={true} />
@@ -220,7 +197,7 @@ const PaymentResultPage = () => {
                                                     </td>
                                                     <td className="py-2 px-3 text-center border border-gray-300">{item.quantity}</td>
                                                     <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                        {(Number(item.unit_price) * Number(item.quantity)).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                        {formatCurrency((Number(item.unit_price) * Number(item.quantity)))}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -228,7 +205,7 @@ const PaymentResultPage = () => {
                                             <tr>
                                                 <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300">{i18n.t("Tổng cộng:", { ns: 'legacy', keySeparator: false })}</td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                    {Number(result.bill.subtotal_price || result.bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                    {formatCurrency(Number(result.bill.subtotal_price || result.bill.total_price || 0))}</td>
                                             </tr>
                                             {result.bill.sale_off_percentage != null && (
                                                 <tr>
@@ -242,7 +219,7 @@ const PaymentResultPage = () => {
                                                 <tr>
                                                     <td colSpan={2} className="py-2 px-3 font-bold border border-gray-300 text-orange-500">{i18n.t("Giảm giá VNPay:", { ns: 'legacy', keySeparator: false })}</td>
                                                     <td className="py-2 px-3 text-right font-bold text-orange-500 border border-gray-300">
-                                                        -{Number((result.bill.subtotal_price || 0) - (result.bill.total_price || 0)).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                        -{formatCurrency(Number((result.bill.subtotal_price || 0) - (result.bill.total_price || 0)))}</td>
                                                 </tr>
                                             )}
                                             {result.bill.payment_method === 'Points' && (
@@ -257,7 +234,7 @@ const PaymentResultPage = () => {
                                                     {result.bill.payment_method === 'vnpay' ? i18n.t("Số tiền đã trả:", { ns: 'legacy', keySeparator: false }) : i18n.t("Số tiền cần trả:", { ns: 'legacy', keySeparator: false })}
                                                 </td>
                                                 <td className="py-2 px-3 text-right font-bold text-red-600 border border-gray-300">
-                                                    {Number(result.bill.total_price || 0).toLocaleString('vi-VN')}{i18n.t("đ", { ns: 'legacy', keySeparator: false }) + " "}</td>
+                                                    {formatCurrency(Number(result.bill.total_price || 0))}</td>
                                             </tr>
                                         </tfoot>
                                     </table>
@@ -284,17 +261,7 @@ const PaymentResultPage = () => {
                 </div>
 
                 {result.success && result.billId && (
-                    <button
-                        onClick={handleSaveImage}
-                        disabled={saving || (verifying && !result.bill)}
-                        className="mt-2 mb-4 w-full flex items-center justify-center gap-2 px-5 py-2 rounded border-2 border-green-600 text-green-600 font-semibold hover:bg-green-600 hover:text-white transition disabled:opacity-50"
-                    >
-                        {saving ? (
-                            <><i className="fas fa-spinner fa-spin"></i>{" " + i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false })}</>
-                        ) : (
-                            <><i className="fas fa-camera"></i>{" " + i18n.t("Lưu ảnh kết quả thanh toán", { ns: 'legacy', keySeparator: false })}</>
-                        )}
-                    </button>
+                    <div className="my-4"><SaveInvoiceMenu billId={result.billId} disabled={!result.confirmed || verifying} onError={setErrorMessage} /></div>
                 )}
 
                 <div className="flex gap-3 justify-center mt-2">

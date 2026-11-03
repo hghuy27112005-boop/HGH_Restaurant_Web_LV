@@ -1,3 +1,4 @@
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import i18n from '../../i18n.js';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
@@ -38,7 +39,7 @@ const RefundResultPage = () => {
                     if (bill) {
                         setResult({
                             success: true,
-                            amount: Number(bill.subtotal_price).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN'),
+                            amount: Number(bill.subtotal_price),
                             type: 'vnpay',
                             orderId: bill.order_id,
                             orderType: bill.order_type
@@ -90,7 +91,7 @@ const RefundResultPage = () => {
                         <p className="text-gray-600 mb-4 text-lg">
                             {result.type === 'points'
                                 ? <>{i18n.t("Đã hoàn", { ns: 'legacy', keySeparator: false }) + " "}<span className="font-bold text-red-600">{result.amount}</span>{" " + i18n.t("điểm về tài khoản của bạn.", { ns: 'legacy', keySeparator: false })}</>
-                                : <>{i18n.t("Đã hoàn", { ns: 'legacy', keySeparator: false }) + " "}<span className="font-bold text-red-600">{result.amount}{i18n.t("đ", { ns: 'legacy', keySeparator: false })}</span>{" " + i18n.t("về tài khoản của bạn.", { ns: 'legacy', keySeparator: false })}</>
+                                : <>{i18n.t("Đã hoàn", { ns: 'legacy', keySeparator: false }) + " "}<span className="font-bold text-red-600">{formatCurrency(result.amount)}</span>{" " + i18n.t("về tài khoản của bạn.", { ns: 'legacy', keySeparator: false })}</>
                             }
                         </p>
 

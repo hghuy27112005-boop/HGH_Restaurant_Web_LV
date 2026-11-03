@@ -54,8 +54,23 @@ class OrderController extends Controller
 
         DB::beginTransaction();
         try {
+            // Serialize daily MAX + 1 code allocation across all order creation paths.
+            DB::select('SELECT pg_advisory_xact_lock(6142026)');
+
             $dishIds = collect($validated['items'])->pluck('dish_id')->unique();
-            $dishes  = Dish::whereIn('dish_id', $dishIds)->get()->keyBy('dish_id');
+            $dishes  = Dish::whereIn('dish_id', $dishIds)
+                ->where('is_active', true)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('dish_id');
+
+            if ($dishes->count() !== $dishIds->count()) {
+                DB::rollBack();
+                return response()->json([
+                    'code' => 'order_request_failed',
+                    'message' => 'Một hoặc nhiều món hiện không được bán.',
+                ], 422);
+            }
 
             $subtotalBeforePoints = 0;
             $itemsWithRealPrice = [];
@@ -296,6 +311,10 @@ class OrderController extends Controller
 
         if ($request->filled('order_type')) {
             $query->where('order_type', $request->order_type);
+        }
+
+        if ($request->filled('invoice')) {
+            $query->whereHas('bill', fn ($q) => $q->where('bill_id', (string) $request->input('invoice')));
         }
 
         $orders = $query->with(['bill', 'items.dish', 'bookings', 'delivery'])

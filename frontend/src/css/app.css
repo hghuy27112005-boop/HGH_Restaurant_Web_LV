@@ -292,3 +292,30 @@ html[data-theme='dark'] .recharts-cartesian-axis-tick-value {
 html[data-theme='dark'] .recharts-cartesian-grid line {
     stroke: #626d7e !important;
 }
+/* Page dialogs share the content area left above/beside the chatbot. */
+.customer-layout {
+    --page-modal-right: 0px;
+    --page-modal-bottom: 0px;
+}
+.page-modal-backdrop {
+    right: var(--page-modal-right, 0px);
+    bottom: var(--page-modal-bottom, 0px);
+    transition: right 300ms, bottom 300ms;
+}
+.page-modal-panel {
+    min-width: 0;
+    max-height: min(90dvh, calc(100dvh - var(--page-modal-bottom, 0px) - 2rem));
+}
+@media (min-width: 1280px) {
+    .customer-layout[data-chatbot-open='true'] {
+        --page-modal-right: clamp(320px, 24vw, 420px);
+    }
+}
+@media (min-width: 768px) and (max-width: 1279px) {
+    .customer-layout[data-chatbot-open='true'] {
+        --page-modal-bottom: clamp(300px, 50dvh, 560px);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .page-modal-backdrop { transition: none; }
+}
