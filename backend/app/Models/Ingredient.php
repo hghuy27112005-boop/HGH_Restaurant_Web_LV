@@ -17,12 +17,18 @@ class Ingredient extends Model
         'aliases',
         'is_add_on',
         'is_active',
+        'quantity_category',
+        'quantity_unit',
+        'cost_per_unit',
+        'quantity_step',
     ];
 
     protected $casts = [
         'aliases' => 'array',
         'is_add_on' => 'boolean',
         'is_active' => 'boolean',
+        'cost_per_unit' => 'decimal:4',
+        'quantity_step' => 'decimal:2',
     ];
 
     public function stocks()

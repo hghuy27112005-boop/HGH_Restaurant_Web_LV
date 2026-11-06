@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Dish;
 use App\Models\DishIngredientRule;
+use App\Models\DishRecipeMeasurement;
 use App\Models\Ingredient;
 use App\Models\IngredientStock;
 use Illuminate\Database\Seeder;
@@ -36,7 +37,7 @@ class BilingualRecipeIngredientSeeder extends Seeder
         21 => ['đậu hũ', 'cốt me', 'bơ lạt'],
         22 => ['mì gói'],
         23 => ['tôm', 'bột chiên xù'],
-        24 => ['bún tươi'],
+        24 => ['bún tươi', 'chả giò'],
         25 => ['thịt cua', 'bột năng', 'nước hầm xương'],
         26 => ['bột bánh xèo', 'bột nghệ', 'nước cốt dừa'],
         27 => ['bột năng', 'bột tàn mì'],
@@ -62,13 +63,13 @@ class BilingualRecipeIngredientSeeder extends Seeder
         18 => ['thịt heo băm'],
         20 => ['tôm', 'thịt ba chỉ'],
         22 => ['tôm', 'mực'],
-        24 => ['thịt heo'],
+        24 => ['thịt heo', 'chả giò'],
         25 => ['gà xé', 'trứng cút', 'bắp ngọt', 'cà rốt', 'nấm đông cô', 'trứng gà'],
         26 => ['thịt ba chỉ', 'tôm'],
         27 => ['tôm', 'thịt heo'],
         28 => ['bắp bò', 'gân bò', 'giò heo', 'chả cua'],
         29 => ['bánh phở', 'nạm bò'],
-        30 => ['thịt heo', 'tôm'],
+        30 => ['thịt heo', 'tôm', 'xá xíu'],
     ];
 
     private const OPTIONAL_BY_DISH = [
@@ -93,13 +94,13 @@ class BilingualRecipeIngredientSeeder extends Seeder
         21 => ['rau răm', 'đậu phụng', 'mè'],
         22 => ['ngò rí'],
         23 => ['xà lách', 'dưa leo', 'mayonaise', 'tương cà'],
-        24 => ['chả giò', 'xà lách', 'giá đỗ', 'dưa leo', 'rau thơm', 'đậu phụng', 'đồ chua'],
+        24 => ['xà lách', 'giá đỗ', 'dưa leo', 'rau thơm', 'đậu phụng', 'đồ chua'],
         25 => ['ngò rí', 'tiêu', 'dầu mè'],
         26 => ['giá đỗ', 'rau cải', 'xà lách', 'rau thơm', 'dưa góp'],
         27 => ['hành phi', 'rau răm'],
         28 => ['ngò gai', 'giá đỗ', 'rau muống chẻ', 'hoa chuối', 'chanh'],
         29 => ['hành lá', 'ngò rí', 'húng quế', 'giá đỗ', 'tỏi ngâm', 'tương đen', 'tương ớt', 'chanh'],
-        30 => ['xá xíu', 'hẹ', 'giá đỗ', 'hành phi', 'ngò rí'],
+        30 => ['hẹ', 'giá đỗ', 'hành phi', 'ngò rí'],
     ];
 
     private const EXTRA_TOPPINGS = [
@@ -117,6 +118,8 @@ class BilingualRecipeIngredientSeeder extends Seeder
     {
         $dishRows = Dish::query()->orderBy('dish_id')->get();
         $catalog = Ingredient::query()->get();
+
+        $this->separateShrimpCatalogIdentities($catalog);
 
         foreach ($dishRows as $dish) {
             $namesVi = $this->split($dish->ingredients);
@@ -204,6 +207,17 @@ class BilingualRecipeIngredientSeeder extends Seeder
     {
         $incoming = [$this->normalizeIngredientName($nameVi), $this->normalizeIngredientName($nameEn)];
 
+        // Prefer canonical bilingual labels over aliases. A legacy alias such as
+        // "Shrimp" on "Minced shrimp" must never absorb the separate shrimp SKU.
+        $canonical = $catalog->first(function (Ingredient $ingredient) use ($incoming): bool {
+            return collect([$ingredient->ingredient_name, $ingredient->ingredient_name_vi])
+                ->filter()
+                ->contains(fn ($name) => in_array($this->normalizeIngredientName((string) $name), $incoming, true));
+        });
+        if ($canonical) {
+            return $canonical;
+        }
+
         return $catalog->first(function (Ingredient $ingredient) use ($incoming): bool {
             $names = [
                 $ingredient->ingredient_name,
@@ -219,10 +233,72 @@ class BilingualRecipeIngredientSeeder extends Seeder
         });
     }
 
+    private function separateShrimpCatalogIdentities($catalog): void
+    {
+        $mincedShrimp = $catalog->first(fn (Ingredient $ingredient): bool =>
+            IngredientStock::keyFor((string) $ingredient->ingredient_key) === IngredientStock::keyFor('minced shrimp')
+            || $this->normalizeIngredientName((string) $ingredient->ingredient_name_vi) === $this->normalizeIngredientName('tôm băm')
+        );
+
+        if ($mincedShrimp) {
+            $mincedShrimp->aliases = array_values(array_filter(
+                $mincedShrimp->aliases ?? [],
+                fn ($alias) => !in_array($this->normalizeIngredientName((string) $alias), [
+                    $this->normalizeIngredientName('tôm'),
+                    $this->normalizeIngredientName('shrimp'),
+                    $this->normalizeIngredientName('tôm tươi'),
+                ], true)
+            ));
+            $mincedShrimp->save();
+        }
+
+        $shrimp = $catalog->first(fn (Ingredient $ingredient): bool =>
+            $this->normalizeIngredientName((string) $ingredient->ingredient_name_vi) === $this->normalizeIngredientName('tôm')
+            || IngredientStock::keyFor((string) $ingredient->ingredient_key) === IngredientStock::keyFor('shrimp')
+        );
+
+        if (!$shrimp) {
+            $shrimp = Ingredient::firstOrCreate(
+                ['ingredient_key' => IngredientStock::keyFor('shrimp')],
+                [
+                    'ingredient_name' => 'Shrimp',
+                    'ingredient_name_vi' => 'Tôm',
+                    'ingredient_group' => 'protein',
+                    'aliases' => ['Tôm', 'Shrimp', 'tôm tươi'],
+                    'is_add_on' => false,
+                    'is_active' => true,
+                ]
+            );
+            $catalog->push($shrimp);
+        } else {
+            $shrimp->ingredient_name = $shrimp->ingredient_name ?: 'Shrimp';
+            $shrimp->ingredient_name_vi = 'Tôm';
+            $shrimp->ingredient_group = 'protein';
+            $shrimp->aliases = array_values(array_unique([
+                ...($shrimp->aliases ?? []),
+                'Tôm',
+                'Shrimp',
+                'tôm tươi',
+            ]));
+            $shrimp->save();
+        }
+
+        if ($mincedShrimp && (int) $mincedShrimp->ingredient_id !== (int) $shrimp->ingredient_id) {
+            DishIngredientRule::query()
+                ->where('dish_id', 3)
+                ->where('ingredient_id', $mincedShrimp->ingredient_id)
+                ->delete();
+            DishRecipeMeasurement::query()
+                ->where('dish_id', 3)
+                ->where('ingredient_id', $mincedShrimp->ingredient_id)
+                ->delete();
+        }
+    }
+
     private function normalizeIngredientName(string $name): string
     {
         $name = Str::ascii(\App\Support\IngredientIdentity::key($name));
-        $name = preg_replace('/\\b(?:chopped|diced|shredded|sliced|minced|ground|finely|roughly|fresh|kernels|meat)\\b/u', ' ', $name);
+        $name = preg_replace('/\\b(?:chopped|diced|shredded|sliced|finely|roughly|fresh|kernels|meat)\\b/u', ' ', $name);
         $name = preg_replace('/\\b(?:thai hat luu|thai soi|thai lat|bam nho|cat nho|xe soi|bao soi|tuoi)\\b/u', ' ', $name);
         $name = preg_replace('/^(?:thit )(?=(?:ga|heo|bo|vit)\\b)/u', '', $name);
         $name = preg_replace('/^hat (?=(?:bap|ngo)\\b)/u', '', $name);

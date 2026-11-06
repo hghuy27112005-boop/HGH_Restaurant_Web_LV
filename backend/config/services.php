@@ -50,6 +50,8 @@ return [
         'api_key' => env('GEMINI_API_KEY'),
         'model' => env('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
         'request_timeout' => 45,
+        // Keep a margin below the Gemini Free tier's observed 15 RPM cap.
+        'max_requests_per_minute' => (int) env('GEMINI_MAX_REQUESTS_PER_MINUTE', 10),
     ],
 
 ];

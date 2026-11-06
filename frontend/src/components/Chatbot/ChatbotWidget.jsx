@@ -851,7 +851,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
 
                         {(historyDate ? historyMessages : messages).map((msg, idx) => (
                             <div key={idx} style={msg.sender === 'user' ? styles.userMsgRow : styles.botMsgRow}>
-                                <div style={msg.sender === 'user' ? styles.userMsg : styles.botMsg}>
+                                <div style={{ ...(msg.sender === 'user' ? styles.userMsg : styles.botMsg), ...(msg.image_url ? styles.imageMsg : {}) }}>
                                     {msg.image_url && (
                                         <button
                                             type="button"
@@ -1128,8 +1128,9 @@ const styles = {
         backgroundColor: 'var(--chat-bot-bubble)', color: 'var(--chat-text)', padding: '8px 12px',
         borderRadius: '12px 12px 12px 0', maxWidth: '75%', fontSize: 'var(--chat-message-size, 14px)', lineHeight: 'var(--chat-message-line-height, normal)', overflowWrap: 'anywhere', whiteSpace: 'pre-line',
     },
-    chatImage: { display: 'block', width: 'min(240px, 100%)', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' },
-    chatImagePreviewButton: { display: 'block', maxWidth: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
+    imageMsg: { width: '240px', minWidth: 0 },
+    chatImage: { display: 'block', width: '100%', height: 'auto', maxHeight: '280px', objectFit: 'contain', borderRadius: '8px' },
+    chatImagePreviewButton: { display: 'block', width: '100%', maxWidth: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' },
     optionsWrap: { display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' },
     optionBtn: {
         backgroundColor: 'var(--chat-surface)', border: '1.5px solid #dc2626', color: '#dc2626',

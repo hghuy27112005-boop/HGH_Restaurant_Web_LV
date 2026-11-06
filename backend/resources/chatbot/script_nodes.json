@@ -43,7 +43,7 @@
     ]
   },
   "modify_dish": {
-    "intentSummary": "Ở chi tiết món, bạn có thể xem các nguyên liệu được phép thay, bỏ nguyên liệu tùy chọn hoặc thêm món kèm có sẵn; xem trước rồi đặt tên và lưu công thức riêng để dùng lại. Nguyên liệu cố định không bỏ được.",
+    "intentSummary": "Ở Chi tiết món, cuộn tới Công thức nấu, bấm Xem công thức thay thế rồi Tạo công thức mới hoặc chọn bản riêng và Chỉnh sửa. Đặt tên, thay/bỏ/thêm theo lựa chọn cho phép, xem trước rồi lưu; nguyên liệu cố định phải giữ.",
     "options": [
       {
         "id": "modify_dish.goto_menu",
@@ -62,7 +62,7 @@
     ]
   },
   "modify_dish.goto_menu": {
-    "intentSummary": "Ở Thực đơn, bạn chọn món rồi mở chi tiết để xem các lựa chọn tùy chỉnh nguyên liệu và lưu công thức riêng.",
+    "intentSummary": "Ở Thực đơn, bấm Xem chi tiết món trên thẻ món; trong Chi tiết món, cuộn tới cuối Công thức nấu, bấm Xem công thức thay thế để tạo hoặc chỉnh bản riêng.",
     "options": [
       {
         "id": "root",
@@ -246,7 +246,7 @@
     ]
   },
   "view_history": {
-    "intentSummary": "Hướng dẫn khách: ở mục Lịch sử giao dịch trong trang cá nhân. Cho khách biết ở đây có thể xem lại tất cả đơn hàng đã đặt, đồng thời xem và xuất hóa đơn PDF cho từng đơn.",
+    "intentSummary": "Trong Lịch sử giao dịch của trang cá nhân có tìm mã/ngày và lọc loại/trạng thái, Xem chi tiết hóa đơn; danh sách lựa chọn Lưu hóa đơn có Xuất PDF và Lưu vào chatbot. Muốn sửa đơn thì vào tab tương ứng trong Giỏ hàng, không sửa ở lịch sử.",
     "options": [
       {
         "id": "root",
@@ -304,7 +304,7 @@
     ]
   },
   "view_profile": {
-    "intentSummary": "Hướng dẫn khách: ở trang cá nhân. Cho khách biết ngoài việc xem các thông tin cơ bản, khách cũng có thể xem điểm tích lũy và bậc thành viên hiện tại ngay ở trang này, và chuyển sang các mục Lịch sử giao dịch, Đánh giá dịch vụ.",
+    "intentSummary": "Ở trang cá nhân, tab Thông tin có ảnh, hạng, điểm, lượt sửa/hủy; bên cạnh là form và nút Thay đổi thông tin cá nhân. Các tab phía trên chuyển Lịch sử giao dịch hoặc Đánh giá món ăn / Rating.",
     "options": [
       {
         "id": "root",

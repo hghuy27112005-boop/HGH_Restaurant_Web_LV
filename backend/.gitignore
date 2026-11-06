@@ -28,4 +28,6 @@ OAuth_client.json
 
 /.runtime/
 
+.env.bak
+
 /public/chat_pictures/

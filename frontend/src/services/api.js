@@ -50,7 +50,9 @@ axiosInstance.interceptors.response.use(
         const url = error.config?.url || '';
         const isAuthForm = url.includes('/login') || url.includes('/register');
         const errorCode = error.response?.data?.code;
-        const translationKey = API_ERROR_KEYS[errorCode];
+        const translationKey = errorCode === 'recipe_preview_unavailable' && url.includes('/dish-customizations/')
+            ? 'recipeEditing.previewUnavailable'
+            : API_ERROR_KEYS[errorCode];
         if (translationKey && error.response?.data && typeof error.response.data === 'object') {
             error.response.data.message = i18n.t(translationKey);
         } else if (error.response?.data && typeof error.response.data === 'object') {
@@ -250,6 +252,7 @@ export const adminAPI = {
                 ingredient_ids: ingredientIds,
             }),
         previewRecipe: (data) => axiosInstance.post('/admin/dishes/preview-recipe', data),
+        previewTieredRecipe: (data) => axiosInstance.post('/admin/dishes/preview-tiered-recipe', data),
         create: (formData) =>
             axiosInstance.post('/admin/dishes', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },

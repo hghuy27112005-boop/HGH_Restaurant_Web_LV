@@ -19,6 +19,14 @@
     foreach ($bill->order->items as $item) {
         $name = $en ? ($item->dish?->dish_name_en ?: $item->dish?->dish_name) : $item->dish?->dish_name;
         $names = $wrap($name);
+        if ($item->dish?->priceProfile) {
+            $portion = match($item->price_tier) {
+                'low' => $en ? 'Small' : 'Ít',
+                'high' => $en ? 'Large' : 'Nhiều',
+                default => $en ? 'Regular' : 'Vừa',
+            };
+            $names = [...$names, ...$wrap(($en ? 'Portion: ' : 'Khẩu phần: ') . $portion)];
+        }
         $custom = $item->customization_name ? $wrap(($en ? 'Alternative recipe: ' : 'Công thức thay thế: ') . $item->customization_name) : [];
         $height = max(70, 24 + count($names) * 29 + count($custom) * 25 + ($custom ? 8 : 0));
         $rows[] = compact('item', 'names', 'custom', 'height', 'y');

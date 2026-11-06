@@ -191,8 +191,11 @@ const DeliveriesPage = () => {
         return (
             <>
                 <div>{translateDishName(item.dish_name_en ? { dish_name: dishName, dish_name_en: item.dish_name_en } : dishName)}</div>
+                {item.has_price_options && item.price_tier && (
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{i18n.t('pricing.selectedPortion', { portion: i18n.t(`pricing.portion${item.price_tier === 'low' ? 'Low' : item.price_tier === 'high' ? 'High' : 'Standard'}`) })}</div>
+                )}
                 {customizationName && (
-                    <div className="mt-1 text-xs text-gray-500">{i18n.t("Công thức thay thế:", { ns: 'legacy', keySeparator: false }) + " "}{customizationName}</div>
+                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-300">{i18n.t("Công thức thay thế:", { ns: 'legacy', keySeparator: false }) + " "}{customizationName}</div>
                 )}
             </>
         );
@@ -461,6 +464,7 @@ const DeliveriesPage = () => {
                     dish_id: item.dish_id,
                     quantity: item.quantity,
                     price_at_order: item.price,
+                    price_tier: item.price_tier ?? 'standard',
                     customization_id: item.customization_id ?? null,
                     customization_name: item.customization_name ?? null,
                     ingredients: item.ingredients ?? null,

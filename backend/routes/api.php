@@ -157,6 +157,7 @@ Route::middleware(['auth:sanctum', 'locked', 'admin'])->group(function () {
     Route::post('admin/dishes/confirm-ingredients', [\App\Http\Controllers\DishController::class, 'confirmIngredients']);
     Route::post('admin/dishes/discard-confirmed-ingredients', [\App\Http\Controllers\DishController::class, 'discardConfirmedIngredients']);
     Route::post('admin/dishes/preview-recipe', [\App\Http\Controllers\DishController::class, 'previewDishRecipe']);
+    Route::post('admin/dishes/preview-tiered-recipe', [\App\Http\Controllers\DishController::class, 'previewTieredDishRecipe']);
     Route::post('admin/dishes', [\App\Http\Controllers\DishController::class, 'addDish']);
     Route::post('admin/dishes/{id}', [\App\Http\Controllers\DishController::class, 'updateDish']);
     Route::post('admin/dishes/{id}/toggle-status', [\App\Http\Controllers\DishController::class, 'toggleStatus']);

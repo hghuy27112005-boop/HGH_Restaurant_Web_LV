@@ -40,6 +40,7 @@ const MenuPage = () => {
     const [errorMessage, setErrorMessage] = useState(null);
     const [ingredientError, setIngredientError] = useState(null); // { message, overLimit } khi giỏ vượt 50 nguyên liệu
     const [selectedDish, setSelectedDish] = useState(null);
+    const [selectedPriceTier, setSelectedPriceTier] = useState('standard');
     const [quantity, setQuantity] = useState(1);
     const [orderType, setOrderType] = useState('mang-ve');
     const [selectedRecipeOptions, setSelectedRecipeOptions] = useState([]);
@@ -148,6 +149,7 @@ const MenuPage = () => {
             return;
         }
         setSelectedDish(dish);
+        setSelectedPriceTier('standard');
         setSelectedCustomization(null);
         setQuantity(1);
         setOrderType(type);
@@ -214,15 +216,25 @@ const MenuPage = () => {
         const currentCart = JSON.parse(localStorage.getItem(cartKey)) || [];
 
         const selectedRecipeId = selectedCustomization?.dish_customization_id ?? null;
-        const existingItemIndex = currentCart.findIndex(item => item.dish_id === selectedDish.dish_id && (item.customization_id ?? null) === selectedRecipeId);
+        if (selectedCustomization && selectedCustomization.pricing_available === false) {
+            setErrorMessage(t('pricing.priceUnavailable'));
+            return;
+        }
+        const baseUnitPrice = Number(selectedDish.price_options?.find((option) => option.key === selectedPriceTier)?.price ?? selectedDish.price);
+        const unitPrice = baseUnitPrice + Number(selectedCustomization?.price_adjustment || 0);
+        const existingItemIndex = currentCart.findIndex(item => item.dish_id === selectedDish.dish_id && (item.customization_id ?? null) === selectedRecipeId && (item.price_tier ?? 'standard') === selectedPriceTier);
 
         if (existingItemIndex > -1) {
             currentCart[existingItemIndex].quantity += qty;
+            currentCart[existingItemIndex].price = unitPrice;
+            currentCart[existingItemIndex].has_price_options = Boolean(selectedDish.price_options?.length);
         } else {
             currentCart.push({
                 dish_id: selectedDish.dish_id,
                 name: selectedCustomization ? `${selectedDish.dish_name} (${selectedCustomization.recipe_name})` : selectedDish.dish_name,
-                price: selectedDish.price,
+                price: unitPrice,
+                price_tier: selectedPriceTier,
+                has_price_options: Boolean(selectedDish.price_options?.length),
                 quantity: qty,
                 image_url: selectedDish.image_url,
                 dish_name_en: selectedDish.dish_name_en ?? null,
@@ -238,6 +250,7 @@ const MenuPage = () => {
             await cartAPI.checkIngredients(currentCart.map(item => ({
                 dish_id: item.dish_id,
                 customization_id: item.customization_id ?? null,
+                price_tier: item.price_tier ?? 'standard',
                 ingredients: item.ingredients ?? null,
                 quantity: item.quantity,
             })));
@@ -408,20 +421,30 @@ const MenuPage = () => {
                 title={selectedDish ? `${i18n.t("Đặt món", { ns: 'legacy', keySeparator: false })}: ${translateDishName(selectedDish)}` : i18n.t("Đặt món", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setIsModalOpen(false)}
                 onConfirm={confirmAddToCart}
-                confirmText="Xác nhận thêm vào giỏ hàng"
+                confirmText={t('pricing.addToCart')}
             >
                 <div className="flex flex-col gap-4">
+                    {selectedDish?.price_options?.length > 0 && <div>
+                        <label className="mb-2 block font-semibold text-gray-700 dark:text-gray-200">{t('pricing.portionSizes')}</label>
+                        <div className="grid grid-cols-3 gap-2">{selectedDish.price_options.map((option) => {
+                            const total = Number(option.price) + Number(selectedCustomization?.price_adjustment || 0);
+                            return <button key={option.key} type="button" onClick={() => setSelectedPriceTier(option.key)} className={`rounded border px-3 py-2 font-semibold ${selectedPriceTier === option.key ? 'border-red-600 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}>
+                                {t(`pricing.portion${option.key === 'low' ? 'Low' : option.key === 'high' ? 'High' : 'Standard'}`)}<br />{formatCurrency(total)}
+                            </button>;
+                        })}</div>
+                        {Number(selectedCustomization?.price_adjustment || 0) > 0 && <p className="text-sm text-gray-600 dark:text-gray-300">{t('pricing.surcharge', { amount: formatCurrency(Number(selectedCustomization.price_adjustment)) })}</p>}
+                    </div>}
                     <div>
-                        <span className="text-sm font-semibold text-green-700">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
+                        <span className="text-sm font-semibold text-green-700 dark:text-green-300">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-2 text-gray-700">{i18n.t("Chọn công thức thay thế", { ns: 'legacy', keySeparator: false })}</label>
+                        <label className="block font-semibold mb-2 text-gray-700 dark:text-gray-200">{i18n.t("Chọn công thức thay thế", { ns: 'legacy', keySeparator: false })}</label>
                         <div className="flex flex-col items-start gap-2">
                             <button
                                 type="button"
                                 onClick={() => setSelectedCustomization(null)}
-                                className={`rounded border px-3 py-2 text-left ${!selectedCustomization ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
+                                    className={`rounded border px-3 py-2 text-left ${!selectedCustomization ? 'border-red-600 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}
                             >{i18n.t("Món gốc", { ns: 'legacy', keySeparator: false }) + " "}</button>
 
                             {selectedRecipeOptions.length === 0 ? (
@@ -431,16 +454,17 @@ const MenuPage = () => {
                                     key={recipe.dish_customization_id}
                                     type="button"
                                     onClick={() => setSelectedCustomization(recipe)}
-                                    className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
+                                    disabled={recipe.pricing_available === false}
+                                    className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'} disabled:cursor-not-allowed disabled:opacity-50`}
                                 >
-                                    {translateRecipeName(recipe)}
+                                    {translateRecipeName(recipe)}{Number(recipe.price_adjustment || 0) > 0 ? ` (+${formatCurrency(Number(recipe.price_adjustment))})` : ''}
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-1 text-gray-700">{i18n.t("Nhập số lượng", { ns: 'legacy', keySeparator: false })}</label>
+                        <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-200">{i18n.t("Nhập số lượng", { ns: 'legacy', keySeparator: false })}</label>
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <button
                                 type="button"

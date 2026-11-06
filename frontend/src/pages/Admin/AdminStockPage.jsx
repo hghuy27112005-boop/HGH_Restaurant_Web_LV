@@ -20,12 +20,19 @@ const normalize = (text) => String(text || '')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/đ/g, 'd');
 
+const formatStockUnit = (unit, isEnglish) => ({
+    portion: isEnglish ? 'portion' : 'phần',
+    unit: isEnglish ? 'unit' : 'cái',
+    small_loaf: isEnglish ? 'small loaf' : 'ổ nhỏ',
+    large_loaf: isEnglish ? 'large loaf' : 'ổ lớn',
+}[unit] || unit || '');
+
 // Màu theo mức tồn: hết hàng / sắp hết / đủ
 const isOutOfStock = (item) => item.quantity_left + (item.reserve_fund ?? 0) === 0;
 
 const getLevel = (item) => {
     if (isOutOfStock(item)) return { bar: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50' };
-    if (item.quantity_left <= LOW_LIMIT) return { bar: 'bg-yellow-400', text: 'text-yellow-600', bg: 'bg-yellow-50' };
+    if (item.quantity_left <= (item.unit_code === 'g' ? 1500 : LOW_LIMIT)) return { bar: 'bg-yellow-400', text: 'text-yellow-600', bg: 'bg-yellow-50' };
     return { bar: 'bg-green-500', text: 'text-green-600', bg: 'bg-white' };
 };
 
@@ -111,7 +118,7 @@ const AdminStockPage = () => {
             ? item.removed_ingredients
             : item.removed_ingredients ? [item.removed_ingredients] : [];
         const removedLabel = removedIngredients.length > 0
-            ? ` (Bỏ: ${translateIngredients(removedIngredients.join(', '))})`
+            ? ` (${isEnglish ? 'Removed' : 'Bỏ'}: ${translateIngredients(removedIngredients.join(', '))})`
             : '';
 
         return `${translateDishName(item)}${removedLabel} x${item.quantity}`;
@@ -226,10 +233,10 @@ const AdminStockPage = () => {
                                                 {ingredientName || 'N/A'}
                                             </p>
                                             <p className={`text-xl font-bold leading-tight ${level.text}`}>
-                                                {item.quantity_left} / {item.quantity_start}
+                                                {item.quantity_left} / {item.quantity_start} {formatStockUnit(item.unit_code, isEnglish)}
                                             </p>
                                             <div className="mt-1 text-[11px] text-gray-500 leading-4">
-                                                <p>Refill: {item.refill_count ?? 0}{" " + i18n.t("· Giữ chỗ:", { ns: 'legacy', keySeparator: false }) + " "}{item.reserved ?? 0}</p>
+                                                <p>{isEnglish ? 'Refills:' : 'Số lần nạp:'} {item.refill_count ?? 0} · {isEnglish ? 'Reserved:' : 'Đang giữ:'} {item.reserved ?? 0}</p>
                                                 <p className="whitespace-nowrap">
                                                     {item.updated_at ? new Date(item.updated_at).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') : '-'}
                                                 </p>
@@ -248,7 +255,7 @@ const AdminStockPage = () => {
                     ) : history.map((order) => (
                         <Card key={order.order_id} title={
                             <div className="flex items-baseline flex-wrap">
-                                <span className="text-red-600">{`Đơn hàng ${order.order_stt || order.order_id}`}</span>
+                                <span className="text-red-600">{`${isEnglish ? 'Order' : 'Đơn hàng'} ${order.order_stt || order.order_id}`}</span>
                                 <span className="ml-[2.5cm] text-sm font-normal text-gray-500">{i18n.t("Mã hóa đơn:", { ns: 'legacy', keySeparator: false }) + " "}{order.bill_id || '—'}</span>
                             </div>
                         }>
@@ -257,8 +264,8 @@ const AdminStockPage = () => {
                                 <div>
                                     <p className="font-semibold mb-2">{i18n.t("Danh sách món:", { ns: 'legacy', keySeparator: false })}</p>
                                     <div className="flex flex-wrap gap-x-5 gap-y-1">
-                                        {order.items.map((item) => (
-                                            <span key={`${order.order_id}-${item.dish_id}-${item.customization_id ?? 'original'}`}>
+                                        {order.items.map((item, index) => (
+                                            <span key={item.order_item_id ?? `${order.order_id}-item-${index}`}>
                                                 {formatOrderItemName(item)}
                                             </span>
                                         ))}
@@ -282,15 +289,15 @@ const AdminStockPage = () => {
                                         <tbody>
                                             <tr>
                                                 <th className="border border-black px-3 py-2 text-left">{i18n.t("Số lượng trước khi đặt", { ns: 'legacy', keySeparator: false })}</th>
-                                                {order.ingredients.map((item, index) => <td key={`before-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_before}</td>)}
+                                                {order.ingredients.map((item, index) => <td key={`before-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_before} {formatStockUnit(item.unit_code, isEnglish)}</td>)}
                                             </tr>
                                             <tr>
                                                 <th className="border border-black px-3 py-2 text-left">{i18n.t("Số lượng đã trừ", { ns: 'legacy', keySeparator: false })}</th>
-                                                {order.ingredients.map((item, index) => <td key={`deducted-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_deducted}</td>)}
+                                                {order.ingredients.map((item, index) => <td key={`deducted-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_deducted} {formatStockUnit(item.unit_code, isEnglish)}</td>)}
                                             </tr>
                                             <tr>
                                                 <th className="border border-black px-3 py-2 text-left">{i18n.t("Số lượng còn lại", { ns: 'legacy', keySeparator: false })}</th>
-                                                {order.ingredients.map((item, index) => <td key={`after-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_after}</td>)}
+                                                {order.ingredients.map((item, index) => <td key={`after-${index}`} className="border border-black px-3 py-2 text-center font-semibold">{item.quantity_after} {formatStockUnit(item.unit_code, isEnglish)}</td>)}
                                             </tr>
                                         </tbody>
                                     </table>

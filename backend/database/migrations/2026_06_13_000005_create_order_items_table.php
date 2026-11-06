@@ -22,9 +22,11 @@ return new class extends Migration
             $table->json('removed_ingredients')->nullable();
             $table->integer('quantity'); // Should be > 0 checked in code
             $table->decimal('unit_price', 10, 2)->default(30000);
+            $table->string('price_tier', 16)->default('standard');
+            $table->json('ingredient_quantities_snapshot')->nullable();
             $table->timestamp('created_at')->useCurrent();
             $table->timestamp('updated_at')->useCurrent();
-            $table->unique(['order_id', 'dish_id', 'customization_id'], 'uq_order_dish_variant');
+            $table->unique(['order_id', 'dish_id', 'customization_id', 'price_tier'], 'uq_order_dish_price_variant');
         });
     }
 

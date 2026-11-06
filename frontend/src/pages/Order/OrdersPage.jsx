@@ -58,7 +58,7 @@ const getTodayDateKey = () => {
 const I18nText = ({ translationKey }) => i18n.t(translationKey);
 
 const OrdersPage = () => {
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const invoiceCode = searchParams.get('invoice') || '';
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -76,8 +76,18 @@ const OrdersPage = () => {
     }, [invoiceCode]);
 
     useEffect(() => {
+        setSearchBillId(invoiceCode);
+        setDateFilter(invoiceCode ? '' : getTodayDateKey());
+        setTypeFilter('all');
+        setStatusFilter('all');
+        if (!invoiceCode) {
+            setDetailBill(null);
+            return;
+        }
+    }, [invoiceCode]);
+
+    useEffect(() => {
         if (!invoiceCode) return;
-        setSearchBillId(invoiceCode); setDateFilter(''); setTypeFilter('all'); setStatusFilter('all');
         const bill = orders.find((item) => String(item.bill_id) === invoiceCode);
         setDetailBill(bill || null);
     }, [invoiceCode, orders]);
@@ -100,6 +110,23 @@ const OrdersPage = () => {
     const handleTypeFilterChange = (id) => {
         setTypeFilter(id);
         setStatusFilter('all'); // reset bộ lọc trạng thái khi đổi loại đơn
+    };
+
+    const handleInvoiceSearchKeyDown = (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+
+        const nextInvoice = searchBillId.trim();
+        if (!nextInvoice && !invoiceCode) {
+            setDateFilter((current) => current || getTodayDateKey());
+            return;
+        }
+        if (nextInvoice === invoiceCode) return;
+
+        const nextParams = new URLSearchParams(searchParams);
+        if (nextInvoice) nextParams.set('invoice', nextInvoice);
+        else nextParams.delete('invoice');
+        setSearchParams(nextParams);
     };
 
     const getStatusText = (status) => DELIVERY_STATUS_INFO[status]?.label ?? status ?? '—';
@@ -241,6 +268,7 @@ const OrdersPage = () => {
                             type="text"
                             value={searchBillId}
                             onChange={e => setSearchBillId(e.target.value)}
+                            onKeyDown={handleInvoiceSearchKeyDown}
                             placeholder={i18n.t("Nhập mã hóa đơn...", { ns: 'legacy', keySeparator: false })}
                             className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                         />
@@ -444,6 +472,11 @@ const OrdersPage = () => {
                                 <tr key={i}>
                                     <td className="py-2 px-3 border border-gray-300">
                                         <div>{translateDishName(item.dish || item)}</div>
+                                        {item.has_price_options && item.price_tier && (
+                                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                                {i18n.t('pricing.selectedPortion', { portion: i18n.t(`pricing.portion${item.price_tier === 'low' ? 'Low' : item.price_tier === 'high' ? 'High' : 'Standard'}`) })}
+                                            </div>
+                                        )}
                                         {item.customization_name && (
                                             <div className="mt-1 text-xs text-gray-500">{i18n.t("Công thức thay thế:", { ns: 'legacy', keySeparator: false }) + " "}{item.customization_name}</div>
                                         )}

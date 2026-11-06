@@ -47,7 +47,7 @@ class RecipeIngredientCatalogSeeder extends Seeder
         $wonton = Dish::where('dish_name', 'Hoành thánh')->first();
         if ($wonton) {
             foreach ($wonton->ingredientRules()->with('ingredient')->get() as $rule) {
-                if ($policy->matches($rule->ingredient, ['Xá xíu', 'Char siu pork'])) $rule->update(['role' => 'optional']);
+                if ($policy->matches($rule->ingredient, ['Xá xíu', 'Char siu pork'])) $rule->update(['role' => 'required_replaceable']);
             }
         }
     }

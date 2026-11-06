@@ -322,6 +322,7 @@ const DishDetailPage = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedPriceTier, setSelectedPriceTier] = useState('standard');
     const [successMessage, setSuccessMessage] = useState('');
     const [alertMessage, setAlertMessage] = useState('');
     const [ingredientError, setIngredientError] = useState(null); // { message, overLimit } khi giỏ vượt 50 nguyên liệu
@@ -381,6 +382,7 @@ const DishDetailPage = () => {
             return;
         }
         setQuantity(1);
+        setSelectedPriceTier('standard');
         setOrderType(type);
         setSelectedCustomization(null);
         setIsModalOpen(true);
@@ -424,12 +426,20 @@ const DishDetailPage = () => {
         const cartKey = getCartKey(orderType === 'mang-ve' ? 'delivery' : 'booking');
         const cart = JSON.parse(localStorage.getItem(cartKey) || '[]');
         const selectedRecipeId = selectedCustomization?.dish_customization_id ?? null;
-        const existing = cart.find((item) => item.dish_id === selectedDish.dish_id && (item.customization_id ?? null) === selectedRecipeId);
-        if (existing) existing.quantity += qty;
+        if (selectedCustomization && selectedCustomization.pricing_available === false) {
+            setAlertMessage(t('pricing.priceUnavailable'));
+            return;
+        }
+        const baseUnitPrice = Number(selectedDish.price_options?.find((option) => option.key === selectedPriceTier)?.price ?? selectedDish.price);
+        const unitPrice = baseUnitPrice + Number(selectedCustomization?.price_adjustment || 0);
+        const existing = cart.find((item) => item.dish_id === selectedDish.dish_id && (item.customization_id ?? null) === selectedRecipeId && (item.price_tier ?? 'standard') === selectedPriceTier);
+        if (existing) { existing.quantity += qty; existing.price = unitPrice; existing.has_price_options = Boolean(selectedDish.price_options?.length); }
         else cart.push({
             dish_id: selectedDish.dish_id,
             name: selectedCustomization ? `${selectedDish.dish_name} (${selectedCustomization.recipe_name})` : selectedDish.dish_name,
-            price: selectedDish.price,
+            price: unitPrice,
+            price_tier: selectedPriceTier,
+            has_price_options: Boolean(selectedDish.price_options?.length),
             quantity: qty,
             image_url: selectedDish.image_url,
             dish_name_en: selectedDish.dish_name_en ?? null,
@@ -443,6 +453,7 @@ const DishDetailPage = () => {
             await cartAPI.checkIngredients(cart.map((item) => ({
                 dish_id: item.dish_id,
                 customization_id: item.customization_id ?? null,
+                price_tier: item.price_tier ?? 'standard',
                 ingredients: item.ingredients ?? null,
                 quantity: item.quantity,
             })));
@@ -504,13 +515,6 @@ const DishDetailPage = () => {
             if (requestId === optionsRequest.current) setLoadingRecipeOptions(false);
         }
     };
-
-    useEffect(() => {
-        if (!recipeModalOpen || recipeModalView !== 'ingredients' || !recipeOptions) return undefined;
-        setLoadingRecipeOptions(true);
-        const timer = setTimeout(() => { void loadRecipeOptions(recipeSelection.template_key, recipeSelection); }, 250);
-        return () => clearTimeout(timer);
-    }, [recipeSelection, recipeModalView, recipeModalOpen]);
 
     const startCreateRecipe = async () => {
         setRecipeName('');
@@ -782,7 +786,7 @@ const DishDetailPage = () => {
                         <img src={selectedDish.image_url} alt={translateDishName(selectedDish)} className="w-full max-w-lg mx-auto h-56 sm:h-72 object-cover rounded-xl" />
                         <div>
                             <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">{translateDishName(selectedDish)}</h2>
-                            <p className="text-red-600 text-2xl font-bold mb-5">{formatCurrency(Number(selectedDish.price))}</p>
+                            <p className="text-red-600 text-2xl font-bold mb-5">{selectedDish.price_options?.length ? `${formatCurrency(Number(selectedDish.price_options[0].price))} – ${formatCurrency(Number(selectedDish.price_options[2].price))}` : formatCurrency(Number(selectedDish.price))}</p>
                             <h3 className="font-semibold text-lg mb-2">{i18n.t("Nguyên liệu nấu", { ns: 'legacy', keySeparator: false })}</h3>
                             <p className="text-gray-700 leading-7">{displayedIngredients ? translateIngredients(displayedIngredients) : i18n.t("Món này chưa có thông tin nguyên liệu.", { ns: 'legacy', keySeparator: false })}</p>
                             <div className="grid grid-cols-2 gap-3 mt-6">
@@ -827,20 +831,30 @@ const DishDetailPage = () => {
                 title={`${i18n.t("Đặt món", { ns: 'legacy', keySeparator: false })}: ${translateDishName(selectedDish)}`}
                 onClose={() => setIsModalOpen(false)}
                 onConfirm={confirmAddToCart}
-                confirmText="Xác nhận thêm vào giỏ hàng"
+                confirmText={t('pricing.addToCart')}
             >
                 <div className="flex flex-col gap-4">
+                    {selectedDish.price_options?.length > 0 && <div>
+                        <label className="mb-2 block font-semibold text-gray-700 dark:text-gray-200">{t('pricing.portionSizes')}</label>
+                        <div className="grid grid-cols-3 gap-2">{selectedDish.price_options.map((option) => {
+                            const total = Number(option.price) + Number(selectedCustomization?.price_adjustment || 0);
+                            return <button key={option.key} type="button" onClick={() => setSelectedPriceTier(option.key)} className={`rounded border px-3 py-2 font-semibold ${selectedPriceTier === option.key ? 'border-red-600 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}>
+                                {t(`pricing.portion${option.key === 'low' ? 'Low' : option.key === 'high' ? 'High' : 'Standard'}`)}<br />{formatCurrency(total)}
+                            </button>;
+                        })}</div>
+                        {Number(selectedCustomization?.price_adjustment || 0) > 0 && <p className="text-sm text-gray-600 dark:text-gray-300">{t('pricing.surcharge', { amount: formatCurrency(Number(selectedCustomization.price_adjustment)) })}</p>}
+                    </div>}
                     <div>
-                        <span className="text-sm font-semibold text-green-700">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
+                        <span className="text-sm font-semibold text-green-700 dark:text-green-300">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-2 text-gray-700">{i18n.t("Chọn công thức thay thế", { ns: 'legacy', keySeparator: false })}</label>
+                        <label className="block font-semibold mb-2 text-gray-700 dark:text-gray-200">{i18n.t("Chọn công thức thay thế", { ns: 'legacy', keySeparator: false })}</label>
                         <div className="flex flex-col items-start gap-2">
                             <button
                                 type="button"
                                 onClick={() => setSelectedCustomization(null)}
-                                className={`rounded border px-3 py-2 text-left ${!selectedCustomization ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
+                                className={`rounded border px-3 py-2 text-left ${!selectedCustomization ? 'border-red-600 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'}`}
                             >{i18n.t("Món gốc", { ns: 'legacy', keySeparator: false }) + " "}</button>
 
                             {(selectedDish?.custom_recipes || []).length === 0 ? (
@@ -850,16 +864,17 @@ const DishDetailPage = () => {
                                     key={recipe.dish_customization_id}
                                     type="button"
                                     onClick={() => setSelectedCustomization(recipe)}
-                                    className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-300 bg-white text-gray-700'}`}
+                                disabled={recipe.pricing_available === false}
+                                className={`rounded border px-3 py-2 text-left ${selectedCustomization?.dish_customization_id === recipe.dish_customization_id ? 'border-red-600 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200' : 'border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200'} disabled:cursor-not-allowed disabled:opacity-50`}
                                 >
-                                    {translateRecipeName(recipe)}
+                                    {translateRecipeName(recipe)}{Number(recipe.price_adjustment || 0) > 0 ? ` (+${formatCurrency(Number(recipe.price_adjustment))})` : ''}
                                 </button>
                             ))}
                         </div>
                     </div>
 
                     <div>
-                        <label className="block font-semibold mb-1 text-gray-700">{i18n.t("Nhập số lượng", { ns: 'legacy', keySeparator: false })}</label>
+                        <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-200">{i18n.t("Nhập số lượng", { ns: 'legacy', keySeparator: false })}</label>
                         <div className="flex flex-wrap items-center justify-center gap-2">
                             <button type="button" onClick={handleDecrease10Qty} className="px-2 h-9 flex-shrink-0 border border-gray-300 rounded text-xs font-semibold hover:bg-gray-100">−10</button>
                             <button type="button" onClick={handleDecreaseQty} className="w-9 h-9 flex-shrink-0 flex items-center justify-center border border-gray-300 rounded font-bold text-lg hover:bg-gray-100">−</button>
@@ -1004,8 +1019,8 @@ const DishDetailPage = () => {
                                                 ? slot.alternatives.find((item) => item.ingredient_id === replacement.to_ingredient_id)
                                                 : slot.ingredient;
                                             return (
-                                                <div key={slot.slot_key} className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 p-3">
-                                                    <span className="text-gray-800">{ingredientOptionLabel(selected || slot.ingredient)}</span>
+                                                <div key={slot.slot_key} className="flex flex-wrap items-center justify-between gap-2 rounded border border-gray-200 p-3 dark:border-gray-700 dark:bg-gray-800">
+                                                    <span className="text-gray-800 dark:text-gray-100">{ingredientOptionLabel(selected || slot.ingredient)}</span>
                                                     <div className="flex flex-wrap gap-2">
                                                         {replacement && (
                                                             <button type="button" onClick={() => chooseReplacement(slot, slot.ingredient)} className="rounded border border-gray-300 px-3 py-1 text-sm hover:border-red-600 hover:text-red-600">
@@ -1031,7 +1046,7 @@ const DishDetailPage = () => {
                                         {recipeOptions.optional.map((ingredient) => {
                                             const included = !recipeSelection.removed_ingredient_ids.includes(ingredient.ingredient_id);
                                             return (
-                                                <label key={ingredient.ingredient_id} className="flex cursor-pointer items-center gap-2 rounded border border-gray-200 p-2">
+                                                    <label key={ingredient.ingredient_id} className="flex cursor-pointer items-center gap-2 rounded border border-gray-200 p-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
                                                     <input
                                                         type="checkbox"
                                                         checked={included}
@@ -1053,19 +1068,19 @@ const DishDetailPage = () => {
                                         aria-expanded={showAddOns}
                                         aria-controls="recipe-add-ons"
                                     >
-                                        <span>{i18n.t("Thêm gia vị / nguyên liệu phụ", { ns: 'legacy', keySeparator: false })}</span>
+                                        <span>{t('recipeEditing.addOns')}</span>
                                         <span aria-hidden="true" className="text-xl leading-none">{showAddOns ? '▾' : '▸'}</span>
                                     </button>
                                     {showAddOns && (
                                         <div id="recipe-add-ons" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                                             {recipeOptions.add_ons.filter(ingredient => !recipeOptions.required.some(slot => selectedIngredientId(slot) === ingredient.ingredient_id)).map((ingredient) => (
-                                                <label key={ingredient.ingredient_id} className="flex cursor-pointer items-center gap-2 rounded border border-gray-200 p-2">
+                                                <label key={ingredient.ingredient_id} className="flex cursor-pointer items-center gap-2 rounded border border-gray-200 p-2 text-gray-800 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
                                                     <input
                                                         type="checkbox"
                                                         checked={recipeSelection.add_on_ingredient_ids.includes(ingredient.ingredient_id)}
                                                         onChange={() => toggleAddOn(ingredient.ingredient_id)}
                                                     />
-                                                    <span>{ingredientOptionLabel(ingredient)}</span>
+                                                    <span>{ingredientOptionLabel(ingredient)} <span className="text-sm text-gray-500 dark:text-gray-300">{Number(ingredient.price_adjustment || 0) > 0 ? `(+${formatCurrency(Number(ingredient.price_adjustment))})` : `(${t('pricing.noSurcharge')})`}</span></span>
                                                 </label>
                                             ))}
                                         </div>

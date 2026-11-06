@@ -12,6 +12,7 @@ class IngredientReservation extends Model
     protected $fillable = [
         'order_id',
         'ingredient_id',
+        'unit_code',
         'stock_date',
         'quantity',
     ];

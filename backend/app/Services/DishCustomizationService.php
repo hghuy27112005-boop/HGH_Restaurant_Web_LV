@@ -9,7 +9,6 @@ use App\Models\Ingredient;
 use App\Models\IngredientStock;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -66,45 +65,32 @@ class DishCustomizationService
         });
     }
 
-    public function options(Dish $dish, array $selection = [], bool $recommend = false, bool $inventoryValidation = false): array
+    public function options(Dish $dish, array $selection = []): array
     {
         $rules = $this->rules($dish, $selection);
         if ($rules->isEmpty()) {
             throw ValidationException::withMessages(['ingredients' => 'Công thức món ăn chưa được cấu hình nguyên liệu.']);
         }
         $policy = app(IngredientSubstitutionPolicy::class);
-        $inventory = Ingredient::where('is_active', true)->orderBy('ingredient_id')->get()
-            ->unique(fn ($ingredient) => \App\Support\IngredientIdentity::key($ingredient->ingredient_name ?: $ingredient->ingredient_name_vi ?: $ingredient->ingredient_key))->values();
-        $analysis = null;
-        if ($recommend && $inventory->isNotEmpty()) {
-            $slots = $rules->where('role', '!=', 'optional')->filter(fn ($rule) => $rule->role !== 'required_fixed'
-                || ($policy->isPho($dish) && $policy->matches($rule->ingredient, config('ingredient_substitutions.families.noodles'))))
-                ->map(fn ($rule) => ['slot_key' => $rule->slot_key, ...$this->ingredientPayload($rule->ingredient)])->values()->all();
-            $pantry = $inventory->map(fn ($ingredient) => [...$this->ingredientPayload($ingredient), 'aliases' => $ingredient->aliases ?? []])->all();
-            $replacements = collect($selection['replacements'] ?? [])->keyBy('slot_key');
-            $currentIds = $rules->reject(fn ($rule) => $rule->role === 'optional' && in_array((int) $rule->ingredient_id, array_map('intval', $selection['removed_ingredient_ids'] ?? []), true))
-                ->map(fn ($rule) => (int) ($replacements->get($rule->slot_key)['to_ingredient_id'] ?? $rule->ingredient_id))
-                ->merge($selection['add_on_ingredient_ids'] ?? [])->unique();
-            $currentIngredients = Ingredient::whereIn('ingredient_id', $currentIds)->get()->map(fn ($ingredient) => $this->ingredientPayload($ingredient))->values()->all();
-            $context = ['selection' => $this->canonicalSelection($selection), 'current_ingredients' => $currentIngredients, 'recipe_instructions' => $dish->recipe_instructions,
-                'required' => $rules->map(fn ($rule) => ['slot_key' => $rule->slot_key, 'role' => $rule->role, 'ingredient_id' => $rule->ingredient_id])->values()->all()];
-            $cacheKey = 'live-ingredient-options:' . hash('sha256', json_encode([$dish->dish_name, $pantry, $slots, $context], JSON_UNESCAPED_UNICODE));
-            $analysis = Cache::remember($cacheKey, now()->addMinutes(15), fn () => app(GeminiChatbotService::class)->recommendDishIngredientOptions(
-                $dish->dish_name, $pantry, $slots, $rules->where('role', 'optional')->pluck('ingredient_id')->all(), $context
-            ));
-        }
-        $required = $rules->where('role', '!=', 'optional')->map(function ($rule) use ($dish, $policy, $inventory, $rules, $analysis, $selection, $inventoryValidation) {
+        $measurements = $dish->recipeMeasurements()->get()->keyBy('ingredient_id');
+        $inventory = $this->uniqueIngredientInventory(
+            Ingredient::where('is_active', true)->orderBy('ingredient_id')->get(),
+            $policy
+        );
+        $required = $rules->where('role', '!=', 'optional')->map(function ($rule) use ($dish, $policy, $inventory, $measurements) {
             // Rice noodles are a deliberate exception to the old fixed classification.
             $noodles = $policy->isPho($dish) && $policy->matches($rule->ingredient, config('ingredient_substitutions.families.noodles'));
-            $alternatives = ($rule->role !== 'required_fixed' || $noodles)
+            $measurement = $measurements->get((int) $rule->ingredient_id);
+            $alternatives = ($measurement?->is_variable && (float) ($measurement->unit_cost_snapshot ?? 0) > 0 && ($rule->role !== 'required_fixed' || $noodles))
                 ? $policy->alternatives($dish, $rule->ingredient, $inventory)
                 : collect();
-            $isPhoProtein = $policy->isPho($dish) && $policy->matches($rule->ingredient, ['Nạm bò', 'Bò tái']);
-            if (($analysis !== null || $inventoryValidation) && ($rule->role !== 'required_fixed' || $noodles) && !$isPhoProtein) {
-                $selected = collect($selection['replacements'] ?? [])->firstWhere('slot_key', $rule->slot_key);
-                $ids = array_merge($analysis['replacements'][$rule->slot_key] ?? [], isset($selected['to_ingredient_id']) ? [(int) $selected['to_ingredient_id']] : []);
-                $alternatives = $inventoryValidation ? $inventory : $inventory->whereIn('ingredient_id', $ids);
-                $alternatives = $alternatives->reject(fn ($candidate) => $policy->sameIngredient($rule->ingredient, $candidate));
+            if ($measurement?->is_variable) {
+                $alternatives = $alternatives->filter(fn (Ingredient $candidate) =>
+                    $candidate->quantity_category !== 'fixed'
+                    && $candidate->quantity_category === $rule->ingredient->quantity_category
+                    && $candidate->quantity_unit === $measurement->quantity_unit
+                    && (float) ($candidate->cost_per_unit ?? 0) > 0
+                )->values();
             }
             return [
                 'slot_key' => (string) $rule->slot_key,
@@ -114,18 +100,57 @@ class DishCustomizationService
             ];
         })->values();
         $additions = $policy->additions($dish, $inventory);
-        if ($analysis !== null || $inventoryValidation) {
-            $additionIds = array_merge($analysis['add_on_ids'] ?? [], $selection['add_on_ingredient_ids'] ?? []);
-            if ($policy->isPho($dish)) $additionIds = array_merge($additionIds, $additions->pluck('ingredient_id')->all());
-            $additions = $inventoryValidation ? $inventory : $inventory->whereIn('ingredient_id', $additionIds);
-        }
         return [
             'template_key' => $selection['template_key'] ?? null,
             'required' => $required,
-            'optional' => $rules->where('role', 'optional')->map(fn ($rule) => $this->ingredientPayload($rule->ingredient))->values(),
+            'optional' => $rules->where('role', 'optional')
+                ->reject(fn ($rule) => (bool) ($measurements->get((int) $rule->ingredient_id)?->is_variable))
+                ->map(fn ($rule) => $this->ingredientPayload($rule->ingredient))->values(),
             'add_ons' => $additions->reject(fn ($ingredient) => $rules->contains(fn ($rule) => $policy->sameIngredient($rule->ingredient, $ingredient)))
-                ->map(fn ($ingredient) => $this->ingredientPayload($ingredient))->values(),
+                ->map(function ($ingredient) use ($dish) {
+                    $pricing = app(\App\Services\TieredRecipeService::class)->publicAddOnDetails($ingredient, $dish);
+                    return $pricing === null ? null : [...$this->ingredientPayload($ingredient), ...$pricing];
+                })->filter()->values(),
         ];
+    }
+
+    /**
+     * Collapse duplicate catalog rows with an explicitly shared ingredient label/alias.
+     * If one duplicate is priced and another is fixed, keep the priced record so the
+     * customer sees one consistent option and cannot select a free duplicate instead.
+     */
+    private function uniqueIngredientInventory($inventory, IngredientSubstitutionPolicy $policy)
+    {
+        $ordered = $inventory->sort(function (Ingredient $left, Ingredient $right): int {
+            $leftPriced = $left->quantity_category !== 'fixed'
+                && filled($left->quantity_unit)
+                && (float) ($left->cost_per_unit ?? 0) > 0;
+            $rightPriced = $right->quantity_category !== 'fixed'
+                && filled($right->quantity_unit)
+                && (float) ($right->cost_per_unit ?? 0) > 0;
+
+            if ($leftPriced !== $rightPriced) {
+                return $rightPriced <=> $leftPriced;
+            }
+
+            $leftHasVietnameseName = filled($left->ingredient_name_vi);
+            $rightHasVietnameseName = filled($right->ingredient_name_vi);
+            if ($leftHasVietnameseName !== $rightHasVietnameseName) {
+                return $rightHasVietnameseName <=> $leftHasVietnameseName;
+            }
+
+            return (int) $left->ingredient_id <=> (int) $right->ingredient_id;
+        })->values();
+
+        $unique = collect();
+        foreach ($ordered as $ingredient) {
+            if ($unique->contains(fn (Ingredient $existing): bool => $policy->sameIngredient($existing, $ingredient))) {
+                continue;
+            }
+            $unique->push($ingredient);
+        }
+
+        return $unique->values();
     }
 
     private function rules(Dish $dish, array $selection = [])
@@ -209,9 +234,9 @@ class DishCustomizationService
         }
     }
 
-    public function resolveSelection(Dish $dish, array $selection, bool $inventoryValidation = true): array
+    public function resolveSelection(Dish $dish, array $selection): array
     {
-        $options = $this->options($dish, $selection, false, $inventoryValidation);
+        $options = $this->options($dish, $selection);
         $requiredBySlot = $options['required']->keyBy('slot_key');
         $replacementInputs = collect($selection['replacements'] ?? []);
         $selectedReplacements = [];
@@ -453,6 +478,7 @@ class DishCustomizationService
     public function presentCustomizations($customizations)
     {
         return $customizations->map(function (DishCustomization $customization): array {
+            $dish = Dish::with('priceProfile')->find((int) $customization->dish_id);
             $payload = $customization->toArray();
             $selection = $customization->selection ?? [];
             if (empty($selection)) {
@@ -460,6 +486,24 @@ class DishCustomizationService
             }
 
             $payload['selection'] = $this->selectionWithNames($selection);
+            try {
+                if (!$dish) throw ValidationException::withMessages(['dish_id' => 'Dish pricing is unavailable.']);
+                $pricing = app(TieredRecipeService::class);
+                $payload['price_adjustment'] = $pricing->addOnSurchargeForSelection($selection, $dish);
+                foreach ($dish?->priceProfile ? ['low', 'standard', 'high'] : ['standard'] as $tier) {
+                    $pricing->orderPricingSnapshot(
+                        $dish,
+                        $tier,
+                        (int) $customization->dish_customization_id,
+                        (int) $customization->user_id,
+                        'vi'
+                    );
+                }
+                $payload['pricing_available'] = true;
+            } catch (ValidationException) {
+                $payload['price_adjustment'] = null;
+                $payload['pricing_available'] = false;
+            }
             $payload = array_merge($payload, $this->structuredSelectionData(
                 (int) $customization->dish_id,
                 $selection

@@ -11,6 +11,7 @@ class IngredientStock extends Model
 
     protected $fillable = [
         'ingredient_id',
+        'unit_code',
         'ingredient_key',
         'ingredient_name',
         'stock_date',
@@ -41,7 +42,7 @@ class IngredientStock extends Model
         return \App\Support\IngredientIdentity::key($name);
     }
 
-    public static function getOrCreateForDate(string $name, string $date, string $language = 'vi'): self
+    public static function getOrCreateForDate(string $name, string $date, string $language = 'vi', ?string $requestedUnit = null): self
     {
         $name = trim($name);
         $key = self::keyFor($name);
@@ -57,8 +58,10 @@ class IngredientStock extends Model
             $ingredientNameAttributes
         );
 
-        return self::firstOrCreate(
-            ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date],
+        $catalogUnit = $ingredient->quantity_unit === 'kg' ? 'g' : (in_array($ingredient->quantity_unit, ['g', 'small_loaf', 'large_loaf', 'unit'], true) ? $ingredient->quantity_unit : 'portion');
+        $unitCode = $requestedUnit ?? ($ingredient->quantity_category === 'fixed' ? 'portion' : $catalogUnit);
+        $stock = self::firstOrCreate(
+            ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date, 'unit_code' => $unitCode],
             [
                 'ingredient_key' => $key,
                 // This snapshot column stores English names; language is explicit
@@ -66,10 +69,11 @@ class IngredientStock extends Model
                 // Stock snapshots are English-only and the legacy schema requires
                 // a non-null value. Keep Vietnamese catalog text in its own column.
                 'ingredient_name' => $ingredient->ingredient_name ?? '',
-                'quantity_start' => 50,
-                'quantity_left' => 50,
+                'quantity_start' => $unitCode === 'g' ? 10000 : 50,
+                'quantity_left' => $unitCode === 'g' ? 10000 : 50,
                 'refill_count' => 0,
             ]
         );
+        return $stock;
     }
 }

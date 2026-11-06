@@ -126,8 +126,15 @@ class RecipeCustomizationTest extends TestCase
         $this->assertNotEmpty($changed['replacements']);
         $this->assertEmpty($service->resolveSelection($dish, ['replacements' => []])['replacements']);
         Sanctum::actingAs(User::where('role', 'user')->first());
+        // Admin's public pho recipes are not preinstalled in a customer's private collection.
+        $this->getJson('/api/dish-customizations/29')->assertOk()->assertJsonCount(0, 'custom_recipes');
+        $public = $this->getJson('/api/community-recipes/29')->assertOk()->json('data');
+        $this->assertCount(4, $public);
+        $adminId = User::where('role', 'admin')->value('user_id');
+        $this->assertSame(4, DB::table('community_recipes')->where('dish_id', 29)->where('user_id', $adminId)->count());
         $communityId = DB::table('community_recipes')->where('seed_key', 'pho:pho_rare')->value('id');
         $this->postJson('/api/community-recipes/' . $communityId . '/save')->assertOk();
+        $this->getJson('/api/dish-customizations/29')->assertOk()->assertJsonCount(1, 'custom_recipes');
         $copy = DishCustomization::where('user_id', auth()->id())->whereNull('seed_key')->firstOrFail();
         $this->assertSame('pho_rare', $copy->selection['template_key']);
         $preview = $this->postJson('/api/dish-customizations/29/preview', ['selection' => $copy->selection, 'language' => 'en'])->assertOk();

@@ -33,8 +33,7 @@ class ChatVisualContext
 
     public function page(?string $path): ?string
     {
-        $allowed = ['/', '/menu', '/cart', '/cart/bookings', '/cart/deliveries', '/profile', '/profile/orders', '/profile/ratings', '/login', '/forgot-password', '/payment-result', '/refund-result'];
-        if (in_array($path, $allowed, true) || (is_string($path) && preg_match('#^/dish-details/\d+$#', $path))) return $path;
+        if (is_string($path) && (isset(CustomerWebsiteKnowledge::PAGE_TOPICS[$path]) || preg_match('#^/dish-details/\d+$#', $path))) return $path;
         return null;
     }
 }

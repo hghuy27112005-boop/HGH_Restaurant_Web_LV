@@ -178,6 +178,8 @@ class DatabaseSeeder extends Seeder
 
         // 7. Seed the bilingual ingredient inventory and each dish's persisted ingredient roles.
         $this->call(BilingualRecipeIngredientSeeder::class);
+        $this->call(RecipeIngredientCatalogSeeder::class);
+        $this->call(TieredDishPricingSeeder::class);
 
         $this->call(SaleOffEventSeeder::class);
         $this->call(OrdersSeeder::class);

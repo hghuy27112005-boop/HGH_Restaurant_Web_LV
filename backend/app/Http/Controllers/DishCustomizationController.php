@@ -39,7 +39,7 @@ class DishCustomizationController extends Controller
         try {
             return response()->json([
                 'success' => true,
-                'options' => $service->options(Dish::findOrFail($dishId), $request->validate(['template_key' => 'nullable|string|max:40', 'replacements' => 'sometimes|array|max:40', 'replacements.*.slot_key' => 'required|string|max:80', 'replacements.*.from_ingredient_id' => 'required|integer', 'replacements.*.to_ingredient_id' => 'required|integer', 'removed_ingredient_ids' => 'sometimes|array|max:40', 'removed_ingredient_ids.*' => 'integer', 'add_on_ingredient_ids' => 'sometimes|array|max:40', 'add_on_ingredient_ids.*' => 'integer']), true),
+                'options' => $service->options(Dish::findOrFail($dishId), $request->validate(['template_key' => 'nullable|string|max:40', 'replacements' => 'sometimes|array|max:40', 'replacements.*.slot_key' => 'required|string|max:80', 'replacements.*.from_ingredient_id' => 'required|integer', 'replacements.*.to_ingredient_id' => 'required|integer', 'removed_ingredient_ids' => 'sometimes|array|max:40', 'removed_ingredient_ids.*' => 'integer', 'add_on_ingredient_ids' => 'sometimes|array|max:40', 'add_on_ingredient_ids.*' => 'integer'])),
             ]);
         } catch (RuntimeException|ConnectionException|RequestException $exception) {
             report($exception);
@@ -71,18 +71,40 @@ class DishCustomizationController extends Controller
             $service = app(DishCustomizationService::class);
             $resolved = $service->resolveSelection($dish, $data['selection']);
             $service->assertSelectionChanged($resolved);
-            if (trim((string) $dish->recipe_instructions) === '') {
-                return response()->json(['message' => 'Món ăn chưa có công thức gốc để tạo công thức mới.'], 422);
-            }
-
             $template = ($data['selection']['template_key'] ?? null)
                 ? \App\Models\DishCustomization::where('dish_id', $dish->dish_id)
                     ->where('seed_key', 'pho:' . $data['selection']['template_key'])->first()
                 : null;
             $unchangedTemplate = $template && empty($data['selection']['replacements']) && empty($data['selection']['removed_ingredient_ids']) && empty($data['selection']['add_on_ingredient_ids']);
+            $forbiddenIngredients = collect($resolved['removed_ingredients_structured'])
+                ->merge(collect($resolved['replacements_structured'])->pluck('from'))
+                ->unique('ingredient_id')
+                ->values()->all();
             $revised = $unchangedTemplate
                 ? ['vi' => $template->recipe_instructions, 'en' => $template->recipe_instructions_en]
-                : $gemini->generateRecipeTranslations($template?->recipe_instructions ?? $dish->recipe_instructions, $resolved['ingredients']);
+                : $gemini->generateRecipeForFinalIngredients(
+                    (string) $dish->dish_name,
+                    (string) ($dish->dish_name_en ?: $dish->dish_name),
+                    $resolved['ingredients'],
+                    $resolved['ingredients_structured'],
+                    $forbiddenIngredients
+                );
+
+            $selectedIngredientIds = collect($resolved['ingredients_structured'])
+                ->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all();
+            $catalogGuard = app(\App\Services\RecipeIngredientCatalogGuard::class);
+            $revised['vi'] = $catalogGuard->canonicalizeSelectedAliases($revised['vi'], $selectedIngredientIds, 'vi');
+            $revised['en'] = $catalogGuard->canonicalizeSelectedAliases($revised['en'], $selectedIngredientIds, 'en');
+            $unselectedMentions = $catalogGuard->findUnselectedMentions([$revised['vi'], $revised['en']], $selectedIngredientIds);
+            if ($unselectedMentions !== []) {
+                $ingredientNames = implode(', ', $unselectedMentions);
+                return response()->json([
+                    'code' => 'recipe_ingredient_catalog_mismatch',
+                    'message' => $data['language'] === 'en'
+                        ? "The recipe mentions ingredient(s) not selected: {$ingredientNames}. Please generate the preview again."
+                        : "Công thức có nhắc đến nguyên liệu chưa chọn: {$ingredientNames}. Vui lòng tạo lại bản xem trước.",
+                ], 422);
+            }
         } catch (RuntimeException|ConnectionException|RequestException $exception) {
             report($exception);
             return response()->json([

@@ -27,7 +27,7 @@ class SavedInvoiceLibrary
         // The receipt image is an index, never proof of ownership or current status.
         return Bill::whereIn('bill_id', array_keys($references))
             ->whereHas('order', fn ($query) => $query->where('user_id', $userId))
-            ->with('order.items.dish')->orderByDesc('created_at')->limit(60)->get()->map(function ($bill) use ($references, $awards) {
+            ->with('order.items.dish.priceProfile')->orderByDesc('created_at')->limit(60)->get()->map(function ($bill) use ($references, $awards) {
                 $image = $references[$bill->bill_id];
                 return [
                     'image_message_id' => $image?->message_id,
@@ -48,6 +48,8 @@ class SavedInvoiceLibrary
                         'dish' => $item->dish?->dish_name,
                         'dish_en' => $item->dish?->dish_name_en,
                         'quantity' => $item->quantity,
+                        'price_tier' => $item->price_tier,
+                        'has_price_options' => $item->dish?->priceProfile !== null,
                         'recipe' => $item->customization_name,
                     ])->all(),
                 ];

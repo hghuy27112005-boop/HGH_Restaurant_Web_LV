@@ -24,7 +24,7 @@ class DishController extends Controller
     public function index(Request $request)
     {
         // Chỉ lấy món đang bán (is_active = true) cho trang menu công khai / đặt hàng
-        $dishes = Dish::where('is_active', true)->orderBy('dish_id', 'asc')->get();
+        $dishes = Dish::with('priceProfile')->where('is_active', true)->orderBy('dish_id', 'asc')->get();
 
         // Số lượng tối đa mỗi món là 50 (kiểm tra theo nguyên liệu ở backend), không còn trả quantity_left.
         $result = $dishes;
@@ -32,6 +32,7 @@ class DishController extends Controller
         if ($request->expectsJson()) {
             $reviewStats = $this->reviewStatsForDishIds($dishes->pluck('dish_id')->all());
             $dishes->each(fn (Dish $dish) => $this->applyReviewStats($dish, $reviewStats));
+            $dishes->each(fn (Dish $dish) => $this->applyPublicPriceOptions($dish));
 
             return response()->json($result->values());
         }
@@ -44,7 +45,7 @@ class DishController extends Controller
      */
     public function adminIndex()
     {
-        $dishes = Dish::with('ingredientRules.ingredient')->orderBy('dish_id', 'asc')->get();
+        $dishes = Dish::with(['ingredientRules.ingredient', 'priceProfile', 'recipeMeasurements'])->orderBy('dish_id', 'asc')->get();
         return response()->json($dishes);
     }
 
@@ -75,6 +76,11 @@ class DishController extends Controller
             $reviewStats = $this->reviewStatsForDishIds([(int) $dish->dish_id]);
             $this->applyReviewStats($dish, $reviewStats);
             $payload = $dish->toArray();
+            $payload['price_options'] = $dish->priceProfile ? [
+                ['key' => 'low', 'price' => (int) $dish->priceProfile->price_low],
+                ['key' => 'standard', 'price' => (int) $dish->priceProfile->price_standard],
+                ['key' => 'high', 'price' => (int) $dish->priceProfile->price_high],
+            ] : [];
             // Không còn trả quantity_left (xem ghi chú ở index()).
             if (Auth::check()) {
                 $payload['custom_recipes'] = $dish->customizations()
@@ -120,6 +126,55 @@ class DishController extends Controller
         $dish->setAttribute('review_count', $stats === null ? 0 : (int) $stats->review_count);
     }
 
+    private function applyPublicPriceOptions(Dish $dish): void
+    {
+        $profile = $dish->priceProfile;
+        $dish->setAttribute('price_options', $profile ? [
+            ['key' => 'low', 'price' => (int) $profile->price_low],
+            ['key' => 'standard', 'price' => (int) $profile->price_standard],
+            ['key' => 'high', 'price' => (int) $profile->price_high],
+        ] : []);
+        $dish->unsetRelation('priceProfile');
+    }
+
+    private function validateTieredRecipePayload(string $json, array $ingredientIds, \App\Services\TieredRecipeService $service, string $language = 'vi'): array
+    {
+        $payload = json_decode($json, true);
+        if (!is_array($payload) || !is_array($payload['prices'] ?? null) || !is_array($payload['quantities'] ?? null) || !is_array($payload['measurements'] ?? null)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['tiered_recipe' => $language === 'en' ? 'The price and quantity data is invalid.' : 'Dữ liệu giá và định lượng không hợp lệ.']);
+        }
+        $quantities = collect($payload['quantities'])->keyBy(fn ($row) => (int) ($row['ingredient_id'] ?? 0));
+        $submittedIds = $quantities->keys()->map(fn ($id) => (int) $id)->sort()->values()->all();
+        sort($ingredientIds);
+        if ($submittedIds !== $ingredientIds) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['tiered_recipe' => $language === 'en' ? 'The quantity settings do not match the confirmed ingredients.' : 'Danh sách định lượng không khớp nguyên liệu đã duyệt.']);
+        }
+        $input = ['pricing' => [
+            'price_group' => $payload['price_group'] ?? '',
+            'prices' => $payload['prices'],
+            'minimum_gross_margin_percent' => $payload['minimum_gross_margin_percent'] ?? 10,
+            'tax_percent_included' => $payload['tax_percent_included'] ?? 0,
+            'fixed_cost_per_serving' => $payload['fixed_cost_per_serving'] ?? 0,
+        ], 'quantities' => $payload['quantities']];
+        $normalized = $service->validateAndNormalize($input, $ingredientIds, $language);
+        $generated = [];
+        foreach ($normalized['quantities'] as $id => $settings) {
+            $row = $payload['measurements'][$id] ?? $payload['measurements'][(string) $id] ?? null;
+            if (!is_array($row)) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['tiered_recipe' => $language === 'en' ? 'An approved quantity is missing for an ingredient.' : 'Thiếu định lượng đã duyệt cho một nguyên liệu.']);
+            }
+            if (!$settings['is_variable']) continue;
+            $generated[] = ['ingredient_id' => (int) $id, ...$row];
+        }
+        $measured = $service->validateGeneratedQuantities($generated, $normalized['quantities'], $normalized['budgets'], $language);
+        $profile = $input['pricing'];
+        return [
+            'input' => $input, 'ingredient_ids' => $ingredientIds, 'group' => $profile['price_group'], 'prices' => $profile['prices'],
+            'normalized' => $normalized['quantities'], 'measurements' => $measured,
+            'margin' => (float) $profile['minimum_gross_margin_percent'], 'tax' => (float) $profile['tax_percent_included'], 'fixed_cost' => (float) $profile['fixed_cost_per_serving'],
+        ];
+    }
+
     public function analyzeIngredients(Request $request, GeminiChatbotService $gemini)
     {
         $data = $request->validate([
@@ -143,11 +198,16 @@ class DishController extends Controller
                 $service = app(\App\Services\DishCustomizationService::class);
                 $service->createRequiredRulesFromDishIngredients($dish);
                 $sourceNames = array_map('trim', explode(',', (string) ($language === 'en' ? $dish->ingredients_en : $dish->ingredients)));
-                $ingredients = $dish->ingredientRules()->with('ingredient')->orderBy('sort_order')->get()->values()->map(function ($rule, $index) use ($language, $sourceNames) {
+                $measurements = $dish->recipeMeasurements()->get()->keyBy('ingredient_id');
+                $ingredients = $dish->ingredientRules()->with('ingredient')->orderBy('sort_order')->get()->values()->map(function ($rule, $index) use ($language, $sourceNames, $measurements) {
                     $name = $sourceNames[$index] ?? $this->canonicalIngredientName($rule->ingredient, $language);
+                    $measurement = $measurements->get((int) $rule->ingredient_id);
                     return ['ingredient_id' => (int) $rule->ingredient_id, 'name' => $name,
                         'name_vi' => $rule->ingredient->ingredient_name_vi, 'name_en' => $rule->ingredient->ingredient_name,
-                        $language === 'en' ? 'name_en' : 'name_vi' => $name, 'role' => $rule->role];
+                        $language === 'en' ? 'name_en' : 'name_vi' => $name, 'role' => $rule->role,
+                        'quantity_category' => $measurement ? ($measurement->is_variable ? $rule->ingredient->quantity_category : 'fixed') : (($rule->ingredient->quantity_unit || $rule->ingredient->cost_per_unit) ? $rule->ingredient->quantity_category : null),
+                        'quantity_unit' => $measurement?->quantity_unit ?: $rule->ingredient->quantity_unit, 'cost_per_unit' => $rule->ingredient->cost_per_unit,
+                        'minimum_quantity' => $measurement?->minimum_quantity, 'maximum_quantity' => $measurement?->maximum_quantity];
                 });
                 return response()->json(['success' => true, 'language' => $language, 'ingredients' => $ingredients, 'source' => 'stored']);
             }
@@ -179,6 +239,8 @@ class DishController extends Controller
                     'name_en' => $this->canonicalIngredientName($ingredient, 'en'),
                     'name_vi' => $this->canonicalIngredientName($ingredient, 'vi'),
                     'aliases' => $ingredient->aliases ?? [],
+                    'quantity_category' => ($ingredient->quantity_unit || $ingredient->cost_per_unit) ? $ingredient->quantity_category : null,
+                    'quantity_unit' => $ingredient->quantity_unit, 'cost_per_unit' => $ingredient->cost_per_unit,
                 ])
                 ->all();
 
@@ -199,10 +261,22 @@ class DishController extends Controller
                 ], 422);
             }
 
+            $catalogById = Ingredient::query()->whereIn('ingredient_id', collect($analysis['ingredients'])->pluck('ingredient_id')->filter()->all())->get()->keyBy('ingredient_id');
+            $ingredients = collect($analysis['ingredients'])->map(function (array $row) use ($catalogById): array {
+                $catalog = $catalogById->get((int) ($row['ingredient_id'] ?? 0));
+                if (!$catalog) return $row;
+                return [
+                    ...$row,
+                    'quantity_unit' => $catalog->quantity_unit,
+                    'cost_per_unit' => $catalog->cost_per_unit,
+                    'quantity_step' => $catalog->quantity_step,
+                ];
+            })->all();
+
             return response()->json([
                 'success' => true,
                 'language' => $language,
-                'ingredients' => $analysis['ingredients'],
+                'ingredients' => $ingredients,
             ]);
         } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
             report($exception);
@@ -226,6 +300,7 @@ class DishController extends Controller
                 'ingredients.*.name' => 'nullable|string|max:255',
                 "ingredients.*.{$nameField}" => 'required|string|max:255',
                 'ingredients.*.role' => 'required|in:required_replaceable,required_fixed,optional',
+                'ingredients.*.quantity_category' => 'nullable|in:fixed,starch,protein,mushroom,other',
             ]);
         } catch (\Illuminate\Validation\ValidationException $exception) {
             $errors = $exception->errors();
@@ -296,6 +371,10 @@ class DishController extends Controller
                     'name' => $sourceName,
                     'role' => $item['role'],
                     'created_in_confirmation' => $createdForConfirmation,
+                    'quantity_category' => ($match->quantity_unit || $match->cost_per_unit) ? $match->quantity_category : ($item['quantity_category'] ?? 'fixed'),
+                    'quantity_unit' => $match->quantity_unit,
+                    'cost_per_unit' => $match->cost_per_unit,
+                    'quantity_step' => $match->quantity_step,
                 ];
             }
 
@@ -416,7 +495,58 @@ class DishController extends Controller
         ]);
     }
 
-    public function addDish(Request $request, GeminiChatbotService $gemini)
+    public function previewTieredDishRecipe(Request $request, GeminiChatbotService $gemini, \App\Services\TieredRecipeService $tiered)
+    {
+        $data = $request->validate([
+            'dish_name' => 'required|string|max:255', 'language' => 'required|in:vi,en',
+            'price_group' => 'required|in:small,medium,large', 'prices.low' => 'required|integer|min:1',
+            'prices.standard' => 'required|integer|min:1', 'prices.high' => 'required|integer|min:1',
+            'minimum_gross_margin_percent' => 'required|numeric|min:0|max:90', 'tax_percent_included' => 'required|numeric|min:0|max:100',
+            'fixed_cost_per_serving' => 'required|numeric|min:0',
+            'ingredients' => 'required|array|min:1|max:40', 'ingredients.*.ingredient_id' => 'required|integer|distinct|exists:ingredients,ingredient_id',
+            'ingredients.*.name' => 'required|string|max:255', 'quantities' => 'required|array|min:1|max:40',
+            'quantities.*.ingredient_id' => 'required|integer|distinct|exists:ingredients,ingredient_id',
+            'quantities.*.category' => 'required|in:fixed,starch,protein,mushroom,other', 'quantities.*.unit' => 'nullable|string|max:12',
+            'quantities.*.cost_per_unit' => 'nullable|numeric|min:0', 'quantities.*.step' => 'nullable|numeric|min:0.01',
+            'quantities.*.minimum_quantity' => 'nullable|numeric|min:0', 'quantities.*.maximum_quantity' => 'nullable|numeric|min:0',
+        ]);
+        $ids = collect($data['ingredients'])->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all();
+        $quantityIds = collect($data['quantities'])->pluck('ingredient_id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+        if ($quantityIds !== collect($ids)->sort()->values()->all()) {
+            return response()->json(['code' => 'tiered_recipe_input_invalid', 'message' => $data['language'] === 'en' ? 'Classify every ingredient before generating quantities.' : 'Cần phân loại đầy đủ từng nguyên liệu.'], 422);
+        }
+        $input = ['pricing' => ['price_group' => $data['price_group'], 'prices' => $data['prices'], 'minimum_gross_margin_percent' => $data['minimum_gross_margin_percent'], 'tax_percent_included' => $data['tax_percent_included'], 'fixed_cost_per_serving' => $data['fixed_cost_per_serving']], 'quantities' => $data['quantities']];
+        $validated = $tiered->validateAndNormalize($input, $ids, $data['language']);
+        $ingredientNames = collect($data['ingredients'])->keyBy('ingredient_id');
+        $aiIngredients = [];
+        foreach ($validated['quantities'] as $id => $setting) {
+            $aiIngredients[] = ['ingredient_id' => (int) $id, 'name' => $ingredientNames->get($id)['name'], 'category' => $setting['is_variable'] ? $setting['category'] : 'fixed', 'unit' => $setting['quantity_unit'], 'cost_per_unit' => $setting['cost_per_unit'], 'step' => $setting['step'], 'minimum_quantity' => $setting['minimum_quantity'], 'maximum_quantity' => $setting['maximum_quantity']];
+        }
+        try {
+            $generated = $gemini->generateTieredDishRecipe($data['dish_name'], $aiIngredients, $validated['budgets'], $data['language']);
+            $fittedQuantities = $tiered->fitGeneratedQuantities($generated['quantities'], $validated['quantities'], $validated['budgets'], $data['language']);
+            $measurements = $tiered->validateGeneratedQuantities($fittedQuantities, $validated['quantities'], $validated['budgets'], $data['language']);
+        } catch (\Illuminate\Validation\ValidationException $exception) {
+            $message = collect($exception->errors())->flatten()->first();
+            return response()->json(['code' => 'tiered_recipe_out_of_bounds', 'message' => $message ?: ($data['language'] === 'en'
+                ? 'The generated quantities do not fit the budget or configured steps. Adjust unit costs or limits and try again.'
+                : 'Định lượng AI tạo chưa phù hợp ngân sách hoặc bước tăng. Hãy chỉnh đơn giá/giới hạn rồi thử lại.')], 422);
+        } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
+            report($exception);
+            return response()->json(['code' => 'tiered_recipe_unavailable', 'message' => $data['language'] === 'en'
+                ? 'Could not generate the three-tier recipe right now. Please try again.'
+                : 'Chưa thể tạo công thức theo ba mức giá. Vui lòng thử lại.'], 503);
+        }
+        $costs = [];
+        foreach (['low', 'standard', 'high'] as $tier) {
+            $cost = 0.0;
+            foreach ($validated['quantities'] as $id => $setting) if ($setting['is_variable']) $cost += $measurements[$id][$tier] * $setting['cost_per_unit'];
+            $costs[$tier] = round($cost, 2);
+        }
+        return response()->json(['success' => true, 'recipe_instructions' => $generated['recipe_instructions'], 'quantities' => $measurements, 'budgets' => $validated['budgets'], 'variable_costs' => $costs]);
+    }
+
+    public function addDish(Request $request, GeminiChatbotService $gemini, \App\Services\TieredRecipeService $tieredService)
     {
         $validated = $request->validate([
             'dish_name' => 'required|string|max:255',
@@ -425,11 +555,12 @@ class DishController extends Controller
             'language' => 'required|in:vi,en',
             'ingredients' => 'required|array|min:1|max:40',
             'ingredients.*.ingredient_id' => 'required|integer|distinct',
-            'ingredients.*.name' => 'nullable|string|max:255',
+            'ingredients.*.name' => 'required|string|max:255',
             'ingredients.*.role' => 'required|in:required_replaceable,required_fixed,optional',
             'recipe_instructions' => 'nullable|string',
             'recipe_instructions_vi' => 'nullable|string',
             'recipe_instructions_en' => 'nullable|string',
+            'tiered_recipe' => 'required|string',
             'image' => 'required|image|mimes:jpeg,jpg|max:5120',
         ]);
 
@@ -443,6 +574,7 @@ class DishController extends Controller
                 'message' => 'Danh sách nguyên liệu không hợp lệ.',
             ], 422);
         }
+        $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $validated['language']);
 
         $language = $validated['language'];
         $sourceName = trim($validated['dish_name']);
@@ -513,7 +645,7 @@ class DishController extends Controller
         $imageName = null;
         $imageWasMoved = false;
         try {
-            $dish = DB::transaction(function () use ($validated, $vietnamese, $english, $ingredients, $selected, $ingredientsVi, $ingredientsEn, $missingIngredientTranslations, $language, $image, $directory, &$imageName, &$imageWasMoved): Dish {
+            $dish = DB::transaction(function () use ($validated, $vietnamese, $english, $ingredients, $selected, $ingredientsVi, $ingredientsEn, $missingIngredientTranslations, $language, $image, $directory, $tieredService, $tieredConfig, &$imageName, &$imageWasMoved): Dish {
                 DB::table('dish_types')->orderBy('type_id')->lockForUpdate()->first();
                 $dishId = $this->nextAvailableDishId();
                 $dish = Dish::create([
@@ -565,6 +697,7 @@ class DishController extends Controller
                 app(DishIngredientAvailabilityService::class)->syncForIngredientIds(
                     collect($validated['ingredients'])->pluck('ingredient_id')->all()
                 );
+                $tieredService->persist($dish, $tieredConfig['input'], $tieredConfig['ingredient_ids'], $tieredConfig['group'], $tieredConfig['prices'], $tieredConfig['normalized'], $tieredConfig['measurements'], $tieredConfig['margin'], $tieredConfig['tax'], $tieredConfig['fixed_cost']);
 
                 return $dish;
             });
@@ -729,12 +862,21 @@ class DishController extends Controller
     private function normalizeIngredientName(string $name): string
     {
         $name = Str::ascii(\App\Support\IngredientIdentity::key($name));
-        $name = preg_replace('/\\b(?:chopped|diced|shredded|sliced|minced|ground|finely|roughly|fresh|kernels|meat)\\b/u', ' ', $name);
+        $name = preg_replace('/\\b(?:chopped|diced|shredded|sliced|finely|roughly|fresh|kernels|meat)\\b/u', ' ', $name);
         $name = preg_replace('/\\b(?:thai hat luu|thai soi|thai lat|bam nho|cat nho|xe soi|bao soi|tuoi)\\b/u', ' ', $name);
         $name = preg_replace('/^(?:thit )(?=(?:ga|heo|bo|vit)\\b)/u', '', $name);
         $name = preg_replace('/^hat (?=(?:bap|ngo)\\b)/u', '', $name);
         $name = preg_replace('/\\bngo\\b/u', 'bap', $name);
         return trim((string) preg_replace('/\\s+/u', ' ', $name));
+    }
+
+    private function recipeInstructionStepCount(string $instructions): int
+    {
+        $steps = preg_split('/\r\n|\r|\n/', trim($instructions)) ?: [];
+        return count(array_filter(array_map(
+            static fn (string $step): string => trim((string) preg_replace('/^\s*(?:\d+[.)]\s*|[-*]\s*)/', '', $step)),
+            $steps
+        ), static fn (string $step): bool => $step !== ''));
     }
 
     private function rolePriority(string $role): int
@@ -746,12 +888,12 @@ class DishController extends Controller
         };
     }
 
-    public function updateDish(Request $request, $id, GeminiChatbotService $gemini)
+    public function updateDish(Request $request, $id, GeminiChatbotService $gemini, \App\Services\TieredRecipeService $tieredService)
     {
         $dish = Dish::findOrFail($id);
 
         if (is_array($request->input('ingredients'))) {
-            return $this->updateDishWithConfirmedIngredients($request, $dish, $gemini);
+            return $this->updateDishWithConfirmedIngredients($request, $dish, $gemini, $tieredService);
         }
 
         $validated = $request->validate([
@@ -891,7 +1033,8 @@ class DishController extends Controller
     private function updateDishWithConfirmedIngredients(
         Request $request,
         Dish $dish,
-        GeminiChatbotService $gemini
+        GeminiChatbotService $gemini,
+        \App\Services\TieredRecipeService $tieredService
     ) {
         $validated = $request->validate([
             'dish_name' => 'required|string|max:255',
@@ -901,11 +1044,12 @@ class DishController extends Controller
             'image' => 'nullable|image|mimes:jpeg,jpg|max:5120',
             'ingredients' => 'required|array|min:1|max:40',
             'ingredients.*.ingredient_id' => 'required|integer|distinct',
-            'ingredients.*.name' => 'nullable|string|max:255',
+            'ingredients.*.name' => 'required|string|max:255',
             'ingredients.*.role' => 'required|in:required_replaceable,required_fixed,optional',
             'recipe_instructions' => 'nullable|string',
             'recipe_instructions_vi' => 'nullable|string',
             'recipe_instructions_en' => 'nullable|string',
+            'tiered_recipe' => 'required|string',
         ]);
 
         $language = $validated['language'];
@@ -926,6 +1070,7 @@ class DishController extends Controller
                 'message' => 'Danh sách nguyên liệu chưa được xác nhận.',
             ], 422);
         }
+        $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $validated['language']);
 
         $sourceIngredientNames = $ingredients->map(fn (Ingredient $ingredient) => trim((string) (
             $selected->get((int) $ingredient->ingredient_id)['name']
@@ -945,8 +1090,11 @@ class DishController extends Controller
             $recipeColumn = $language === 'en' ? 'recipe_instructions_en' : 'recipe_instructions';
             $targetColumn = $language === 'en' ? 'ingredients' : 'ingredients_en';
             $targetRecipeColumn = $language === 'en' ? 'recipe_instructions' : 'recipe_instructions_en';
+            $translationStepsMatch = $this->recipeInstructionStepCount($sourceRecipe)
+                === $this->recipeInstructionStepCount((string) $dish->{$targetRecipeColumn});
             $unchanged = $sourceIngredients === $dish->{$sourceColumn} && $sourceRecipe === $dish->{$recipeColumn}
-                && trim((string) $dish->{$targetColumn}) !== '' && trim((string) $dish->{$targetRecipeColumn}) !== '';
+                && trim((string) $dish->{$targetColumn}) !== '' && trim((string) $dish->{$targetRecipeColumn}) !== ''
+                && $translationStepsMatch;
             $translated = $unchanged
                 ? ['dish_name' => $language === 'en' ? $dish->dish_name : $dish->dish_name_en, 'ingredients' => $dish->{$targetColumn}, 'recipe_instructions' => $dish->{$targetRecipeColumn}]
                 : $gemini->translateDishContent($dishName, $sourceIngredients, $sourceRecipe, $language);
@@ -1027,7 +1175,9 @@ class DishController extends Controller
                 $recipeEn,
                 $missingIngredientTranslations,
                 $language,
-                $request
+                $request,
+                $tieredService,
+                $tieredConfig
             ): void {
                 $lockedDish = Dish::query()->lockForUpdate()->findOrFail($dish->dish_id);
                 $oldIngredientIds = $lockedDish->ingredientRules()
@@ -1081,6 +1231,8 @@ class DishController extends Controller
                     'recipe_instructions_en' => $recipeEn,
                     ...($request->hasFile('image') ? ['image_url' => $dish->dish_id . '.jpg'] : []),
                 ]);
+
+                $tieredService->persist($lockedDish, $tieredConfig['input'], $tieredConfig['ingredient_ids'], $tieredConfig['group'], $tieredConfig['prices'], $tieredConfig['normalized'], $tieredConfig['measurements'], $tieredConfig['margin'], $tieredConfig['tax'], $tieredConfig['fixed_cost']);
 
                 app(DishIngredientAvailabilityService::class)->syncForIngredientIds([
                     ...$oldIngredientIds,

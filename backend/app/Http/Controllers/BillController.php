@@ -32,6 +32,7 @@ class BillController extends Controller
             'items.*.dish_id' => 'required|exists:dishes,dish_id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
+            'items.*.price_tier' => 'nullable|in:low,standard,high',
             'items.*.customization_name' => 'nullable|string|max:255',
             'items.*.ingredients' => 'nullable|string',
             'items.*.removed_ingredients' => 'nullable|array',
@@ -118,12 +119,30 @@ class BillController extends Controller
                     ], 422);
                 }
 
-                $realPrice = (float) $dish->price;
-                $subtotalBeforePoints += $realPrice * $item['quantity'];
+                $tier = $item['price_tier'] ?? 'standard';
+                $profile = $dish->priceProfile;
+                if ($profile) {
+                    $realPrice = (float) match ($tier) { 'low' => $profile->price_low, 'high' => $profile->price_high, default => $profile->price_standard };
+                } else {
+                    if ($tier !== 'standard') {
+                        DB::rollBack();
+                        return response()->json(['code' => 'price_variant_invalid', 'message' => $request->header('Accept-Language') === 'en' ? 'The selected dish price is no longer available.' : 'Mức giá món ăn không còn hợp lệ.'], 422);
+                    }
+                    $realPrice = (float) $dish->price;
+                }
                 $recipeSnapshot = app(\App\Services\DishCustomizationService::class)->orderVariantSnapshot(
                     $dish,
                     isset($item['customization_id']) ? (int) $item['customization_id'] : null
                 );
+                $pricingSnapshot = app(\App\Services\TieredRecipeService::class)->orderPricingSnapshot(
+                    $dish,
+                    $tier,
+                    isset($item['customization_id']) ? (int) $item['customization_id'] : null,
+                    (int) $request->user()->user_id,
+                    $request->header('Accept-Language') === 'en' ? 'en' : 'vi'
+                );
+                $realPrice += (int) $pricingSnapshot['price_adjustment'];
+                $subtotalBeforePoints += $realPrice * $item['quantity'];
 
                 $itemsWithRealPrice[] = [
                     'dish_id'  => $item['dish_id'],
@@ -133,6 +152,8 @@ class BillController extends Controller
                     'customization_name' => $recipeSnapshot['customization_name'],
                     'ingredients' => $recipeSnapshot['ingredients'],
                     'removed_ingredients' => $recipeSnapshot['removed_ingredients'],
+                    'price_tier' => $tier,
+                    'ingredient_quantities_snapshot' => $pricingSnapshot['ingredient_quantities'],
                 ];
             }
 
@@ -179,6 +200,8 @@ class BillController extends Controller
                     'customization_name' => $item['customization_name'] ?? null,
                     'ingredients' => $item['ingredients'] ?? null,
                     'removed_ingredients' => $item['removed_ingredients'] ?? [],
+                    'price_tier' => $item['price_tier'] ?? 'standard',
+                    'ingredient_quantities_snapshot' => $item['ingredient_quantities_snapshot'] ?? null,
                 ]);
             }
 
@@ -267,6 +290,9 @@ class BillController extends Controller
                 ],
                 'message' => 'Bill created successfully',
             ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['code' => 'recipe_variant_invalid', 'message' => $e->validator->errors()->first()], 422);
         } catch (\Illuminate\Database\QueryException $e) {
             DB::rollBack();
             if ($e->getCode() === '23P01') {
@@ -285,7 +311,7 @@ class BillController extends Controller
 
     public function exportPDF(Request $request, Bill $bill)
     {
-        $bill->load(['order.items.dish', 'order.bookings', 'order.delivery']);
+        $bill->load(['order.items.dish.priceProfile', 'order.bookings', 'order.delivery']);
 
         $user = auth()->user();
         if (!$bill->order || ($bill->order->user_id !== $user->user_id && $user->role !== 'admin' && $user->role !== 'staff')) {
@@ -304,7 +330,7 @@ class BillController extends Controller
      */
     public function exportPDFAdmin(Request $request, Bill $bill)
     {
-        $bill->load(['order.items.dish', 'order.bookings', 'order.delivery']);
+        $bill->load(['order.items.dish.priceProfile', 'order.bookings', 'order.delivery']);
 
         $language = PreferredLanguage::fromRequest($request);
         $pdf = Pdf::loadView('pdf.invoice', compact('bill', 'language'));

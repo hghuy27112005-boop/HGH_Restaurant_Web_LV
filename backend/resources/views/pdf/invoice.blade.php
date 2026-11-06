@@ -109,6 +109,16 @@
                     <td style="text-align: center;">{{ $loop->iteration }}</td>
                     <td>
                         <div class="highlight">{{ $item->dish ? ($isEnglish ? \App\Support\DishName::english($item->dish) : $item->dish->dish_name) : 'N/A' }}</div>
+                        @if($item->dish?->priceProfile)
+                            @php
+                                $portionLabel = match($item->price_tier) {
+                                    'low' => $isEnglish ? 'Small' : 'Ít',
+                                    'high' => $isEnglish ? 'Large' : 'Nhiều',
+                                    default => $isEnglish ? 'Regular' : 'Vừa',
+                                };
+                            @endphp
+                            <div style="font-size: 11px; color: #666; margin-top: 3px;">{{ $isEnglish ? 'Portion:' : 'Khẩu phần:' }} {{ $portionLabel }}</div>
+                        @endif
                         @if($item->customization_name)
                             <div style="font-size: 11px; color: #666; margin-top: 3px;">{{ $isEnglish ? 'Custom recipe:' : 'Công thức thay thế:' }} {{ $item->customization_name }}</div>
                         @endif

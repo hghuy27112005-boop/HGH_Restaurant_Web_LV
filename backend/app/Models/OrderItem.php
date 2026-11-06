@@ -20,15 +20,20 @@ class OrderItem extends Model
         'removed_ingredients',
         'quantity',
         'unit_price',
+        'price_tier',
+        'ingredient_quantities_snapshot',
     ];
 
     protected $casts = [
         'quantity' => 'integer',
         'unit_price' => 'decimal:2',
         'removed_ingredients' => 'array',
+        'ingredient_quantities_snapshot' => 'array',
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
+
+    protected $hidden = ['ingredient_quantities_snapshot'];
 
     // ============================================
     // RELATIONSHIPS

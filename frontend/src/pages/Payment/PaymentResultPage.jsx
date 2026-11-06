@@ -190,6 +190,11 @@ const PaymentResultPage = () => {
                                                 <tr key={`${item.dish_id || item.dish_name}-${index}`}>
                                                     <td className="py-2 px-3 border border-gray-300">
                                                         <div>{translateDishName(item)}</div>
+                                                        {item.has_price_options && item.price_tier && (
+                                                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                                                {i18n.t('pricing.selectedPortion', { portion: i18n.t(`pricing.portion${item.price_tier === 'low' ? 'Low' : item.price_tier === 'high' ? 'High' : 'Standard'}`) })}
+                                                            </div>
+                                                        )}
                                                         {item.customization_name && (
                                                             <div className="mt-1 text-xs text-gray-500">{i18n.t("Công thức thay thế:", { ns: 'legacy', keySeparator: false }) + " "}{item.customization_name}
                                                             </div>

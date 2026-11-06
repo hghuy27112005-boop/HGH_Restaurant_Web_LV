@@ -11,6 +11,7 @@ return new class extends Migration
         Schema::create('ingredient_stocks', function (Blueprint $table) {
             $table->id('ingredient_stock_id');
             $table->foreignId('ingredient_id')->constrained('ingredients', 'ingredient_id')->cascadeOnDelete();
+            $table->string('unit_code', 12)->default('portion');
             $table->string('ingredient_key', 255);
             $table->string('ingredient_name', 255)->nullable();
             $table->date('stock_date');
@@ -18,7 +19,7 @@ return new class extends Migration
             $table->integer('quantity_left')->default(50);
             $table->integer('refill_count')->default(0);
             $table->timestamps();
-            $table->unique(['ingredient_id', 'stock_date'], 'uq_ingredient_stock_date');
+            $table->unique(['ingredient_id', 'stock_date', 'unit_code'], 'uq_ingredient_stock_date_unit');
         });
     }
 

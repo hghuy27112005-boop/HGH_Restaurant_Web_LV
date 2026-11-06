@@ -31,6 +31,16 @@ class Dish extends Model
         'is_active' => 'boolean',
     ];
 
+    public function priceProfile()
+    {
+        return $this->hasOne(\App\Models\DishPriceProfile::class, 'dish_id', 'dish_id');
+    }
+
+    public function recipeMeasurements()
+    {
+        return $this->hasMany(\App\Models\DishRecipeMeasurement::class, 'dish_id', 'dish_id');
+    }
+
     public function getImageUrlAttribute($value)
     {
         if (!$value)

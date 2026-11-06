@@ -23,6 +23,7 @@ class OrderController extends Controller
             'items' => 'required|array|min:1',
             'items.*.dish_id' => 'required|exists:dishes,dish_id',
             'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
+            'items.*.price_tier' => 'nullable|in:low,standard,high',
             'items.*.customization_name' => 'nullable|string|max:255',
             'items.*.ingredients' => 'nullable|string',
             'items.*.removed_ingredients' => 'nullable|array',
@@ -85,12 +86,31 @@ class OrderController extends Controller
                     ], 422);
                 }
 
-                $realPrice = (float) $dish->price;
-                $subtotalBeforePoints += $realPrice * $item['quantity'];
+                $tier = $item['price_tier'] ?? 'standard';
+                $profile = $dish->priceProfile;
+                if ($profile) {
+                    $realPrice = (float) match ($tier) {
+                        'low' => $profile->price_low,
+                        'high' => $profile->price_high,
+                        default => $profile->price_standard,
+                    };
+                } else {
+                    if ($tier !== 'standard') {
+                        DB::rollBack();
+                        return response()->json(['code' => 'price_variant_invalid', 'message' => $request->header('Accept-Language') === 'en' ? 'The selected dish price is no longer available.' : 'Mức giá món ăn không còn hợp lệ.'], 422);
+                    }
+                    $realPrice = (float) $dish->price;
+                }
                 $recipeSnapshot = app(\App\Services\DishCustomizationService::class)->orderVariantSnapshot(
                     $dish,
                     isset($item['customization_id']) ? (int) $item['customization_id'] : null
                 );
+                $pricingSnapshot = app(\App\Services\TieredRecipeService::class)->orderPricingSnapshot(
+                    $dish, $tier, isset($item['customization_id']) ? (int) $item['customization_id'] : null, (int) $request->user()->user_id,
+                    $request->header('Accept-Language') === 'en' ? 'en' : 'vi'
+                );
+                $realPrice += (int) $pricingSnapshot['price_adjustment'];
+                $subtotalBeforePoints += $realPrice * $item['quantity'];
 
                 $itemsWithRealPrice[] = [
                     'dish_id'  => $item['dish_id'],
@@ -98,6 +118,8 @@ class OrderController extends Controller
                     'customization_name' => $recipeSnapshot['customization_name'],
                     'ingredients' => $recipeSnapshot['ingredients'],
                     'removed_ingredients' => $recipeSnapshot['removed_ingredients'],
+                    'price_tier' => $tier,
+                    'ingredient_quantities_snapshot' => $pricingSnapshot['ingredient_quantities'],
                     'quantity' => $item['quantity'],
                     'price'    => $realPrice,
                 ];
@@ -133,6 +155,8 @@ class OrderController extends Controller
                     'removed_ingredients' => $item['removed_ingredients'] ?? [],
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['price'],
+                    'price_tier' => $item['price_tier'],
+                    'ingredient_quantities_snapshot' => $item['ingredient_quantities_snapshot'],
                 ]);
             }
 
@@ -235,6 +259,9 @@ class OrderController extends Controller
                 ],
                 'message' => 'Order created successfully',
             ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return response()->json(['code' => 'recipe_variant_invalid', 'message' => $e->validator->errors()->first()], 422);
         } catch (\Exception $e) {
             DB::rollBack();
             report($e);
@@ -252,6 +279,7 @@ class OrderController extends Controller
             'items' => 'required|array|min:1',
             'items.*.dish_id' => 'required|exists:dishes,dish_id',
             'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
+            'items.*.price_tier' => 'nullable|in:low,standard,high',
             'items.*.ingredients' => 'nullable|string',
             'items.*.quantity' => 'required|integer|min:1',
         ]);
@@ -317,7 +345,7 @@ class OrderController extends Controller
             $query->whereHas('bill', fn ($q) => $q->where('bill_id', (string) $request->input('invoice')));
         }
 
-        $orders = $query->with(['bill', 'items.dish', 'bookings', 'delivery'])
+        $orders = $query->with(['bill', 'items.dish.priceProfile', 'bookings', 'delivery'])
             ->orderByDesc('created_at')
             ->limit(100)
             ->get();
@@ -385,6 +413,8 @@ class OrderController extends Controller
                     'customization_name' => $item->customization_name,
                     'quantity'   => $item->quantity,
                     'unit_price' => $item->unit_price,
+                    'price_tier' => $item->price_tier,
+                    'has_price_options' => $item->dish?->priceProfile !== null,
                 ]),
             ];
         })->filter()->values();

@@ -35,6 +35,63 @@ const STATUS_FILTERS = [
 ];
 
 const NO_SPIN = '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+const PRICE_GROUPS = {
+    small: { low: 12000, standard: 15000, high: 20000 },
+    medium: { low: 25000, standard: 30000, high: 40000 },
+    large: { low: 35000, standard: 40000, high: 50000 },
+};
+const quantityUnitLabel = (unit, language) => ({
+    g: 'g',
+    kg: 'kg',
+    unit: language === 'en' ? 'unit' : 'cái',
+    small_loaf: language === 'en' ? 'small loaf' : 'ổ nhỏ',
+    large_loaf: language === 'en' ? 'large loaf' : 'ổ lớn',
+}[unit] || 'g');
+const defaultQuantityStep = (category, unit) => (
+    ['small_loaf', 'large_loaf', 'unit'].includes(unit) ? 1
+        : unit === 'kg' ? 0.05
+            : category === 'protein' ? 10
+            : ['mushroom', 'other'].includes(category) ? 25
+                    : 50
+);
+const ingredientNameForLanguage = (ingredient, language) => String(
+    ingredient[language === 'en' ? 'name_en' : 'name_vi']
+    || ingredient.name
+    || ingredient.ingredient_name
+    || ingredient.ingredient_name_vi
+    || ''
+).trim();
+const classifyIngredient = (ingredient) => {
+    const name = `${ingredient.name_vi || ''} ${ingredient.name_en || ''}`.toLocaleLowerCase();
+    if (/nấm|mushroom/.test(name)) return 'mushroom';
+    if (/thịt|bò|heo|lợn|gà|cá|tôm|mực|trứng|đậu hũ|beef|pork|chicken|fish|shrimp|squid|egg|tofu/.test(name)) return 'protein';
+    if (/bánh phở|phở|bún|mì|hủ tiếu|bánh mì|rice noodle|noodle|bread/.test(name)) return 'starch';
+    return 'fixed';
+};
+const savedIngredientRows = (dish) => {
+    const measurements = new Map((dish.recipe_measurements || []).map((row) => [Number(row.ingredient_id), row]));
+    return (dish.ingredient_rules || []).map((rule) => {
+        const ingredient = rule.ingredient || {};
+        const measurement = measurements.get(Number(ingredient.ingredient_id || rule.ingredient_id));
+        const nameVi = ingredient.ingredient_name_vi || ingredient.name_vi || ingredient.ingredient_name || '';
+        const nameEn = ingredient.ingredient_name || ingredient.name_en || ingredient.ingredient_name_vi || '';
+        return {
+            ...ingredient,
+            ingredient_id: Number(ingredient.ingredient_id || rule.ingredient_id),
+            name: i18n.resolvedLanguage?.startsWith('en') ? nameEn : nameVi,
+            name_vi: nameVi,
+            name_en: nameEn,
+            role: rule.role || 'required_replaceable',
+            quantity_category: measurement ? (measurement.is_variable ? (ingredient.quantity_category || classifyIngredient(ingredient)) : 'fixed') : (ingredient.quantity_category || 'fixed'),
+            quantity_unit: measurement?.quantity_unit || ingredient.quantity_unit || 'g',
+            cost_per_unit: ingredient.cost_per_unit ?? '',
+            quantity_step: ingredient.quantity_step ?? defaultQuantityStep(ingredient.quantity_category || classifyIngredient(ingredient), ingredient.quantity_unit || 'g'),
+            minimum_quantity: measurement?.minimum_quantity ?? measurement?.quantity_low ?? '',
+            maximum_quantity: measurement?.maximum_quantity ?? measurement?.quantity_high ?? '',
+            saved_measurement: measurement,
+        };
+    });
+};
 
 const convertImageToJpeg = async (file) => {
     if (file.type === 'image/jpeg') {
@@ -103,6 +160,10 @@ const AdminMenuManagement = () => {
         dish_name: '',
         type_id: '',
         price: 30000,
+        price_group: 'medium',
+        minimum_gross_margin_percent: 10,
+        tax_percent_included: 0,
+        fixed_cost_per_serving: 0,
         ingredients: '',
         recipe_instructions: '',
     });
@@ -215,6 +276,50 @@ const AdminMenuManagement = () => {
         .map((step) => step.trim().replace(/^\d+[.)]\s*/, ''))
         .filter(Boolean);
 
+    const isDishFormComplete = () => {
+        const language = workflowLanguage || currentLanguage;
+        const priceOptions = formData.price_options || PRICE_GROUPS[formData.price_group];
+        const margin = Number(formData.minimum_gross_margin_percent);
+        const tax = Number(formData.tax_percent_included);
+        const fixedCost = Number(formData.fixed_cost_per_serving);
+        const variables = confirmedIngredients.filter((item) => (item.quantity_category || classifyIngredient(item)) !== 'fixed');
+        const hasFixedIngredients = confirmedIngredients.some((item) => (item.quantity_category || classifyIngredient(item)) === 'fixed');
+
+        if (
+            !formData.dish_name.trim() || !formData.type_id || !PRICE_GROUPS[formData.price_group]
+            || (!editMode && !selectedImage) || !confirmedIngredients.length || !recipePreview?.quantities
+            || !String(recipePreview.recipe_instructions || '').trim() || editRequiresReconfirmation
+            || !Number.isFinite(margin) || margin < 0 || margin > 90
+            || !Number.isFinite(tax) || tax < 0 || tax > 100
+            || !Number.isFinite(fixedCost) || fixedCost < 0
+            || (hasFixedIngredients && fixedCost <= 0)
+        ) return false;
+
+        const expectedPrices = PRICE_GROUPS[formData.price_group];
+        if (!['low', 'standard', 'high'].every((tier) => Number(priceOptions?.[tier]) === expectedPrices[tier])) return false;
+
+        const ingredientRowsValid = confirmedIngredients.every((item) => {
+            const name = String(item[language === 'en' ? 'name_en' : 'name_vi'] || item.name || item.ingredient_name || item.ingredient_name_vi || '').trim();
+            return Boolean(item.ingredient_id && name && ['required_replaceable', 'required_fixed', 'optional'].includes(item.role));
+        });
+        if (!ingredientRowsValid) return false;
+
+        return variables.every((item) => {
+            const step = Number(item.quantity_step);
+            const cost = Number(item.cost_per_unit);
+            const minimum = Number(item.minimum_quantity);
+            const maximum = Number(item.maximum_quantity);
+            const rangeIsValid = step > 0 && cost > 0 && minimum > 0 && maximum > minimum
+                && maximum - minimum >= (step - 0.0001);
+            if (!rangeIsValid) return false;
+            const quantities = recipePreview.quantities?.[item.ingredient_id];
+            if (!quantities) return false;
+            const values = ['low', 'standard', 'high'].map((tier) => Number(quantities[tier]));
+            return values.every((value) => Number.isFinite(value) && value >= minimum && value <= maximum && Math.abs((value - minimum) / step - Math.round((value - minimum) / step)) < 0.0001)
+                && values[0] <= values[1] && values[1] <= values[2];
+        });
+    };
+
     // Thống kê trên toàn bộ món (không đổi theo bộ lọc)
     const totalDishes = dishes.length;
     const activeDishes = dishes.filter((d) => d.is_active).length;
@@ -225,6 +330,18 @@ const AdminMenuManagement = () => {
     const handleOpenModal = (dish = null) => {
         if (dish) {
             const english = i18n.resolvedLanguage?.startsWith('en');
+            const savedIngredients = savedIngredientRows(dish);
+            const savedQuantities = Object.fromEntries((dish.recipe_measurements || []).map((row) => [Number(row.ingredient_id), { low: row.quantity_low, standard: row.quantity_standard, high: row.quantity_high }]));
+            const savedPrices = dish.price_profile ? { low: Number(dish.price_profile.price_low), standard: Number(dish.price_profile.price_standard), high: Number(dish.price_profile.price_high) } : PRICE_GROUPS[Number(dish.price) <= 20000 ? 'small' : Number(dish.price) <= 40000 ? 'medium' : 'large'];
+            const margin = Number(dish.price_profile?.minimum_gross_margin_percent ?? 10);
+            const tax = Number(dish.price_profile?.tax_percent_included ?? 0);
+            const variableCosts = Object.fromEntries(['low', 'standard', 'high'].map((tier) => [tier, savedIngredients.reduce((sum, ingredient) => {
+                if ((ingredient.quantity_category || 'fixed') === 'fixed') return sum;
+                const unitPrice = Number(ingredient.cost_per_unit || 0);
+                return sum + Number(savedQuantities[ingredient.ingredient_id]?.[tier] || 0) * unitPrice;
+            }, 0)]));
+            const fixedCost = Number(dish.price_profile?.fixed_cost_per_serving || 0);
+            const budgets = Object.fromEntries(['low', 'standard', 'high'].map((tier) => [tier, (savedPrices[tier] / (1 + tax / 100)) * (1 - margin / 100) - fixedCost]));
             setEditMode(true);
             setIsEditing(false);
             setSelectedDishId(dish.dish_id);
@@ -232,13 +349,18 @@ const AdminMenuManagement = () => {
                 dish_name: english ? dish.dish_name_en || dish.dish_name : dish.dish_name,
                 type_id: dish.type_id,
                 price: dish.price,
+                price_group: dish.price_profile?.price_group || (Number(dish.price) <= 20000 ? 'small' : Number(dish.price) <= 40000 ? 'medium' : 'large'),
+                minimum_gross_margin_percent: dish.price_profile?.minimum_gross_margin_percent ?? 10,
+                tax_percent_included: dish.price_profile?.tax_percent_included ?? 0,
+                fixed_cost_per_serving: dish.price_profile?.fixed_cost_per_serving ?? 0,
+                price_options: savedPrices,
                 ingredients: (english ? dish.ingredients_en : dish.ingredients) || '',
                 recipe_instructions: (english ? dish.recipe_instructions_en : dish.recipe_instructions) || '',
             });
             setPreviewImage(getImageUrl(dish.image_url));
-            setDraftIngredients([]);
-            setConfirmedIngredients([]);
-            setRecipePreview(null);
+            setDraftIngredients(savedIngredients);
+            setConfirmedIngredients(savedIngredients);
+            setRecipePreview(dish.recipe_measurements?.length ? { recipe_instructions: (english ? dish.recipe_instructions_en : dish.recipe_instructions) || '', quantities: savedQuantities, variable_costs: variableCosts, budgets } : null);
             setEditRequiresReconfirmation(false);
             setWorkflowLanguage(null);
         } else {
@@ -254,6 +376,11 @@ const AdminMenuManagement = () => {
                 dish_name: '',
                 type_id: dishTypes.length > 0 ? dishTypes[0].type_id : '',
                 price: 30000,
+                price_group: 'medium',
+                price_options: PRICE_GROUPS.medium,
+                minimum_gross_margin_percent: 10,
+                tax_percent_included: 0,
+                fixed_cost_per_serving: 0,
                 ingredients: '',
                 recipe_instructions: '',
             });
@@ -276,10 +403,17 @@ const AdminMenuManagement = () => {
         const dish = dishes.find((item) => item.dish_id === selectedDishId);
         if (dish) {
             const english = i18n.resolvedLanguage?.startsWith('en');
+            const savedIngredients = savedIngredientRows(dish);
+            const savedQuantities = Object.fromEntries((dish.recipe_measurements || []).map((row) => [Number(row.ingredient_id), { low: row.quantity_low, standard: row.quantity_standard, high: row.quantity_high }]));
             setFormData({
                 dish_name: english ? dish.dish_name_en || dish.dish_name : dish.dish_name,
                 type_id: dish.type_id,
                 price: dish.price,
+                price_group: dish.price_profile?.price_group || 'medium',
+                price_options: dish.price_profile ? { low: Number(dish.price_profile.price_low), standard: Number(dish.price_profile.price_standard), high: Number(dish.price_profile.price_high) } : PRICE_GROUPS.medium,
+                minimum_gross_margin_percent: dish.price_profile?.minimum_gross_margin_percent ?? 10,
+                tax_percent_included: dish.price_profile?.tax_percent_included ?? 0,
+                fixed_cost_per_serving: dish.price_profile?.fixed_cost_per_serving ?? 0,
                 ingredients: (english ? dish.ingredients_en : dish.ingredients) || '',
                 recipe_instructions: (english ? dish.recipe_instructions_en : dish.recipe_instructions) || '',
             });
@@ -287,9 +421,9 @@ const AdminMenuManagement = () => {
         }
         setSelectedImage(null);
         setImageValidationError('');
-        setDraftIngredients([]);
-        setConfirmedIngredients([]);
-        setRecipePreview(null);
+            setDraftIngredients(savedIngredients);
+            setConfirmedIngredients(savedIngredients);
+            setRecipePreview(dish.recipe_measurements?.length ? { recipe_instructions: (english ? dish.recipe_instructions_en : dish.recipe_instructions) || '', quantities: savedQuantities } : null);
         setEditRequiresReconfirmation(false);
         setWorkflowLanguage(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -341,8 +475,16 @@ const AdminMenuManagement = () => {
             setAlertMessage('adminDish.errNeedConfirm');
             return;
         }
+        if (!recipePreview?.quantities || !confirmedIngredients.length) {
+            setAlertMessage('adminDish.errNeedTieredRecipe');
+            return;
+        }
         if (editMode && editRequiresReconfirmation) {
             setAlertMessage('adminDish.errNeedReconfirm');
+            return;
+        }
+        if (!isDishFormComplete()) {
+            setAlertMessage('adminDish.completeFieldsBeforeSave');
             return;
         }
 
@@ -352,13 +494,31 @@ const AdminMenuManagement = () => {
             data.append('dish_name', formData.dish_name);
             data.append('type_id', formData.type_id);
             data.append('language', workflowLanguage || currentLanguage);
+            const priceOptions = formData.price_options || PRICE_GROUPS[formData.price_group];
+            data.append('tiered_recipe', JSON.stringify({
+                price_group: formData.price_group,
+                prices: priceOptions,
+                minimum_gross_margin_percent: Number(formData.minimum_gross_margin_percent ?? 10),
+                tax_percent_included: Number(formData.tax_percent_included ?? 0),
+                fixed_cost_per_serving: Number(formData.fixed_cost_per_serving ?? 0),
+                quantities: confirmedIngredients.map((ingredient) => ({
+                    ingredient_id: Number(ingredient.ingredient_id),
+                    category: ingredient.quantity_category || classifyIngredient(ingredient),
+                    unit: ingredient.quantity_unit || 'g',
+                    cost_per_unit: Number(ingredient.cost_per_unit || 0),
+                    step: Number(ingredient.quantity_step || 50),
+                    minimum_quantity: Number(ingredient.minimum_quantity || 0),
+                    maximum_quantity: Number(ingredient.maximum_quantity || 0),
+                })),
+                measurements: recipePreview.quantities,
+            }));
 
             if (editMode) {
-                data.append('price', formData.price);
+                data.append('price', priceOptions.standard);
                 if (confirmedIngredients.length && recipePreview) {
                     confirmedIngredients.forEach((ingredient, index) => {
                         data.append(`ingredients[${index}][ingredient_id]`, ingredient.ingredient_id);
-                        data.append(`ingredients[${index}][name]`, ingredient.name || ingredient[workflowLanguage === 'en' ? 'name_en' : 'name_vi']);
+                        data.append(`ingredients[${index}][name]`, ingredientNameForLanguage(ingredient, workflowLanguage || currentLanguage));
                         data.append(`ingredients[${index}][role]`, ingredient.role);
                     });
                     data.append('recipe_instructions', recipePreview.recipe_instructions);
@@ -367,10 +527,10 @@ const AdminMenuManagement = () => {
                     data.append('recipe_instructions', formData.recipe_instructions);
                 }
             } else {
-                data.append('price', formData.price);
+                data.append('price', priceOptions.standard);
                 confirmedIngredients.forEach((ingredient, index) => {
                     data.append(`ingredients[${index}][ingredient_id]`, ingredient.ingredient_id);
-                    data.append(`ingredients[${index}][name]`, ingredient.name || ingredient[workflowLanguage === 'en' ? 'name_en' : 'name_vi']);
+                    data.append(`ingredients[${index}][name]`, ingredientNameForLanguage(ingredient, workflowLanguage || currentLanguage));
                     data.append(`ingredients[${index}][role]`, ingredient.role);
                 });
                 data.append('recipe_instructions', recipePreview.recipe_instructions);
@@ -405,12 +565,12 @@ const AdminMenuManagement = () => {
         } catch (err) {
             console.error('Save dish error:', err.response?.data || err.message);
             const code = err.response?.data?.code;
-            setAlertMessage(
+            setAlertMessage(err.response?.data?.message || (
                 code === 'dish_name_invalid' ? 'adminDish.nameInvalid'
                 : code === 'dish_name_duplicate' ? 'adminDish.nameDuplicate'
                 : code === 'translation_unavailable' ? 'adminDish.translationUnavailable'
                 : 'adminDish.saveFailed'
-            );
+            ));
         } finally {
             setBusy(false);
         }
@@ -460,6 +620,19 @@ const AdminMenuManagement = () => {
         if (draftIngredients.some(item => !String(item[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi'] || '').trim())) {
             setAlertMessage('adminDish.emptyIngredient'); return;
         }
+        const invalidVariableSettings = draftIngredients.some((item) => {
+            if ((item.quantity_category || classifyIngredient(item)) === 'fixed') return false;
+            const step = Number(item.quantity_step);
+            const minimum = Number(item.minimum_quantity);
+            const maximum = Number(item.maximum_quantity);
+            return Number(item.cost_per_unit) <= 0 || step <= 0 || minimum <= 0 || maximum <= minimum
+                || maximum - minimum < (step - 0.0001)
+                || (['small_loaf', 'large_loaf', 'unit'].includes(item.quantity_unit) && (!Number.isInteger(minimum) || !Number.isInteger(maximum)));
+        });
+        if (invalidVariableSettings) {
+            setAlertMessage('adminDish.quantitySettingsIncomplete');
+            return;
+        }
         setWorkflowBusy(true);
         setWorkflowAction('confirm');
         try {
@@ -471,26 +644,77 @@ const AdminMenuManagement = () => {
                     editMode ? selectedDishId : null,
                     workflowLanguage || currentLanguage
                 );
-                confirmed = response.data.ingredients || [];
+                const resolvedIngredients = response.data.ingredients || [];
+                confirmed = resolvedIngredients.map((resolved, index) => {
+                    const resolvedName = String(resolved.name || resolved.name_vi || resolved.name_en || '').trim().toLocaleLowerCase();
+                    const submitted = draftIngredients.find((candidate) =>
+                        (candidate.ingredient_id && candidate.ingredient_id === resolved.ingredient_id)
+                        || String(candidate.name || candidate.name_vi || candidate.name_en || '').trim().toLocaleLowerCase() === resolvedName
+                    ) || draftIngredients[index] || {};
+                    return {
+                        ...submitted,
+                        ...resolved,
+                        ingredient_id: resolved.ingredient_id,
+                        role: submitted.role ?? resolved.role,
+                        quantity_category: submitted.quantity_category ?? resolved.quantity_category ?? classifyIngredient({ ...submitted, ...resolved }),
+                        quantity_unit: submitted.quantity_unit ?? resolved.quantity_unit,
+                        cost_per_unit: submitted.cost_per_unit ?? resolved.cost_per_unit ?? '',
+                        quantity_step: submitted.quantity_step ?? resolved.quantity_step,
+                    };
+                });
                 setDraftIngredients(confirmed);
                 setConfirmedIngredients(confirmed);
             }
-            const recipeResponse = await adminAPI.dishes.previewRecipe({
-                ...(editMode ? { dish_id: selectedDishId } : {}),
+            const preparedIngredients = confirmed.map((ingredient, index) => {
+                const resolvedName = String(ingredient.name || ingredient.name_vi || ingredient.name_en || '').trim().toLocaleLowerCase();
+                const submitted = draftIngredients.find((candidate) =>
+                    (candidate.ingredient_id && candidate.ingredient_id === ingredient.ingredient_id)
+                    || String(candidate.name || candidate.name_vi || candidate.name_en || '').trim().toLocaleLowerCase() === resolvedName
+                ) || draftIngredients[index] || {};
+                const merged = { ...ingredient, ...submitted, ingredient_id: ingredient.ingredient_id };
+                const unit = merged.quantity_unit || (/bánh mì|bread/i.test(`${merged.name_vi || ''} ${merged.name_en || ''}`) ? 'small_loaf' : 'g');
+                return {
+                    ...merged,
+                    quantity_category: submitted.quantity_category ?? classifyIngredient(merged),
+                    quantity_unit: unit,
+                    cost_per_unit: merged.cost_per_unit ?? '',
+                    quantity_step: merged.quantity_step ?? defaultQuantityStep(submitted.quantity_category ?? classifyIngredient(merged), unit),
+                };
+            });
+            setConfirmedIngredients(preparedIngredients);
+            setDraftIngredients(preparedIngredients);
+            const priceOptions = formData.price_options || PRICE_GROUPS[formData.price_group];
+            const recipeResponse = await adminAPI.dishes.previewTieredRecipe({
                 dish_name: formData.dish_name.trim(),
-                ingredient_ids: confirmed.map((ingredient) => ingredient.ingredient_id),
-                ingredient_names: confirmed.map((ingredient) => ({
+                language: workflowLanguage || currentLanguage,
+                price_group: formData.price_group,
+                prices: priceOptions,
+                minimum_gross_margin_percent: Number(formData.minimum_gross_margin_percent ?? 10),
+                tax_percent_included: Number(formData.tax_percent_included ?? 0),
+                fixed_cost_per_serving: Number(formData.fixed_cost_per_serving ?? 0),
+                ingredients: preparedIngredients.map((ingredient) => ({
                     ingredient_id: ingredient.ingredient_id,
                     name: ingredient.name || ingredient[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi'],
                 })),
-                language: workflowLanguage || currentLanguage,
+                quantities: preparedIngredients.map((ingredient) => ({
+                    ingredient_id: ingredient.ingredient_id,
+                    category: ingredient.quantity_category,
+                    unit: ingredient.quantity_unit,
+                    cost_per_unit: Number(ingredient.cost_per_unit || 0),
+                    step: Number(ingredient.quantity_step || 50),
+                    minimum_quantity: Number(ingredient.minimum_quantity || 0),
+                    maximum_quantity: Number(ingredient.maximum_quantity || 0),
+                })),
             });
             setRecipePreview({
                 recipe_instructions: recipeResponse.data.recipe_instructions,
+                quantities: recipeResponse.data.quantities,
+                budgets: recipeResponse.data.budgets,
+                variable_costs: recipeResponse.data.variable_costs,
             });
             if (editMode) setEditRequiresReconfirmation(false);
         } catch (err) {
-            setAlertMessage(err.response?.status === 503 ? 'adminDish.aiUnavailable' : 'adminDish.confirmFailed');
+            setAlertMessage(err.response?.data?.message || (err.response?.status === 503 ? 'adminDish.aiUnavailable' : 'adminDish.confirmFailed'));
         } finally {
             setWorkflowBusy(false);
             setWorkflowAction('');
@@ -507,9 +731,45 @@ const AdminMenuManagement = () => {
         setRecipePreview(null);
         if (editMode) setEditRequiresReconfirmation(true);
     };
-    const updateDraftIngredient = (index, field, value) => changeDraftIngredients(current => current.map((ingredient, itemIndex) =>
-        itemIndex === index ? { ...ingredient, [field]: value, ...(field === 'name_vi' || field === 'name_en' ? { ingredient_id: null } : {}) } : ingredient
-    ));
+    const updateDraftIngredient = (index, field, value) => {
+        if (['quantity_category', 'quantity_unit', 'cost_per_unit', 'quantity_step', 'minimum_quantity', 'maximum_quantity'].includes(field)) {
+            const update = current => current.map((ingredient, itemIndex) => {
+                if (itemIndex !== index) return ingredient;
+                const next = { ...ingredient, [field]: value };
+                if (field === 'cost_per_unit') {
+                }
+                if (field === 'quantity_unit') {
+                    const previousUnit = ingredient.quantity_unit || 'g';
+                    if (Number(next.cost_per_unit) > 0 && previousUnit !== value) {
+                        if (previousUnit === 'g' && value === 'kg') next.cost_per_unit = Number((Number(next.cost_per_unit) * 1000).toFixed(4));
+                        else if (previousUnit === 'kg' && value === 'g') next.cost_per_unit = Number((Number(next.cost_per_unit) / 1000).toFixed(4));
+                        else {
+                            next.cost_per_unit = '';
+                        }
+                    }
+                    next.quantity_step = defaultQuantityStep(next.quantity_category || classifyIngredient(next), value);
+                }
+                if (field === 'quantity_category' && value !== 'fixed') next.quantity_step = defaultQuantityStep(value, next.quantity_unit || 'g');
+                return next;
+            });
+            setDraftIngredients(update);
+            setConfirmedIngredients(update);
+            setRecipePreview(null);
+            return;
+        }
+        if (field === 'name_vi' || field === 'name_en') {
+            changeDraftIngredients(current => current.map((ingredient, itemIndex) => itemIndex === index ? {
+                ...ingredient,
+                [field]: value,
+                ingredient_id: null,
+                cost_per_unit: '',
+                minimum_quantity: '',
+                maximum_quantity: '',
+            } : ingredient));
+            return;
+        }
+        changeDraftIngredients(current => current.map((ingredient, itemIndex) => itemIndex === index ? { ...ingredient, [field]: value } : ingredient));
+    };
     const addDraftIngredient = () => {
         if (draftIngredients.length >= 40) return;
         setWorkflowLanguage(workflowLanguage || currentLanguage);
@@ -817,7 +1077,7 @@ const AdminMenuManagement = () => {
                     onMouseDown={handleBackdropMouseDown}
                     onMouseUp={handleBackdropMouseUp}
                 >
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
                         <div className="bg-red-600 px-6 py-4 flex justify-between items-center">
                             <h3 className="text-xl font-bold text-white">
                                 {editMode ? t('adminDish.titleDetail') : t('adminDish.titleNew')}
@@ -828,9 +1088,9 @@ const AdminMenuManagement = () => {
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                    <label className="block min-h-10 text-sm font-semibold text-gray-700 mb-1">
                                         {editMode ? t('adminDish.labelNameFixed') : t('adminDish.labelName')}
                                         {!editMode && " (*)"}
                                     </label>
@@ -854,7 +1114,7 @@ const AdminMenuManagement = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{t('adminDish.labelType')}{!editMode && " (*)"}</label>
+                                    <label className="block min-h-10 text-sm font-semibold text-gray-700 mb-1">{t('adminDish.labelType')}{!editMode && " (*)"}</label>
                                     <select
                                         required disabled={busy || (editMode && !isEditing)}
                                         value={formData.type_id}
@@ -868,42 +1128,60 @@ const AdminMenuManagement = () => {
                                     </select>
                                 </div>
 
-                                <div>
-                                    <label className="block text-sm font-semibold text-gray-700 mb-1">{t('adminDish.labelPrice')}</label>
-                                    <div className="flex w-full items-center rounded border border-gray-300 px-3 focus-within:border-red-500 focus-within:ring-1 focus-within:ring-red-500">
-                                        <input
-                                            type="number" required min="0" step="1000" readOnly={editMode && !isEditing} disabled={busy}
-                                            value={formData.price === '' ? '' : Number(formData.price)}
-                                            onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                            aria-label={`${t('adminDish.labelPrice')} (${currentLanguage === 'en' ? 'VND' : 'đ'})`}
-                                            style={{ width: `${Math.max(String(Number(formData.price) || 0).length + 1, 5)}ch` }}
-                                            className={`min-w-0 max-w-full flex-none py-2 outline-none ${NO_SPIN}`}
-                                        />
-                                        <span aria-hidden="true" className="whitespace-nowrap text-gray-500">
-                                            {currentLanguage === 'en' ? ' VND' : 'đ'}
-                                        </span>
-                                    </div>
+                                <div className="sm:col-span-2 lg:col-span-1">
+                                    <label className="block min-h-10 text-sm font-semibold text-gray-700 mb-1">{currentLanguage === 'en' ? 'Dish price group' : 'Nhóm giá / cỡ món'}</label>
+                                    <select
+                                        disabled={busy || (editMode && !isEditing)}
+                                        value={formData.price_group || 'medium'}
+                                        onChange={e => {
+                                            const group = e.target.value;
+                                            setFormData({ ...formData, price_group: group, price_options: PRICE_GROUPS[group], price: PRICE_GROUPS[group].standard });
+                                            setRecipePreview(null);
+                                        }}
+                                        className="w-full rounded border border-gray-300 px-3 py-2"
+                                    >
+                                        <option value="small">{currentLanguage === 'en' ? 'Small' : 'Nhỏ'} · 12k / 15k / 20k</option>
+                                        <option value="medium">{currentLanguage === 'en' ? 'Medium' : 'Vừa'} · 25k / 30k / 40k</option>
+                                        <option value="large">{currentLanguage === 'en' ? 'Large' : 'Lớn'} · 35k / 40k / 50k</option>
+                                    </select>
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('adminDish.labelImage')}{!editMode && " (*)"}</label>
-                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                                    {previewImage && (
-                                        <img src={previewImage} alt={t('adminDish.labelImage')} className="mx-auto h-32 object-contain mb-3" />
+                            <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                                <div className="min-w-0">
+                                    <label className="mb-2 block text-sm font-semibold text-gray-700">{t('adminDish.labelImage')}{!editMode && " (*)"}</label>
+                                    <div className="flex min-h-[15rem] flex-col justify-center rounded-lg border-2 border-dashed border-gray-300 p-4 text-center">
+                                        {previewImage && (
+                                            <img src={previewImage} alt={t('adminDish.labelImage')} className="mx-auto mb-3 h-32 max-w-full object-contain" />
+                                        )}
+                                        <input
+                                            type="file" ref={fileInputRef} accept="image/*"
+                                            required={!editMode} disabled={busy || (editMode && !isEditing)}
+                                            onChange={handleFileChange}
+                                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
+                                        />
+                                    </div>
+                                    {imageValidationError && (
+                                        <p role="alert" className="mt-2 text-sm font-medium text-red-600">
+                                            {renderMsg(imageValidationError)}
+                                        </p>
                                     )}
-                                    <input
-                                        type="file" ref={fileInputRef} accept="image/*"
-                                        required={!editMode} disabled={busy || (editMode && !isEditing)}
-                                        onChange={handleFileChange}
-                                        className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer"
-                                    />
                                 </div>
-                                {imageValidationError && (
-                                    <p role="alert" className="mt-2 text-sm font-medium text-red-600">
-                                        {renderMsg(imageValidationError)}
-                                    </p>
-                                )}
+
+                                <div className="grid content-center gap-3">
+                                    <label className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,0.8fr)] items-center gap-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                        <span>{currentLanguage === 'en' ? 'Minimum gross margin (%)' : 'Lãi gộp tối thiểu (%)'}</span>
+                                        <input type="number" min="0" max="90" step="1" disabled={busy || (editMode && !isEditing)} value={formData.minimum_gross_margin_percent ?? 10} onChange={e => { setFormData({ ...formData, minimum_gross_margin_percent: e.target.value }); setRecipePreview(null); }} className="w-full min-w-0 rounded border border-gray-300 bg-white px-3 py-2 text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" />
+                                    </label>
+                                    <label className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,0.8fr)] items-center gap-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                        <span>{currentLanguage === 'en' ? 'Tax included in displayed price (%)' : 'Thuế đã gồm trong giá hiển thị (%)'}</span>
+                                        <input type="number" min="0" max="100" step="0.1" disabled={busy || (editMode && !isEditing)} value={formData.tax_percent_included ?? 0} onChange={e => { setFormData({ ...formData, tax_percent_included: e.target.value }); setRecipePreview(null); }} className="w-full min-w-0 rounded border border-gray-300 bg-white px-3 py-2 text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" />
+                                    </label>
+                                    <label className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,0.8fr)] items-center gap-3 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                                        <span>{t('adminDish.fixedCostPerServing')}</span>
+                                        <input type="number" min="0" step="100" aria-label={t('adminDish.fixedCostPerServingAria')} disabled={busy || (editMode && !isEditing)} value={formData.fixed_cost_per_serving ?? 0} onChange={e => { setFormData({ ...formData, fixed_cost_per_serving: e.target.value }); setRecipePreview(null); }} className="w-full min-w-0 rounded border border-gray-300 bg-white px-3 py-2 text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" />
+                                    </label>
+                                </div>
                             </div>
 
                             <div>
@@ -939,7 +1217,7 @@ const AdminMenuManagement = () => {
                                             </button>
                                         </div>
                                         {draftIngredients.map((ingredient, index) => (
-                                            <div key={index} className="grid grid-cols-[minmax(0,1fr)_2.5rem] gap-2 rounded border border-gray-200 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(17rem,1.35fr)_2.5rem]">
+                                            <div key={index} className="grid grid-cols-[minmax(0,1fr)_2.5rem] gap-2 rounded border border-red-600 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(13rem,1fr)_2.5rem]">
                                                 <input
                                                     aria-label={(workflowLanguage || currentLanguage) === 'en' ? t('adminDish.ingredientNameEn') : t('adminDish.ingredientNameVi')}
                                                     value={ingredient[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi'] || ''}
@@ -959,6 +1237,26 @@ const AdminMenuManagement = () => {
                                                     <option value="optional">{t('adminDish.roleOptional')}</option>
                                                 </select>
                                                 <button type="button" onClick={() => removeDraftIngredient(index)} disabled={workflowBusy || busy} aria-label={t('adminDish.removeIngredient', { count: index + 1 })} className="col-start-2 row-span-2 row-start-1 rounded border border-red-300 text-xl font-bold text-red-600 hover:bg-red-50 disabled:opacity-50 sm:col-start-3 sm:row-span-1">−</button>
+                                                <div className="col-span-2 grid grid-cols-2 gap-2 sm:col-span-2 md:grid-cols-[minmax(8rem,0.9fr)_minmax(6rem,0.65fr)_minmax(10rem,1.3fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)_minmax(7rem,0.8fr)]">
+                                                    <select aria-label={t('adminDish.quantityCategoryAria')} value={ingredient.quantity_category || classifyIngredient(ingredient)} disabled={workflowBusy || busy} onChange={e => updateDraftIngredient(index, 'quantity_category', e.target.value)} className="rounded border border-gray-300 px-2 py-2 text-sm">
+                                                        <option value="fixed">{currentLanguage === 'en' ? 'Fixed ingredient' : 'Cố định'}</option><option value="starch">{currentLanguage === 'en' ? 'Starch' : 'Tinh bột'}</option><option value="protein">{currentLanguage === 'en' ? 'Protein' : 'Đạm'}</option><option value="mushroom">{currentLanguage === 'en' ? 'Mushroom' : 'Nấm'}</option><option value="other">{currentLanguage === 'en' ? 'Other main ingredient' : 'Thành phần chính khác'}</option>
+                                                    </select>
+                                                    {((ingredient.quantity_category || classifyIngredient(ingredient)) === 'fixed') ? <div className="rounded bg-gray-50 px-2 py-2 text-xs text-gray-600">{currentLanguage === 'en' ? 'Cost included' : 'Đã tính phí'}</div> : <>
+                                                        <select aria-label={t('adminDish.quantityUnitAria')} value={ingredient.quantity_unit || 'g'} disabled={workflowBusy || busy} onChange={e => updateDraftIngredient(index, 'quantity_unit', e.target.value)} className="rounded border border-gray-300 px-2 py-2 text-sm">
+                                                            <option value="g">g</option><option value="kg">kg</option><option value="unit">{currentLanguage === 'en' ? 'unit' : 'cái'}</option><option value="small_loaf">{currentLanguage === 'en' ? 'small loaf' : 'ổ nhỏ'}</option><option value="large_loaf">{currentLanguage === 'en' ? 'large loaf' : 'ổ lớn'}</option>
+                                                        </select>
+                                                        <input type="number" min="0" step="0.01" aria-label={t('adminDish.costPerUnitAria')} placeholder={t('adminDish.costPerUnitPlaceholder')} value={ingredient.cost_per_unit ?? ''} disabled={workflowBusy || busy} onChange={e => updateDraftIngredient(index, 'cost_per_unit', e.target.value)} className="min-w-0 rounded border border-gray-300 px-2 py-2 text-sm" />
+                                                        <div className="flex min-w-0 items-center gap-2 rounded border border-gray-300 px-2">
+                                                            <input type="number" min="1" step="1" aria-label={t('adminDish.quantityStepAria')} placeholder={t('adminDish.quantityStepPlaceholder')} value={ingredient.quantity_step ?? defaultQuantityStep(ingredient.quantity_category || classifyIngredient(ingredient), ingredient.quantity_unit || 'g')} disabled={workflowBusy || busy} onChange={e => updateDraftIngredient(index, 'quantity_step', e.target.value)} className="min-w-0 w-full border-0 px-0 py-2 text-sm focus:outline-none focus:ring-0" />
+                                                            <span className="shrink-0 text-sm text-gray-500">{quantityUnitLabel(ingredient.quantity_unit || 'g', currentLanguage)}</span>
+                                                        </div>
+                                                        <input type="number" min="0.01" step="any" aria-label={t('adminDish.quantityMinimumAria')} placeholder={t('adminDish.quantityMinimumPlaceholder')} value={ingredient.minimum_quantity ?? ''} disabled={workflowBusy || busy} onChange={e => updateDraftIngredient(index, 'minimum_quantity', e.target.value)} className="min-w-0 rounded border border-gray-300 px-2 py-2 text-sm" />
+                                                        <input type="number" min={Number(ingredient.minimum_quantity || 0.01)} step="any" aria-label={t('adminDish.quantityMaximumAria')} placeholder={t('adminDish.quantityMaximumPlaceholder')} value={ingredient.maximum_quantity ?? ''} disabled={workflowBusy || busy} onChange={e => updateDraftIngredient(index, 'maximum_quantity', e.target.value)} className="min-w-0 rounded border border-gray-300 px-2 py-2 text-sm" />
+                                                    </>}
+                                                </div>
+                                                {(ingredient.quantity_category || classifyIngredient(ingredient)) !== 'fixed' && (
+                                                    <p className="col-span-2 text-xs text-gray-500">{t('adminDish.quantityRangeHelp')}</p>
+                                                )}
                                             </div>
                                         ))}
                                         <button type="button" onClick={addDraftIngredient} disabled={workflowBusy || busy || draftIngredients.length >= 40} className="inline-flex items-center gap-2 rounded border border-blue-600 px-3 py-2 font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50"><span aria-hidden="true">＋</span>{t('adminDish.addIngredient')}</button>
@@ -988,12 +1286,20 @@ const AdminMenuManagement = () => {
                                 {!editMode || isEditing ? (
                                     <div className="space-y-3">
                                         {recipePreview ? (
-                                            <textarea
-                                                rows={5}
-                                                value={recipePreview.recipe_instructions}
-                                                onChange={(event) => setRecipePreview((current) => ({ ...current, recipe_instructions: event.target.value }))}
-                                                className="w-full resize-y rounded border border-gray-300 px-3 py-2"
-                                            />
+                                            <div className="space-y-3">
+                                                <textarea rows={5} value={recipePreview.recipe_instructions} onChange={(event) => setRecipePreview((current) => ({ ...current, recipe_instructions: event.target.value }))} className="w-full resize-y rounded border border-gray-300 px-3 py-2" />
+                                                <div className="overflow-x-auto rounded border border-gray-200">
+                                                    <table className="min-w-full text-sm"><thead className="bg-gray-50"><tr><th className="p-2 text-left">{currentLanguage === 'en' ? 'Ingredient' : 'Nguyên liệu'}</th><th className="p-2">{currentLanguage === 'en' ? 'Low' : 'Ít'}</th><th className="p-2">{currentLanguage === 'en' ? 'Standard' : 'Vừa'}</th><th className="p-2">{currentLanguage === 'en' ? 'High' : 'Nhiều'}</th></tr></thead><tbody>
+                                                        {confirmedIngredients.filter(item => (item.quantity_category || classifyIngredient(item)) !== 'fixed').map(item => <tr key={item.ingredient_id} className="border-t"><td className="p-2">{item.name || item[(workflowLanguage || currentLanguage) === 'en' ? 'name_en' : 'name_vi']}</td>{['low', 'standard', 'high'].map(tier => <td key={tier} className="p-2"><input type="number" min={Number(item.minimum_quantity || 0.01)} step={Number(item.quantity_step || 50)} value={recipePreview.quantities?.[item.ingredient_id]?.[tier] ?? ''} onChange={event => setRecipePreview(current => {
+                                                            const quantities = { ...current.quantities, [item.ingredient_id]: { ...current.quantities[item.ingredient_id], [tier]: Number(event.target.value) } };
+                                                            const variable_costs = Object.fromEntries(['low', 'standard', 'high'].map((priceTier) => [priceTier, confirmedIngredients.reduce((sum, row) => (row.quantity_category || classifyIngredient(row)) === 'fixed' ? sum : sum + Number(quantities[row.ingredient_id]?.[priceTier] || 0) * Number(row.cost_per_unit || 0), 0)]));
+                                                            return { ...current, quantities, variable_costs };
+                                                        })} className="w-24 rounded border border-gray-300 px-2 py-1 text-right" /><span className="ml-1">{item.quantity_unit || 'g'}</span></td>)}</tr>)}
+                                                    </tbody></table>
+                                                </div>
+                                                {confirmedIngredients.every(item => (item.quantity_category || classifyIngredient(item)) === 'fixed') && <p className="text-sm text-amber-700">{t('adminDish.noVariableIngredientsNote')}</p>}
+                                                {confirmedIngredients.some(item => (item.quantity_category || classifyIngredient(item)) !== 'fixed') && <p className="text-xs text-gray-500">{currentLanguage === 'en' ? 'Variable costs / maximum budgets (target: 85–95% budget use): ' : 'Chi phí biến đổi / ngân sách tối đa (mục tiêu dùng 85–95%): '}{['low', 'standard', 'high'].map(tier => `${currentLanguage === 'en' ? tier : ({ low: 'Ít', standard: 'Vừa', high: 'Nhiều' }[tier])}: ${Number(recipePreview.variable_costs?.[tier] || 0).toLocaleString()} / ${Number(recipePreview.budgets?.[tier] || 0).toLocaleString()}${currentLanguage === 'en' ? ' VND' : 'đ'}`).join(' · ')}</p>}
+                                            </div>
                                         ) : (
                                             <input
                                                 type="text"
@@ -1013,6 +1319,19 @@ const AdminMenuManagement = () => {
                                 )}
                             </div>
 
+                            {editMode && !isEditing && (dishes.find((dish) => dish.dish_id === selectedDishId)?.recipe_measurements || []).some((row) => row.is_variable) && <section className="inline-block max-w-full rounded-lg border border-red-600 bg-red-50 p-4 align-top">
+                                <h3 className="mb-2 font-semibold text-red-700">{currentLanguage === 'en' ? 'Admin-only ingredient quantities' : 'Định lượng nguyên liệu (chỉ admin)'}</h3>
+                                <div className="max-w-full overflow-x-auto"><table className="mr-auto w-auto table-auto text-sm"><thead><tr><th className="whitespace-nowrap px-4 py-2 text-left">{currentLanguage === 'en' ? 'Ingredient' : 'Nguyên liệu'}</th><th className="whitespace-nowrap px-4 py-2 text-center">{currentLanguage === 'en' ? 'Low' : 'Ít'}</th><th className="whitespace-nowrap px-4 py-2 text-center">{currentLanguage === 'en' ? 'Standard' : 'Vừa'}</th><th className="whitespace-nowrap px-4 py-2 text-center">{currentLanguage === 'en' ? 'High' : 'Nhiều'}</th></tr></thead><tbody>
+                                    {(dishes.find((dish) => dish.dish_id === selectedDishId)?.recipe_measurements || []).filter((row) => row.is_variable).map((row) => {
+                                        const ingredient = dishes.find((dish) => dish.dish_id === selectedDishId)?.ingredient_rules?.find((rule) => Number(rule.ingredient_id) === Number(row.ingredient_id))?.ingredient;
+                                        const ingredientName = currentLanguage === 'en' ? ingredient?.ingredient_name || ingredient?.ingredient_name_vi : ingredient?.ingredient_name_vi || ingredient?.ingredient_name;
+                                        const unit = row.quantity_unit === 'small_loaf' ? (currentLanguage === 'en' ? 'small loaf' : 'ổ nhỏ') : row.quantity_unit === 'large_loaf' ? (currentLanguage === 'en' ? 'large loaf' : 'ổ lớn') : row.quantity_unit;
+                                        return <tr key={row.ingredient_id} className="border-t border-red-200"><td className="whitespace-nowrap px-4 py-2 text-left">{ingredientName}</td><td className="whitespace-nowrap px-4 py-2 text-center">{row.quantity_low} {unit}</td><td className="whitespace-nowrap px-4 py-2 text-center">{row.quantity_standard} {unit}</td><td className="whitespace-nowrap px-4 py-2 text-center">{row.quantity_high} {unit}</td></tr>;
+                                    })}
+                                </tbody></table></div>
+                            </section>}
+
+                            {isEditing && !isDishFormComplete() && <p role="status" className="text-sm text-red-700">{t(editRequiresReconfirmation ? 'adminDish.errNeedReconfirm' : 'adminDish.completeFieldsBeforeSave')}</p>}
                             <div className="pt-4 border-t border-gray-200 flex justify-between gap-3">
                                 {editMode ? (
                                     <>
@@ -1025,7 +1344,7 @@ const AdminMenuManagement = () => {
                                         {isEditing ? (
                                             <button
                                                 type="submit"
-                                                disabled={busy || workflowBusy || editRequiresReconfirmation}
+                                                disabled={busy || workflowBusy || editRequiresReconfirmation || !isDishFormComplete()}
                                                 className="px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 font-semibold disabled:opacity-50"
                                             >{busy ? t('adminDish.btnSaving') : t('adminDish.btnSaveChanges')}</button>
                                         ) : (
@@ -1045,7 +1364,7 @@ const AdminMenuManagement = () => {
                                         >{t('adminDish.btnCancel')}</button>
                                         <button
                                             type="submit"
-                                            disabled={busy || workflowBusy || (!confirmedIngredients.length || !recipePreview)}
+                                            disabled={busy || workflowBusy || !isDishFormComplete()}
                                             className="px-4 py-2 bg-red-600 rounded text-white hover:bg-red-700 font-semibold disabled:opacity-50"
                                         >{busy
                                             ? t('adminDish.btnCreating')

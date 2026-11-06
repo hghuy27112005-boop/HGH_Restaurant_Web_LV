@@ -35,14 +35,15 @@ class Admin_StockController extends Controller
             ->get();
 
         $stocks = $ingredients->map(function (Ingredient $ingredient) use ($date): IngredientStock {
+            $unitCode = $ingredient->quantity_category === 'fixed' ? 'portion' : ($ingredient->quantity_unit === 'kg' ? 'g' : ($ingredient->quantity_unit ?: 'portion'));
             return IngredientStock::firstOrCreate(
-                ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date],
+                ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date, 'unit_code' => $unitCode],
                 [
                     'ingredient_key' => $ingredient->ingredient_key,
                     // The stock snapshot column is non-nullable in existing databases.
                     'ingredient_name' => $ingredient->ingredient_name ?? '',
-                    'quantity_start' => 50,
-                    'quantity_left' => 50,
+                    'quantity_start' => $ingredient->quantity_category !== 'fixed' && in_array($ingredient->quantity_unit, ['g', 'kg'], true) ? 10000 : 50,
+                    'quantity_left' => $ingredient->quantity_category !== 'fixed' && in_array($ingredient->quantity_unit, ['g', 'kg'], true) ? 10000 : 50,
                     'refill_count' => 0,
                 ]
             )->setAttribute('ingredient_name_en', $ingredient->ingredient_name)
@@ -50,14 +51,16 @@ class Admin_StockController extends Controller
         })->values();
 
         $reservedByIngredient = IngredientReservation::where('stock_date', $date)
-            ->selectRaw('ingredient_id, SUM(quantity) as total')
-            ->groupBy('ingredient_id')
-            ->pluck('total', 'ingredient_id');
+            ->selectRaw('ingredient_id, unit_code, SUM(quantity) as total')
+            ->groupBy('ingredient_id', 'unit_code')
+            ->get()
+            ->keyBy(fn ($row) => $row->ingredient_id . '|' . $row->unit_code)
+            ->map(fn ($row) => (int) $row->total);
 
         $stocks->each(function ($stock) use ($reservedByIngredient) {
-            $reserved = (int) ($reservedByIngredient[$stock->ingredient_id] ?? 0);
+            $reserved = (int) ($reservedByIngredient[$stock->ingredient_id . '|' . $stock->unit_code] ?? 0);
             $stock->setAttribute('reserved', $reserved);
-            $stock->setAttribute('reserve_fund', max(0, Stock::DAILY_CAP - (int) $stock->quantity_start - $reserved));
+            $stock->setAttribute('reserve_fund', max(0, Stock::dailyCapacity($stock->unit_code) - (int) $stock->quantity_start - $reserved));
         });
 
         return response()->json([
@@ -99,6 +102,7 @@ class Admin_StockController extends Controller
                     'email' => $order->user->email,
                 ] : null,
                 'items' => $order->items->map(fn ($item) => [
+                    'order_item_id' => (int) $item->order_item_id,
                     'dish_id' => $item->dish_id,
                     'dish_name' => $item->dish?->dish_name,
                     'dish_name_en' => $item->dish?->dish_name_en,
@@ -114,6 +118,7 @@ class Admin_StockController extends Controller
                     'quantity_before' => $transaction->quantity_before,
                     'quantity_deducted' => $transaction->quantity_deducted,
                     'quantity_after' => $transaction->quantity_after,
+                    'unit_code' => $transaction->stock?->unit_code,
                 ])->values(),
             ];
         })->values();
