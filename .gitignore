@@ -1,3 +1,4 @@
 node_modules
 frontend/i18n-report.txt
 *.dump
+.github
