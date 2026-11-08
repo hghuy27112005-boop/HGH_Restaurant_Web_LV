@@ -31,4 +31,7 @@ OAuth_client.json
 .env.bak
 
 /public/chat_pictures/
+/public/dish-proposals/
+/public/dishes/proposal-*
+/storage/framework/codex-psysh-appdata/
 

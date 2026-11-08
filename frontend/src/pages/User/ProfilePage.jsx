@@ -4,7 +4,7 @@ import Cropper from "react-easy-crop"; // npm install react-easy-crop
 import { useNavigate } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
 
-import { userAPI } from "../../services/api";
+import { userAPI, dishProposalAPI } from "../../services/api";
 
 // ── Giới hạn file ảnh upload ────────────────────────────────────────────────
 const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -278,6 +278,9 @@ export default function ProfilePage() {
 
   // Busy
   const [busy, setBusy] = useState(null);
+  const [voteTickets, setVoteTickets] = useState(0);
+  const [claimedVoteToday, setClaimedVoteToday] = useState(false);
+  const [voteWindowClosed, setVoteWindowClosed] = useState(false);
 
   // ── Fetch user ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -287,6 +290,16 @@ export default function ProfilePage() {
         const u = res.data.data;
         setUser(u);
         setForm({ username: u.username, email: u.email, tele_number: u.tele_number ?? "" });
+        if (u.role !== 'admin') {
+          try {
+            const ballot = await dishProposalAPI.list();
+            setVoteTickets(ballot.data.tickets || 0);
+            setClaimedVoteToday(Boolean(ballot.data.claimed_today));
+            setVoteWindowClosed(!ballot.data.can_claim && !ballot.data.claimed_today);
+          } catch {
+            // Keep core profile loading even if monthly voting is unavailable.
+          }
+        }
       } catch (error) {
         if (error.response?.status === 401) return;
         showToast(i18n.t("Không thể tải thông tin tài khoản. Vui lòng đăng nhập lại.", { ns: 'legacy', keySeparator: false }), "error");
@@ -439,6 +452,8 @@ export default function ProfilePage() {
         .profile-card { display:flex; flex-direction:column; width:100%; max-width:900px; background:#fff; padding:20px; border-radius:12px; box-shadow:0 5px 20px rgba(0,0,0,0.06); }
         .profile-side { text-align:center; padding-bottom:20px; margin-bottom:20px; border-bottom:1px solid #eee; }
         .profile-main { min-width:0; }
+        html[data-theme='dark'] .vote-ticket-panel { background:#3b321c !important; border-color:#76612c !important; color:#f8e7ad; }
+        html[data-theme='dark'] .vote-ticket-panel p { color:#f8e7ad !important; }
         @media (min-width: 700px) {
           .profile-wrap { padding:24px 20px 50px; }
           .profile-card { flex-direction:row; padding:40px; }
@@ -516,6 +531,16 @@ export default function ProfilePage() {
                 </p>
                 <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{i18n.t("Điểm tích lũy:", { ns: 'legacy', keySeparator: false }) + " "}<strong style={{ color: "#C0392B" }}>{user?.points ?? 0}</strong>
                 </p>
+                <div className="vote-ticket-panel rounded-lg border border-amber-200 bg-amber-50 p-3 text-left" style={{ margin: '12px 0' }}>
+                  <p className="font-semibold text-amber-900">{i18n.t('dishCommunity.voteTickets')} : {voteTickets}</p>
+                  {!user?.tele_number && <p className="my-2 text-xs text-amber-900">{i18n.t('dishCommunity.phoneRequired')}</p>}
+                  <button type="button" disabled={claimedVoteToday || voteWindowClosed || busy === 'vote-ticket'} className="mt-2 w-full rounded bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50" onClick={async () => {
+                    setBusy('vote-ticket');
+                    try { const response = await dishProposalAPI.claim(); setVoteTickets(response.data.tickets || 0); setClaimedVoteToday(true); await showToast(i18n.t('dishCommunity.claimToday'), 'success'); }
+                    catch (error) { showToast(error.response?.data?.message || i18n.t('dishCommunity.error'), 'error'); }
+                    finally { setBusy(null); }
+                  }}>{claimedVoteToday ? i18n.t('dishCommunity.claimToday') : voteWindowClosed ? i18n.t('dishCommunity.voteClosed') : i18n.t('dishCommunity.receiveTicket')}</button>
+                </div>
                 <p style={{ color: "#555", margin: "0 0 8px", fontSize: 15, fontWeight: 600 }}>{i18n.t("Lượt hủy đơn:", { ns: 'legacy', keySeparator: false })}{" "}
                   <strong style={{ color: (user?.cancel_attempts_left ?? 0) === 0 ? "#C0392B" : "#333" }}>
                     {user?.cancel_attempts_left ?? 0}/2

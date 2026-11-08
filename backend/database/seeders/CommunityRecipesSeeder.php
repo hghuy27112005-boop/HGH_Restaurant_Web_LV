@@ -96,13 +96,34 @@ class CommunityRecipesSeeder extends Seeder
         $attributes = ['user_id' => $owner->user_id, 'dish_id' => $dish->dish_id, 'recipe_name' => mb_substr($vi, 0, 255), 'recipe_name_en' => mb_substr($en, 0, 255),
             'ingredients' => implode(', ', $resolved['ingredients']), 'recipe_instructions' => $instructions['vi'], 'recipe_instructions_en' => $instructions['en'],
             'removed_ingredients' => $resolved['removed_ingredients'], 'replacements' => $resolved['replacements'], 'add_on_ingredients' => $resolved['add_ons'], 'selection' => $selection];
-        $custom = DishCustomization::firstOrCreate(['seed_key' => $key], $attributes);
-        // Do not recreate seed likes a user has removed, or overwrite live interactions.
-        if (DB::table('community_recipes')->where('seed_key', $key)->exists()) return;
+        // Refresh deterministic seed rows so recipes created before priced gram
+        // substitutions are rebuilt from the current compatible ingredient catalog.
+        $custom = DishCustomization::firstOrNew(['seed_key' => $key])->fill($attributes);
+        if ($custom->isDirty()) {
+            $custom->save();
+        }
         $snapshot = app(DishCustomizationService::class)->presentCustomizations(collect([$custom]))->first();
+        if (empty($snapshot['pricing_available'])) {
+            $this->command?->warn('Skipped unpriceable community recipe seed ' . $key . '.');
+            return;
+        }
+        // Validate and resolve the selected replacement quantity at every tier.
+        // This also catches stale/non-gram-compatible selections before publishing.
+        $tiered = app(\App\Services\TieredRecipeService::class);
+        foreach (['low', 'standard', 'high'] as $tier) {
+            $tiered->orderPricingSnapshot($dish, $tier, (int) $custom->dish_customization_id, (int) $owner->user_id, 'vi');
+        }
         $snapshot['is_seeded'] = true;
         $createdAt = now()->startOfDay()->subDays(15 + $this->number($key, 15));
-        DB::table('community_recipes')->insertOrIgnore(['seed_key' => $key, 'dish_id' => $dish->dish_id, 'user_id' => $owner->user_id, 'recipe' => json_encode($snapshot, JSON_UNESCAPED_UNICODE), 'created_at' => $createdAt, 'updated_at' => $createdAt]);
+        $communityRecipe = ['dish_id' => $dish->dish_id, 'user_id' => $owner->user_id,
+            'recipe' => json_encode($snapshot, JSON_UNESCAPED_UNICODE), 'updated_at' => $createdAt];
+        $existingRecipeId = DB::table('community_recipes')->where('seed_key', $key)->value('id');
+        if ($existingRecipeId) {
+            // Keep the row ID so existing likes/comments remain attached.
+            DB::table('community_recipes')->where('id', $existingRecipeId)->update($communityRecipe);
+        } else {
+            DB::table('community_recipes')->insert(['seed_key' => $key, ...$communityRecipe, 'created_at' => $createdAt]);
+        }
         $id = DB::table('community_recipes')->where('seed_key', $key)->value('id');
         $audience = $this->shuffled($users->where('user_id', '!=', $owner->user_id), $key);
         $likeCount = min($audience->count(), 10 + $this->number('likes:' . $key, 41));

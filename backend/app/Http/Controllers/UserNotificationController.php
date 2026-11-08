@@ -46,6 +46,8 @@ class UserNotificationController extends Controller
         return match ($notification->type) {
             'booking_reminder' => 'Upcoming booking',
             'delivery_preparing' => 'Delivery order is being prepared',
+            'monthly_dish_winner' => 'Monthly dish voting has ended',
+            'monthly_dish_no_winner' => 'Monthly dish voting: no winner',
             'account_locked' => 'Account locked',
             'account_unlocked' => 'Account access restored',
             default => $notification->title,
@@ -54,6 +56,15 @@ class UserNotificationController extends Controller
 
     private function localizedMessage(UserNotification $notification, string $language): string
     {
+        if ($notification->type === 'monthly_dish_winner'
+            && preg_match('/^monthly-dish-winner:(\d{4})-(\d{2}):\d+$/', (string) $notification->event_key, $matches)) {
+            $period = "{$matches[2]}/{$matches[1]}";
+
+            return $language === 'en'
+                ? "The new-dish vote for {$period} has ended. Please contact the chatbot for more details."
+                : "Đã kết thúc bình chọn món mới kỳ {$period}. Vui lòng liên hệ chatbot để biết thêm thông tin chi tiết.";
+        }
+
         if ($language !== 'en') {
             return $notification->message;
         }
@@ -61,6 +72,7 @@ class UserNotificationController extends Controller
         return match ($notification->type) {
             'booking_reminder' => $this->bookingReminderMessage($notification->message),
             'delivery_preparing' => $this->deliveryPreparingMessage($notification->message),
+            'monthly_dish_winner', 'monthly_dish_no_winner' => $notification->message,
             'account_locked' => $this->accountLockedMessage($notification->message),
             'account_unlocked' => str_contains($notification->message, 'hết thời hạn')
                 ? 'Your account has been unlocked because the suspension period has ended.'

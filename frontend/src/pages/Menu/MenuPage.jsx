@@ -373,7 +373,7 @@ const MenuPage = () => {
                     <EmptyState
                         icon="🔍"
                         title={i18n.t("Không tìm thấy", { ns: 'legacy', keySeparator: false })}
-                        description={i18n.t("Không có món ăn phù hợp với tìm kiếm của bạn", { ns: 'legacy', keySeparator: false })}
+                        description={i18n.t(selectedType && selectedType !== 'bestseller' ? "Không có món ăn thuộc loại này" : "Không có món ăn phù hợp với tìm kiếm của bạn", { ns: 'legacy', keySeparator: false })}
                     />
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -424,7 +424,7 @@ const MenuPage = () => {
                 confirmText={t('pricing.addToCart')}
             >
                 <div className="flex flex-col gap-4">
-                    {selectedDish?.price_options?.length > 0 && <div>
+                    {selectedDish?.supports_tiered_portions !== false && selectedDish?.price_options?.length > 0 && <div>
                         <label className="mb-2 block font-semibold text-gray-700 dark:text-gray-200">{t('pricing.portionSizes')}</label>
                         <div className="grid grid-cols-3 gap-2">{selectedDish.price_options.map((option) => {
                             const total = Number(option.price) + Number(selectedCustomization?.price_adjustment || 0);
@@ -438,7 +438,7 @@ const MenuPage = () => {
                         <span className="text-sm font-semibold text-green-700 dark:text-green-300">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
                     </div>
 
-                    <div>
+                    {selectedDish?.allows_customer_recipe_customization !== false && <div>
                         <label className="block font-semibold mb-2 text-gray-700 dark:text-gray-200">{i18n.t("Chọn công thức thay thế", { ns: 'legacy', keySeparator: false })}</label>
                         <div className="flex flex-col items-start gap-2">
                             <button
@@ -461,7 +461,7 @@ const MenuPage = () => {
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    </div>}
 
                     <div>
                         <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-200">{i18n.t("Nhập số lượng", { ns: 'legacy', keySeparator: false })}</label>

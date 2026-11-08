@@ -46,10 +46,10 @@ class TieredRecipeService
             if ($isVariable && (!in_array($unit, ['g', 'kg', 'small_loaf', 'large_loaf', 'unit'], true) || $cost <= 0 || $step <= 0)) {
                 throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Nguyên liệu có định lượng cần đơn vị, đơn giá và bước tăng hợp lệ.', 'Variable ingredients need a valid unit, unit cost, and quantity step.')]);
             }
-            if ($isVariable && in_array($unit, ['small_loaf', 'large_loaf', 'unit'], true) && ((int) $step !== $step || $step < 1)) {
+            if ($isVariable && in_array($unit, ['small_loaf', 'large_loaf', 'unit'], true) && (floor($step) !== $step || $step < 1)) {
                 throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Bánh mì và nguyên liệu tính theo cái phải dùng bước tăng là số nguyên.', 'Loaves and count-based ingredients must use a whole-number quantity step.')]);
             }
-            if ($isVariable && in_array($unit, ['small_loaf', 'large_loaf', 'unit'], true) && $minimum !== null && $maximum !== null && ((int) $minimum !== $minimum || (int) $maximum !== $maximum)) {
+            if ($isVariable && in_array($unit, ['small_loaf', 'large_loaf', 'unit'], true) && $minimum !== null && $maximum !== null && (floor($minimum) !== $minimum || floor($maximum) !== $maximum)) {
                 throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Bánh mì và nguyên liệu tính theo cái phải có định lượng tối thiểu/tối đa là số nguyên.', 'Loaves and count-based ingredients must use whole-number minimum and maximum quantities.')]);
             }
             if ($isVariable && (
@@ -305,10 +305,68 @@ class TieredRecipeService
         });
     }
 
+    public function persistFixedPriceDish(Dish $dish, array $ingredientIds, int $price): void
+    {
+        if (!in_array($price, [15000, 30000, 40000], true)) {
+            throw ValidationException::withMessages(['price' => 'Món Nước & chè phải dùng một trong các giá 15.000đ, 30.000đ hoặc 40.000đ.']);
+        }
+
+        DB::transaction(function () use ($dish, $ingredientIds, $price): void {
+            DishPriceProfile::updateOrCreate(['dish_id' => $dish->dish_id], [
+                'price_group' => 'fixed',
+                'price_low' => $price,
+                'price_standard' => $price,
+                'price_high' => $price,
+                'minimum_gross_margin_percent' => 0,
+                'tax_percent_included' => 0,
+                'fixed_cost_per_serving' => 0,
+            ]);
+
+            DishRecipeMeasurement::where('dish_id', $dish->dish_id)
+                ->whereNotIn('ingredient_id', $ingredientIds)
+                ->delete();
+            foreach ($ingredientIds as $id) {
+                DishRecipeMeasurement::updateOrCreate(
+                    ['dish_id' => $dish->dish_id, 'ingredient_id' => $id],
+                    [
+                        'quantity_unit' => 'portion',
+                        'quantity_low' => null,
+                        'quantity_standard' => null,
+                        'quantity_high' => null,
+                        'minimum_quantity' => null,
+                        'maximum_quantity' => null,
+                        'unit_cost_snapshot' => null,
+                        'unit_cost_unit' => 'portion',
+                        'is_variable' => false,
+                    ]
+                );
+            }
+        });
+    }
+
     public function orderPricingSnapshot(Dish $dish, string $tier, ?int $customizationId, int $userId, string $language = 'vi'): array
     {
         if (!in_array($tier, ['low', 'standard', 'high'], true)) {
             throw ValidationException::withMessages(['price_tier' => $this->localized($language, 'Mức khẩu phần không hợp lệ.', 'The selected portion size is invalid.')]);
+        }
+        $type = $dish->type()->first();
+        if ($type && !$type->supports_tiered_portions) {
+            if ($tier !== 'standard' || $customizationId !== null) {
+                throw ValidationException::withMessages(['price_tier' => $this->localized($language, 'Món thuộc loại giá cố định và không cho chỉnh sửa công thức.', 'This dish has a fixed price and does not allow recipe customization.')]);
+            }
+            $measurements = $dish->recipeMeasurements()->with('ingredient')->get();
+            $rows = $measurements->map(function ($measurement): ?array {
+                $ingredient = $measurement->ingredient;
+                if (!$ingredient) return null;
+                return [
+                    'ingredient_id' => (int) $measurement->ingredient_id,
+                    'name' => $ingredient->ingredient_name_vi ?: $ingredient->ingredient_name ?: $ingredient->ingredient_key,
+                    'quantity' => 1,
+                    'unit' => 'portion',
+                    'unit_cost_snapshot' => null,
+                ];
+            })->filter()->values()->all();
+            return ['ingredient_quantities' => $rows, 'price_adjustment' => 0, 'variable_cost' => 0];
         }
         if (!$dish->priceProfile()->exists()) {
             $this->rejectUnpricedLegacyAddOns($dish, $customizationId, $userId, $language);

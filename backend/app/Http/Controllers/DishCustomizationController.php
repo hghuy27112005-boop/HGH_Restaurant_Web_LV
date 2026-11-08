@@ -76,6 +76,23 @@ class DishCustomizationController extends Controller
                     ->where('seed_key', 'pho:' . $data['selection']['template_key'])->first()
                 : null;
             $unchangedTemplate = $template && empty($data['selection']['replacements']) && empty($data['selection']['removed_ingredient_ids']) && empty($data['selection']['add_on_ingredient_ids']);
+            $englishIngredientLabels = [
+                'bot gao' => 'Rice flour', 'bot nang' => 'Tapioca starch',
+                'tom tuoi' => 'Fresh shrimp', 'tom' => 'Shrimp',
+                'hanh la' => 'Green onion', 'dau an' => 'Cooking oil',
+                'nuoc mam' => 'Fish sauce', 'duong' => 'Sugar', 'ot' => 'Chili',
+                'hanh phi' => 'Fried shallots', 'top mo' => 'Pork cracklings',
+                'me' => 'Sesame',
+            ];
+            $recipeIngredientRecords = collect($resolved['ingredients_structured'])->map(function (array $ingredient) use ($englishIngredientLabels): array {
+                $nameVi = trim((string) ($ingredient['name_vi'] ?? $ingredient['name'] ?? ''));
+                $key = Str::ascii(Str::lower($nameVi));
+                $nameEn = $englishIngredientLabels[$key] ?? trim((string) ($ingredient['name_en'] ?? $ingredient['name'] ?? $nameVi));
+                return [...$ingredient, 'name_en' => $nameEn];
+            })->all();
+            $recipeIngredientNames = collect($recipeIngredientRecords)
+                ->map(fn (array $ingredient) => $ingredient['name_en'] ?? $ingredient['name'] ?? '')
+                ->all();
             $forbiddenIngredients = collect($resolved['removed_ingredients_structured'])
                 ->merge(collect($resolved['replacements_structured'])->pluck('from'))
                 ->unique('ingredient_id')
@@ -85,25 +102,27 @@ class DishCustomizationController extends Controller
                 : $gemini->generateRecipeForFinalIngredients(
                     (string) $dish->dish_name,
                     (string) ($dish->dish_name_en ?: $dish->dish_name),
-                    $resolved['ingredients'],
-                    $resolved['ingredients_structured'],
+                    $recipeIngredientNames,
+                    $recipeIngredientRecords,
                     $forbiddenIngredients
                 );
 
-            $selectedIngredientIds = collect($resolved['ingredients_structured'])
-                ->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all();
-            $catalogGuard = app(\App\Services\RecipeIngredientCatalogGuard::class);
-            $revised['vi'] = $catalogGuard->canonicalizeSelectedAliases($revised['vi'], $selectedIngredientIds, 'vi');
-            $revised['en'] = $catalogGuard->canonicalizeSelectedAliases($revised['en'], $selectedIngredientIds, 'en');
-            $unselectedMentions = $catalogGuard->findUnselectedMentions([$revised['vi'], $revised['en']], $selectedIngredientIds);
-            if ($unselectedMentions !== []) {
-                $ingredientNames = implode(', ', $unselectedMentions);
-                return response()->json([
-                    'code' => 'recipe_ingredient_catalog_mismatch',
-                    'message' => $data['language'] === 'en'
-                        ? "The recipe mentions ingredient(s) not selected: {$ingredientNames}. Please generate the preview again."
-                        : "Công thức có nhắc đến nguyên liệu chưa chọn: {$ingredientNames}. Vui lòng tạo lại bản xem trước.",
-                ], 422);
+            if (!$unchangedTemplate) {
+                $selectedIngredientIds = collect($resolved['ingredients_structured'])
+                    ->pluck('ingredient_id')->map(fn ($id) => (int) $id)->all();
+                $catalogGuard = app(\App\Services\RecipeIngredientCatalogGuard::class);
+                $revised['vi'] = $catalogGuard->canonicalizeSelectedAliases($revised['vi'], $selectedIngredientIds, 'vi');
+                $revised['en'] = $catalogGuard->canonicalizeSelectedAliases($revised['en'], $selectedIngredientIds, 'en');
+                $unselectedMentions = $catalogGuard->findUnselectedMentions([$revised['vi'], $revised['en']], $selectedIngredientIds);
+                if ($unselectedMentions !== []) {
+                    $ingredientNames = implode(', ', $unselectedMentions);
+                    return response()->json([
+                        'code' => 'recipe_ingredient_catalog_mismatch',
+                        'message' => $data['language'] === 'en'
+                            ? "The recipe mentions ingredient(s) not selected: {$ingredientNames}. Please generate the preview again."
+                            : "Công thức có nhắc đến nguyên liệu chưa chọn: {$ingredientNames}. Vui lòng tạo lại bản xem trước.",
+                    ], 422);
+                }
             }
         } catch (RuntimeException|ConnectionException|RequestException $exception) {
             report($exception);
@@ -188,7 +207,10 @@ class DishCustomizationController extends Controller
 
     public function destroy($dishId, $customizationId)
     {
-        Dish::findOrFail($dishId);
+        $dish = Dish::findOrFail($dishId);
+        if (!$dish->type()->value('allows_customer_recipe_customization')) {
+            return response()->json(['message' => 'Món thuộc loại này không cho phép chỉnh sửa công thức.'], 422);
+        }
         Auth::user()->dishCustomizations()->where('dish_id', $dishId)->whereKey($customizationId)->firstOrFail()->delete();
 
         return response()->json(['success' => true]);

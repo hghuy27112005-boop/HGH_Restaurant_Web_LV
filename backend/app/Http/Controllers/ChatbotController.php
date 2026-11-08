@@ -7,6 +7,7 @@ use App\Models\ChatMessage;
 use App\Services\GeminiChatbotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Services\ContentModerationService;
 
 class ChatbotController extends Controller
@@ -174,7 +175,7 @@ class ChatbotController extends Controller
             if (!$record || ($record['caption_hash'] ?? '') !== hash('sha256', (string) $request->user_input)
                 || !isset($record['expires_at']) || now()->gte(\Carbon\Carbon::parse($record['expires_at']))) $sameApprovedCaption = false;
         }
-        if (function_exists('set_time_limit')) @set_time_limit(90);
+        if (PHP_SAPI !== 'cli' && function_exists('set_time_limit')) @set_time_limit(90);
         if ($request->type === 'text' && !$request->boolean('resume_pending')) {
             // Uploaded images and this exact caption were already moderated together.
             // New captions still go through moderation; approved old images need not
@@ -280,6 +281,13 @@ class ChatbotController extends Controller
                 ->where('message_id', '<', $currentUserMessageId)
                 ->orderByDesc('message_id')->limit(8)->get(['sender', 'content'])
                 ->reverse()->values()->toArray();
+            $lastMessage = end($history);
+            $question = \Illuminate\Support\Str::ascii(mb_strtolower((string) $request->input('user_input')));
+            if (($lastMessage['sender'] ?? null) === 'bot'
+                && in_array($lastMessage['content'], [$this->ballotWarning('vi'), $this->ballotWarning('en')], true)
+                && preg_match('/\b(?:(?:bao gio|khi nao|may gio)\b[^?]*\bhoi lai\b|when\b[^?]*\bask again\b)/', $question)) {
+                return $this->ballotCooldownReply($user, $session, (string) $request->input('lang', 'vi'));
+            }
             $catalog = app(\App\Services\SavedInvoiceLibrary::class)->catalog((int) $user->user_id, $requestedInvoiceCode);
             foreach ($catalog as &$entry) {
                 $entry['attached_to_current_turn'] = in_array($entry['image_message_id'], $visualIds, true) || ($resuming && $entry['image_message_id'] > $currentUserMessageId);
@@ -291,10 +299,16 @@ class ChatbotController extends Controller
                 $context['visual'] = ['message_ids' => $visualIds, 'summary' => $freeform['visual_context'] ?? null, 'expires_at' => now()->addMinutes(30)->toIso8601String()];
                 $session->update(['context_data' => $context]);
             }
+            if (!$imageOnly && !empty($freeform['ballot_cooldown_question'])) {
+                return $this->ballotCooldownReply($user, $session, (string) $request->input('lang', 'vi'));
+            }
+            if (!$imageOnly && !empty($freeform['ballot_question'])) {
+                return $this->dishVoteChatbotReply($user, $session, $freeform['ballot_question'], $freeform['ballot_period'] ?? 'latest_published', (string) $request->input('lang', 'vi'), $history);
+            }
             $matchedId = 'unclear';
-            $reply = $freeform['reply'];
-            $suggestedRoute = $freeform['suggested_route'];
-            $suggestedLabel = $freeform['suggested_label'];
+            $reply = $freeform['reply'] ?? '';
+            $suggestedRoute = $freeform['suggested_route'] ?? null;
+            $suggestedLabel = $freeform['suggested_label'] ?? null;
             $invoiceAction = $freeform['invoice_action'] ?? 'none';
             if (in_array($invoiceAction, ['code', 'explain', 'clarify'], true)) {
                 $suggestedRoute = null;
@@ -348,6 +362,131 @@ class ChatbotController extends Controller
         ]);
     }
 
+    private function dishVoteChatbotReply($user, ChatSession $session, string $question, string $period, string $language, array $history)
+    {
+        $warn = DB::transaction(function () use ($user): bool {
+            $limits = DB::table('chatbot_dish_vote_limits');
+            $limits->insertOrIgnore(['user_id' => $user->user_id, 'created_at' => now()]);
+            $limit = $limits->where('user_id', $user->user_id)->lockForUpdate()->first();
+            $now = now();
+            // Only a lookup or warning under the new policy starts the rolling window.
+            $warn = $limit->ballot_last_requested_at
+                && $now->lt(\Illuminate\Support\Carbon::parse($limit->ballot_last_requested_at)->addHours(4));
+            $limits->update(['ballot_last_requested_at' => $now, 'updated_at' => $now]);
+
+            return $warn;
+        });
+        if ($warn) {
+            return $this->sendDishVoteReply($session, $this->ballotWarning($language), true);
+        }
+
+        $cycles = DB::table('dish_proposal_cycles')
+            ->when($period === 'latest_published', fn ($query) => $query->whereNotNull('announced_at')->whereNotNull('finalized_at'))
+            ->orderByDesc('cycle_key')->limit($period === 'latest_published' ? 1 : 36)->get([
+            'cycle_key', 'status', 'top_results', 'winner_dish_name', 'winner_username', 'announced_at', 'finalized_at',
+        ])->map(function ($cycle) {
+            $isPublicResult = (bool) $cycle->announced_at && (bool) $cycle->finalized_at;
+            $top = $isPublicResult ? (json_decode($cycle->top_results ?? '[]', true) ?: []) : [];
+            $fact = [
+                'cycle_key' => $cycle->cycle_key,
+                'status' => $isPublicResult ? $cycle->status : 'open',
+                'result_announced' => $isPublicResult,
+                'top_dishes' => array_map(fn ($row) => [
+                    'dish_name' => $row['dish_name'] ?? '',
+                    'votes' => (int) ($row['votes'] ?? 0),
+                ], $top),
+            ];
+            if ($isPublicResult && $cycle->status === 'finalized' && $cycle->winner_username) {
+                $fact['winner'] = [
+                    'dish_name' => $cycle->winner_dish_name,
+                    'proposer_name' => $cycle->winner_username,
+                ];
+            }
+            return $fact;
+        })->values()->all();
+
+        $facts = [
+            'requested_period' => $period,
+            'customer_name_for_reward_check' => $user->username,
+        ];
+        if ($period === 'latest_published') {
+            // Only the latest public result belongs in this lookup. The current
+            // standings and unpublished summaries cannot answer this question.
+            $facts['latest_published_cycle'] = collect($cycles)->firstWhere('result_announced', true);
+        } elseif ($period === 'current') {
+            $facts += $this->currentBallotFacts($cycles);
+        } else {
+            $facts['available_cycle_results'] = $cycles;
+        }
+
+        $reply = $this->gemini->answerDishVoteInquiry($question, $language, $history, $facts, now()->format('Y-m-d'));
+
+        return $this->sendDishVoteReply($session, $reply);
+    }
+
+    private function ballotWarning(string $language): string
+    {
+        return $language === 'en'
+            ? 'Please wait four hours from now before asking about the dish vote results again.'
+            : 'Quý khách vui lòng đợi 4 tiếng kể từ bây giờ trước khi hỏi lại về kết quả bình chọn món ăn.';
+    }
+
+    private function ballotCooldownReply($user, ChatSession $session, string $language)
+    {
+        $lastRequest = DB::table('chatbot_dish_vote_limits')->where('user_id', $user->user_id)->value('ballot_last_requested_at');
+        $availableAt = $lastRequest ? \Illuminate\Support\Carbon::parse($lastRequest)->addHours(4) : now();
+        if ($availableAt->lte(now())) {
+            $reply = $language === 'en' ? 'You can ask about the dish vote results now.' : 'Bạn có thể hỏi kết quả bình chọn ngay bây giờ.';
+        } else {
+            $reply = $language === 'en'
+                ? 'You can ask about the dish vote results again at '.$availableAt->format('H:i, M j, Y').' (Vietnam time).'
+                : 'Bạn có thể hỏi kết quả bình chọn lại từ '.$availableAt->format('H:i, d/m/Y').' (giờ Việt Nam).';
+        }
+
+        return $this->sendDishVoteReply($session, $reply);
+    }
+
+    private function currentBallotFacts(array $cycles): array
+    {
+        $currentCycle = now()->format('Y-m');
+        $currentStandings = DB::table('dish_proposals as p')
+            ->leftJoin('dish_proposal_votes as v', 'v.proposal_id', '=', 'p.id')
+            ->where('p.cycle_key', $currentCycle)
+            ->groupBy('p.id')
+            ->select('p.dish_name', DB::raw('COALESCE(SUM(v.quantity), 0) as votes'))
+            ->orderByDesc('votes')->orderBy('p.id')->get();
+        if ($currentStandings->isNotEmpty()) {
+            $maxVotes = (int) $currentStandings->first()->votes;
+            $tiedForFirst = $maxVotes > 0 ? $currentStandings->where('votes', $maxVotes)->count() : 0;
+            $currentStandings = $tiedForFirst > 5
+                ? $currentStandings->where('votes', $maxVotes)->values()
+                : $currentStandings->take(5)->values();
+        }
+
+        return [
+            'current_cycle_key' => $currentCycle,
+            'current_standings' => $currentStandings->map(fn ($row) => [
+                'dish_name' => $row->dish_name,
+                'votes' => (int) $row->votes,
+            ])->values()->all(),
+            'current_cycle_result' => collect($cycles)->firstWhere('cycle_key', $currentCycle),
+        ];
+    }
+
+    private function sendDishVoteReply(ChatSession $session, string $reply, bool $warning = false)
+    {
+        ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'bot', 'content' => $reply]);
+
+        return response()->json([
+            'success' => true,
+            'matched_id' => 'unclear',
+            'reply' => $reply,
+            'ballot_warning' => $warning,
+            'suggested_route' => null,
+            'suggested_label' => null,
+        ]);
+    }
+
     public function chatDays()
     {
         $user = Auth::user();
@@ -385,9 +524,10 @@ class ChatbotController extends Controller
 
     public function moderationStatus()
     {
+        $moderation = $this->moderation->status(Auth::id());
         return response()->json([
             'success' => true,
-            'moderation' => $this->moderation->status(Auth::id()),
+            'moderation' => $moderation,
         ]);
     }
 

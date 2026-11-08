@@ -62,7 +62,7 @@ class DatabaseSeeder extends Seeder
 
         // 3. Seed Users
         //    - user_id 1001-1006: admin + 5 tài khoản demo (Bronze → Diamond)
-        //    - user_id 1-100    : 100 user seed (user101 → user200), mỗi 20 người một hạng
+        //    - user_id 1-100    : 100 user seed (user001 → user100), mỗi 20 người một hạng
         $passwordHash = Hash::make('password'); // dùng chung 1 hash cho nhanh (cùng mật khẩu "password")
         $now = now();
 
@@ -99,14 +99,14 @@ class DatabaseSeeder extends Seeder
         }
 
         for ($n = 1; $n <= 100; $n++) {
-            $stt = 100 + $n; // 101 → 200
+            $stt = $n;
             $tier = $tiers[intdiv($n - 1, 20)];
             $userRows[] = [
                 'user_id' => $n,
-                'username' => 'user' . $stt,
-                'email' => 'user' . $stt . '@gmail.com',
+                'username' => sprintf('user%03d', $stt),
+                'email' => sprintf('user%03d@gmail.com', $stt),
                 'password_hash' => $passwordHash,
-                'tele_number' => '0' . $stt . '456789',
+                'tele_number' => sprintf('090%07d', $stt),
                 'role' => 'user',
                 'points' => $tier['points'],
                 'membership' => $tier['membership'],
@@ -160,18 +160,20 @@ class DatabaseSeeder extends Seeder
 
         DB::table('restaurant_tables')->insert($restaurantTables);
 
-        // 5. Seed Dish Types
-        // Seed the six dish categories from the workbook; extra toppings are not a dish category.
+        // 5. Seed the restaurant's eight menu categories.
         DB::table('dish_types')->insert([
-            ['type_id' => 1, 'type_name' => 'Món chiên & Gỏi'],
-            ['type_id' => 2, 'type_name' => 'Món sợi & Bánh'],
-            ['type_id' => 3, 'type_name' => 'Món súp'],
-            ['type_id' => 4, 'type_name' => 'Món cơm'],
-            ['type_id' => 5, 'type_name' => 'Món hầm'],
-            ['type_id' => 6, 'type_name' => 'Món mặn & Xào'],
+            ['type_id' => 1, 'type_name' => 'Cơm & bánh', 'supports_tiered_portions' => true, 'allows_customer_recipe_customization' => true],
+            ['type_id' => 2, 'type_name' => 'Xào & mặn', 'supports_tiered_portions' => true, 'allows_customer_recipe_customization' => true],
+            ['type_id' => 3, 'type_name' => 'Sợi', 'supports_tiered_portions' => true, 'allows_customer_recipe_customization' => true],
+            ['type_id' => 4, 'type_name' => 'Canh & súp', 'supports_tiered_portions' => true, 'allows_customer_recipe_customization' => true],
+            ['type_id' => 5, 'type_name' => 'Hầm & lẩu', 'supports_tiered_portions' => true, 'allows_customer_recipe_customization' => true],
+            ['type_id' => 6, 'type_name' => 'Chiên', 'supports_tiered_portions' => true, 'allows_customer_recipe_customization' => true],
+            ['type_id' => 7, 'type_name' => 'Gỏi & rau', 'supports_tiered_portions' => true, 'allows_customer_recipe_customization' => true],
+            ['type_id' => 8, 'type_name' => 'Nước & chè', 'supports_tiered_portions' => false, 'allows_customer_recipe_customization' => false],
         ]);
+        DB::statement("SELECT setval(pg_get_serial_sequence('dish_types', 'type_id'), (SELECT MAX(type_id) FROM dish_types))");
 
-        // 6. Seed 30 bilingual dishes from the supplied Excel workbooks.
+        // 6. Seed 30 bilingual dishes with the eight restaurant categories.
         $dishRows = require __DIR__ . '/DishCatalog.php';
         DB::table('dishes')->insert($dishRows);
         DB::statement("SELECT setval(pg_get_serial_sequence('dishes', 'dish_id'), (SELECT MAX(dish_id) FROM dishes))");
@@ -185,6 +187,8 @@ class DatabaseSeeder extends Seeder
         $this->call(OrdersSeeder::class);
         $this->call(ReviewsSeeder::class);
         $this->call(CommunityRecipesSeeder::class);
+        $this->call(DishProposalsSeeder::class);
+        $this->call(DishProposalVotesSeeder::class);
 
         app(\App\Services\DishRankingService::class)->recompute();
 

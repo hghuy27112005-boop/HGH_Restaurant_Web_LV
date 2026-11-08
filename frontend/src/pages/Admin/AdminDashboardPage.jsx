@@ -12,6 +12,7 @@ import PeakHoursSection from './DashboardSections/PeakHoursSection';
 import TopUsersSection from './DashboardSections/TopUsersSection';
 import HolidaysSection from './DashboardSections/HolidaysSection';
 import { fmtMoney, extractError } from './DashboardSections/helpers';
+import DishProposalVoteSection from './DashboardSections/DishProposalVoteSection';
 
 const AdminDashboardPage = () => {
     const { t } = useTranslation();
@@ -78,6 +79,8 @@ const AdminDashboardPage = () => {
             <CollapsibleSection title={i18n.t("Ngày nghỉ lễ", { ns: 'legacy', keySeparator: false })} icon="fa-calendar-days">
                 <HolidaysSection />
             </CollapsibleSection>
+
+            <DishProposalVoteSection />
         </AdminPageShell>
     );
 };

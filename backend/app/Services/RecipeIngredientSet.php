@@ -11,6 +11,11 @@ class RecipeIngredientSet
     private ?array $catalogIndex = null;
     public function fingerprint(array $recipe): string
     {
+        return hash('sha256', json_encode($this->normalizedSet($recipe), JSON_UNESCAPED_UNICODE));
+    }
+
+    public function normalizedSet(array $recipe): array
+    {
         if ($this->catalogIndex === null) {
         $catalog = Ingredient::all();
         $labels = [];
@@ -40,7 +45,7 @@ class RecipeIngredientSet
         }
         $tokens = array_values(array_unique(array_filter($tokens)));
         sort($tokens, SORT_STRING);
-        return hash('sha256', json_encode($tokens, JSON_UNESCAPED_UNICODE));
+        return $tokens;
     }
 
     public function ownedDuplicate(int $userId, int $dishId, array $recipe, ?int $excludeId = null): ?\App\Models\DishCustomization

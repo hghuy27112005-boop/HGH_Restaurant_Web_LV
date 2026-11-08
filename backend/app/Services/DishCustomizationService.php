@@ -67,6 +67,9 @@ class DishCustomizationService
 
     public function options(Dish $dish, array $selection = []): array
     {
+        if (!$dish->type()->value('allows_customer_recipe_customization')) {
+            throw ValidationException::withMessages(['dish_id' => 'Món thuộc loại này không cho phép chỉnh sửa công thức.']);
+        }
         $rules = $this->rules($dish, $selection);
         if ($rules->isEmpty()) {
             throw ValidationException::withMessages(['ingredients' => 'Công thức món ăn chưa được cấu hình nguyên liệu.']);
@@ -90,6 +93,10 @@ class DishCustomizationService
                     && $candidate->quantity_category === $rule->ingredient->quantity_category
                     && $candidate->quantity_unit === $measurement->quantity_unit
                     && (float) ($candidate->cost_per_unit ?? 0) > 0
+                    // A same-unit replacement can still be impossible at the
+                    // smallest supported gram/count step. Hide it unless the
+                    // lowest serving tier can afford that minimum quantity.
+                    && $this->canAffordMinimumReplacement($measurement, $candidate)
                 )->values();
             }
             return [
@@ -112,6 +119,25 @@ class DishCustomizationService
                     return $pricing === null ? null : [...$this->ingredientPayload($ingredient), ...$pricing];
                 })->filter()->values(),
         ];
+    }
+
+    private function canAffordMinimumReplacement($measurement, Ingredient $candidate): bool
+    {
+        $sourceQuantity = (float) ($measurement->quantity_low ?? 0);
+        $sourceUnitCost = (float) ($measurement->unit_cost_snapshot ?? 0);
+        $destinationUnitCost = (float) ($candidate->cost_per_unit ?? 0);
+        if ($sourceQuantity <= 0 || $sourceUnitCost <= 0 || $destinationUnitCost <= 0) {
+            return false;
+        }
+
+        $unit = (string) $measurement->quantity_unit;
+        $minimumQuantity = match ($unit) {
+            'g' => 10.0,
+            'kg' => 0.01,
+            default => max(1.0, (float) ($candidate->quantity_step ?? 1)),
+        };
+
+        return ($sourceQuantity * $sourceUnitCost) > ($minimumQuantity * $destinationUnitCost) + 0.0001;
     }
 
     /**
@@ -143,10 +169,14 @@ class DishCustomizationService
         })->values();
 
         $unique = collect();
+        $acceptedLabels = [];
         foreach ($ordered as $ingredient) {
-            if ($unique->contains(fn (Ingredient $existing): bool => $policy->sameIngredient($existing, $ingredient))) {
+            $labels = array_filter([$ingredient->ingredient_name, $ingredient->ingredient_name_vi, ...($ingredient->aliases ?? [])]);
+            $labels = array_fill_keys(array_map($policy->normalize(...), $labels), true);
+            if (array_intersect_key($labels, $acceptedLabels)) {
                 continue;
             }
+            $acceptedLabels += $labels;
             $unique->push($ingredient);
         }
 
@@ -477,7 +507,9 @@ class DishCustomizationService
 
     public function presentCustomizations($customizations)
     {
-        return $customizations->map(function (DishCustomization $customization): array {
+        return $customizations->filter(function (DishCustomization $customization): bool {
+            return (bool) Dish::query()->whereKey($customization->dish_id)->whereHas('type', fn ($query) => $query->where('allows_customer_recipe_customization', true))->exists();
+        })->map(function (DishCustomization $customization): array {
             $dish = Dish::with('priceProfile')->find((int) $customization->dish_id);
             $payload = $customization->toArray();
             $selection = $customization->selection ?? [];
@@ -614,6 +646,7 @@ class DishCustomizationService
 
     public function forDish(Dish $dish)
     {
+        if (!$dish->type()->value('allows_customer_recipe_customization')) return collect();
         return DishCustomization::where('user_id', Auth::id())
             ->where('dish_id', $dish->dish_id)
             ->orderBy('created_at')

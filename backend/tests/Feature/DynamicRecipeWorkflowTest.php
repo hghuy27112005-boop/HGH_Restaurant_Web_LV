@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Dish;
 use App\Models\DishCustomization;
 use App\Models\DishIngredientRule;
+use App\Models\DishRecipeMeasurement;
 use App\Models\Ingredient;
 use App\Models\IngredientStock;
 use App\Models\User;
@@ -36,30 +37,29 @@ class DynamicRecipeWorkflowTest extends TestCase
             'ingredients' => 'Nạm bò', 'ingredients_en' => 'Beef brisket', 'recipe_instructions' => 'Hầm bò.', 'recipe_instructions_en' => 'Simmer beef.', 'is_active' => true]);
     }
 
-    public function test_gemini_options_use_new_live_inventory_and_current_selection(): void
+    public function test_recipe_options_use_active_compatible_inventory_without_gemini(): void
     {
         $dish = $this->dish();
         $beef = $this->ingredient('Nạm bò', 'Beef brisket');
-        $noodles = $this->ingredient('Hủ tiếu', 'Hu tieu noodles');
-        $inactive = $this->ingredient('Nguyên liệu đã ẩn', 'Hidden ingredient', false);
+        $inactive = $this->ingredient('Thịt gà', 'Chicken', false);
+        $greenOnion = $this->ingredient('Hành lá', 'Green onion');
+        $pricing = ['quantity_category' => 'protein', 'quantity_unit' => 'g', 'cost_per_unit' => 80, 'quantity_step' => 10];
+        $beef->update($pricing);
+        $inactive->update($pricing);
         DishIngredientRule::create(['dish_id' => $dish->dish_id, 'ingredient_id' => $beef->ingredient_id, 'slot_key' => 'protein', 'role' => 'required_replaceable', 'sort_order' => 0]);
-        $calls = [];
-        $this->mock(GeminiChatbotService::class, function ($mock) use (&$calls, $noodles, $inactive) {
-            $mock->shouldReceive('recommendDishIngredientOptions')->times(3)->andReturnUsing(function ($name, $inventory, $slots, $optional, $context) use (&$calls, $noodles, $inactive) {
-                $calls[] = ['inventory' => $inventory, 'context' => $context];
-                return ['replacements' => ['protein' => [999999]], 'add_on_ids' => [$noodles->ingredient_id, $inactive->ingredient_id, 999999]];
-            });
-        });
+        DishRecipeMeasurement::create([
+            'dish_id' => $dish->dish_id, 'ingredient_id' => $beef->ingredient_id, 'quantity_unit' => 'g',
+            'quantity_low' => 100, 'quantity_standard' => 150, 'quantity_high' => 200,
+            'is_variable' => true, 'unit_cost_snapshot' => 100,
+        ]);
+        $this->mock(GeminiChatbotService::class);
         $url = '/api/dish-customizations/' . $dish->dish_id . '/options';
-        $response = $this->getJson($url)->assertOk();
-        $this->assertSame([$noodles->ingredient_id], array_column($response->json('options.add_ons'), 'ingredient_id'));
-        $this->assertSame([], $response->json('options.required.0.alternatives'));
-        $extra = $this->ingredient('Mì gạo mới', 'New rice noodles');
-        $this->getJson($url)->assertOk();
-        $this->getJson($url . '?' . http_build_query(['add_on_ingredient_ids' => [$noodles->ingredient_id]]))->assertOk();
-        $this->assertContains($extra->ingredient_id, array_column($calls[1]['inventory'], 'ingredient_id'));
-        $this->assertNotContains($inactive->ingredient_id, array_column($calls[0]['inventory'], 'ingredient_id'));
-        $this->assertSame([$noodles->ingredient_id], $calls[2]['context']['selection']['add_on_ingredient_ids']);
+        $this->getJson($url)->assertOk()->assertJsonPath('options.add_ons.0.ingredient_id', $greenOnion->ingredient_id)
+            ->assertJsonPath('options.required.0.alternatives', []);
+        $pork = $this->ingredient('Thịt heo', 'Pork');
+        $pork->update($pricing);
+        $this->getJson($url)->assertOk()->assertJsonCount(1, 'options.required.0.alternatives')
+            ->assertJsonPath('options.required.0.alternatives.0.ingredient_id', $pork->ingredient_id);
         $this->postJson('/api/dish-customizations/' . $dish->dish_id . '/preview', ['language' => 'vi', 'selection' => ['add_on_ingredient_ids' => [999999]]])->assertUnprocessable();
     }
 
@@ -114,13 +114,14 @@ class DynamicRecipeWorkflowTest extends TestCase
     public function test_private_recipe_save_rejects_duplicates_but_allows_editing_itself(): void
     {
         $dish = $this->dish();
-        $beef = $this->ingredient('Nạm bò', 'Beef brisket'); $noodles = $this->ingredient('Hủ tiếu', 'Hu tieu noodles');
+        $beef = $this->ingredient('Nạm bò', 'Beef brisket');
+        $greenOnion = $this->ingredient('Hành lá', 'Green onion');
         DishIngredientRule::create(['dish_id' => $dish->dish_id, 'ingredient_id' => $beef->ingredient_id, 'slot_key' => 'protein', 'role' => 'required_replaceable', 'sort_order' => 0]);
-        $existing = DishCustomization::create(['user_id' => auth()->id(), 'dish_id' => $dish->dish_id, 'recipe_name' => 'Existing noodle stew', 'ingredients' => 'Hủ tiếu, Thịt nạm bò', 'recipe_instructions' => 'Cook.']);
+        $existing = DishCustomization::create(['user_id' => auth()->id(), 'dish_id' => $dish->dish_id, 'recipe_name' => 'Existing onion stew', 'ingredients' => 'Hành lá, Thịt nạm bò', 'recipe_instructions' => 'Cook.']);
         $other = DishCustomization::create(['user_id' => auth()->id(), 'dish_id' => $dish->dish_id, 'recipe_name' => 'Different recipe', 'ingredients' => 'Beef brisket', 'recipe_instructions' => 'Cook.']);
         $service = app(\App\Services\DishCustomizationService::class);
-        $selection = ['add_on_ingredient_ids' => [$noodles->ingredient_id]];
-        $saved = $service->save($dish, 'Existing noodle stew', 'Updated instructions.', $selection, $existing->dish_customization_id);
+        $selection = ['add_on_ingredient_ids' => [$greenOnion->ingredient_id]];
+        $saved = $service->save($dish, 'Existing onion stew', 'Updated instructions.', $selection, $existing->dish_customization_id);
         $this->assertSame($existing->dish_customization_id, $saved->dish_customization_id);
         foreach ([null, $other->dish_customization_id] as $id) {
             try {
@@ -164,7 +165,12 @@ class DynamicRecipeWorkflowTest extends TestCase
     {
         config(['services.gemini.api_key' => 'test-key', 'services.gemini.retry_delays' => [0]]);
         Http::preventStrayRequests();
-        $json = ['source_language' => 'vi', 'name_valid' => true, 'is_valid' => true, 'name_core_ingredients' => [['name' => 'Hủ tiếu', 'ingredient_id' => null, 'role' => 'required_fixed']], 'image_observed_ingredients' => []];
+        $json = [
+            'source_language' => 'vi', 'name_valid' => true, 'name_spelling_valid' => true,
+            'canonical_name' => 'Hủ tiếu', 'is_valid' => true,
+            'name_core_ingredients' => [['name' => 'Hủ tiếu', 'ingredient_id' => null, 'role' => 'required_fixed']],
+            'image_observed_ingredients' => [],
+        ];
         Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()->push([], 503)->push(['candidates' => [['content' => ['parts' => [['text' => "```json\n" . json_encode($json) . "\n```"]]]]]])]);
         $file = UploadedFile::fake()->create('dish.jpg', 1, 'image/jpeg');
         $result = app(GeminiChatbotService::class)->analyzeDishIngredients('Hủ tiếu', $file, 'vi');

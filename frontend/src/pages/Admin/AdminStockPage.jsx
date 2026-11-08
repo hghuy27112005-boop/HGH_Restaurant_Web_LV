@@ -8,6 +8,7 @@ import { translateIngredients } from '../Menu/DishDetailPage';
 import { translateDishName } from '../../dishTranslations';
 
 const LOW_LIMIT = 15;
+const GRAM_LOW_LIMIT = 300;
 
 const getLocalDateString = (d = new Date()) => {
     const offset = d.getTimezoneOffset();
@@ -29,10 +30,11 @@ const formatStockUnit = (unit, isEnglish) => ({
 
 // Màu theo mức tồn: hết hàng / sắp hết / đủ
 const isOutOfStock = (item) => item.quantity_left + (item.reserve_fund ?? 0) === 0;
+const lowLimitFor = (item) => item.unit_code === 'g' ? GRAM_LOW_LIMIT : LOW_LIMIT;
 
 const getLevel = (item) => {
     if (isOutOfStock(item)) return { bar: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50' };
-    if (item.quantity_left <= (item.unit_code === 'g' ? 1500 : LOW_LIMIT)) return { bar: 'bg-yellow-400', text: 'text-yellow-600', bg: 'bg-yellow-50' };
+    if (item.quantity_left <= lowLimitFor(item)) return { bar: 'bg-yellow-400', text: 'text-yellow-600', bg: 'bg-yellow-50' };
     return { bar: 'bg-green-500', text: 'text-green-600', bg: 'bg-white' };
 };
 
@@ -85,7 +87,7 @@ const AdminStockPage = () => {
 
     const getFiltered = () => {
         let list = stocks;
-        if (filter === 'low') list = list.filter(s => s.quantity_left <= LOW_LIMIT);
+        if (filter === 'low') list = list.filter(s => s.quantity_left <= lowLimitFor(s));
         if (searchTerm.trim()) {
             const keyword = normalize(searchTerm.trim());
             list = list.filter(s => {
@@ -104,7 +106,7 @@ const AdminStockPage = () => {
         });
     };
 
-    const lowStockCount = stocks.filter(s => s.quantity_left <= LOW_LIMIT).length;
+    const lowStockCount = stocks.filter(s => s.quantity_left <= lowLimitFor(s)).length;
     const outOfStockCount = stocks.filter(isOutOfStock).length;
     const filtered = getFiltered();
     const stockCodeByStockId = new Map(

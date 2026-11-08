@@ -69,8 +69,8 @@ class IngredientStock extends Model
                 // Stock snapshots are English-only and the legacy schema requires
                 // a non-null value. Keep Vietnamese catalog text in its own column.
                 'ingredient_name' => $ingredient->ingredient_name ?? '',
-                'quantity_start' => $unitCode === 'g' ? 10000 : 50,
-                'quantity_left' => $unitCode === 'g' ? 10000 : 50,
+                'quantity_start' => $unitCode === 'g' ? Stock::GRAM_SHELF_SIZE : Stock::SHELF_SIZE,
+                'quantity_left' => $unitCode === 'g' ? Stock::GRAM_SHELF_SIZE : Stock::SHELF_SIZE,
                 'refill_count' => 0,
             ]
         );

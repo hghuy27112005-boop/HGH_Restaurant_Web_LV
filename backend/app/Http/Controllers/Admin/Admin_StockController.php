@@ -14,7 +14,7 @@ use Illuminate\Http\Request;
 class Admin_StockController extends Controller
 {
     /**
-     * Lấy kho nguyên liệu theo ngày từ món ăn và danh mục đồ ăn kèm đang hoạt động.
+     * Lấy kho theo ngày, gồm nguyên liệu thực đơn và nguyên liệu đã dùng hoặc giữ cho đơn.
      */
     public function ingredientsByDate(Request $request)
     {
@@ -42,13 +42,27 @@ class Admin_StockController extends Controller
                     'ingredient_key' => $ingredient->ingredient_key,
                     // The stock snapshot column is non-nullable in existing databases.
                     'ingredient_name' => $ingredient->ingredient_name ?? '',
-                    'quantity_start' => $ingredient->quantity_category !== 'fixed' && in_array($ingredient->quantity_unit, ['g', 'kg'], true) ? 10000 : 50,
-                    'quantity_left' => $ingredient->quantity_category !== 'fixed' && in_array($ingredient->quantity_unit, ['g', 'kg'], true) ? 10000 : 50,
+                    'quantity_start' => $unitCode === 'g' ? Stock::GRAM_SHELF_SIZE : Stock::SHELF_SIZE,
+                    'quantity_left' => $unitCode === 'g' ? Stock::GRAM_SHELF_SIZE : Stock::SHELF_SIZE,
                     'refill_count' => 0,
                 ]
             )->setAttribute('ingredient_name_en', $ingredient->ingredient_name)
                 ->setAttribute('ingredient_name_vi', $ingredient->ingredient_name_vi);
         })->values();
+
+        $orderStocks = IngredientStock::query()->with('ingredient')->where('stock_date', $date)
+            ->where(function ($query): void {
+                $query->has('transactions')->orWhereExists(function ($reservation): void {
+                    $reservation->selectRaw('1')->from('ingredient_stock_reservations')
+                        ->whereColumn('ingredient_stock_reservations.stock_date', 'ingredient_stocks.stock_date')
+                        ->whereColumn('ingredient_stock_reservations.ingredient_id', 'ingredient_stocks.ingredient_id')
+                        ->whereColumn('ingredient_stock_reservations.unit_code', 'ingredient_stocks.unit_code');
+                });
+            })->get()->map(fn (IngredientStock $stock) => $stock
+                ->setAttribute('ingredient_name_en', $stock->ingredient?->ingredient_name)
+                ->setAttribute('ingredient_name_vi', $stock->ingredient?->ingredient_name_vi)
+                ->unsetRelation('ingredient'));
+        $stocks = $stocks->concat($orderStocks)->unique('ingredient_stock_id')->sortBy('ingredient_id')->values();
 
         $reservedByIngredient = IngredientReservation::where('stock_date', $date)
             ->selectRaw('ingredient_id, unit_code, SUM(quantity) as total')

@@ -239,7 +239,7 @@ const en = {
         errNeedTieredRecipe: 'Please generate and review the recipe and quantities for all three price tiers before saving.',
         errNeedReconfirm: 'Please detect and confirm the ingredients again to regenerate the recipe before saving.',
         errNeedNameAndImage: 'Please enter the dish name and upload an image first.',
-        nameInvalid: 'The dish name is invalid or not in the selected language. Please enter it in the current language.',
+        nameInvalid: 'The dish name is misspelled, invalid, or not in the selected language. Please check the dish name.',
         nameDuplicate: 'A dish with this name already exists.',
         imageRejected: 'This image is not suitable. Please choose another one.',
         translationUnavailable: 'Translation is unavailable right now. The dish was not saved; please try again.',
@@ -333,6 +333,11 @@ const en = {
         "search": "Search by dish name",
         "type": "Dish type",
         "allTypes": "All dish types",
+        "sortByVotes": "Votes",
+        "votesAscending": "Votes ascending",
+        "votesDescending": "Votes descending",
+        "switchVotesAscending": "Sorted by votes descending; activate to switch to ascending",
+        "switchVotesDescending": "Sorted by votes ascending; activate to switch to descending",
         "noDishes": "No matching dishes found.",
         "yourReview": "Your review",
         "reviewComment": "Write a review (optional)",
@@ -357,6 +362,68 @@ const en = {
         "recipeSaved": "Recipe saved to your collection.",
         "writeComment": "Write a comment",
         "sendComment": "Post comment"
+        ,"voteTitle": "Vote for new dishes"
+        ,"voteTickets": "Available vote tickets"
+        ,"receiveTicket": "Receive daily vote ticket"
+        ,"claimToday": "Today's vote ticket received"
+        ,"phoneRequired": "Add a phone number to your profile to join voting. Each number can be used by one voting account per month."
+        ,"proposeDish": "Suggest a new dish"
+        ,"proposalName": "Dish name"
+        ,"proposer": "Suggested by"
+        ,"proposalNameEn": "Dish name (English)"
+        ,"proposalImage": "Image URL"
+        ,"proposalIngredients": "Ingredients (comma separated)"
+        ,"proposalIngredientsEn": "Ingredients (English)"
+        ,"proposalRecipe": "Cooking instructions"
+        ,"proposalRecipeEn": "Cooking instructions (English)"
+        ,"aiIngredientsOnly": "AI only identifies ingredients and drafts the recipe; suggestions are not translated."
+        ,"submitProposal": "Submit dish suggestion"
+        ,"editComplete": "Edit and complete dish"
+        ,"confirmReject": "Reject this customer dish suggestion?"
+        ,"submittedInEnglish": "Submitted in English; content has not been translated."
+        ,"submittedInVietnamese": "Submitted in Vietnamese; content has not been translated."
+        ,"sendProposal": "Submit suggestion"
+        ,"vote": "Vote"
+        ,"votes": "votes"
+        ,"closesAt": "Closes at"
+        ,"noProposals": "No dishes have been suggested this month."
+        ,"proposalValidationUnavailable": "We can't check the dish name and photo right now. Please try again shortly."
+        ,"proposalImageMismatch": "The photo does not clearly match the dish name. Please upload a clear photo of the dish you entered."
+        ,"proposalLimit": "Each person may suggest one dish per month."
+        ,"proposalSent": "Dish suggestion submitted."
+          ,"proposePrompt": "Share a new dish idea with the restaurant"
+          ,"proposalUsed": "Suggested this month"
+          ,"proposalSuccess": "Your dish has been added to the suggestion ballot"
+          ,"duplicateSold": "You cannot suggest a dish that is already being sold"
+          ,"duplicateProposed": "You cannot suggest a dish that has already been proposed"
+          ,"processing": "Processing..."
+          ,"viewDetails": "View details"
+          ,"close": "Close"
+          ,"votePhoneHint": "You can save tickets until the last day of the month. Each vote is recorded by voter and date."
+          ,"voteHours": "Voting is open daily from 7:00 AM until before 10:00 PM."
+          ,"voteHoursClosed": "Voting is closed right now. You can vote from 7:00 AM until before 10:00 PM."
+          ,"phoneAlreadyUsed": "This phone number was already used to vote by another account this month."
+          ,"phoneLocked": "You have voted with another phone number this month; you cannot switch numbers to vote again."
+          ,"voteClosed": "This month's voting has ended"
+          ,"voteForDish": "Vote for a dish"
+          ,"voteQuantity": "Number of votes"
+          ,"back": "Back"
+          ,"decreaseVote": "Decrease votes"
+          ,"increaseVote": "Increase votes"
+          ,"winnerTie": "Several dishes tied for first place this month, so no dish was selected."
+          ,"winnerNoVotes": "No dish won this month because no votes were cast."
+          ,"ballotNotClosed": "Voting can only be finalized after 10:00 PM on the last day of its voting month."
+          ,"receiveWinner": "Receive winning dish"
+          ,"winnerReceived": "The winning dish is ready to complete under Customer Dish Suggestions."
+          ,"addToMenu": "Add dish"
+          ,"addingToMenu": "Adding dish…"
+          ,"addedToMenu": "Dish added successfully."
+          ,"winnerUnavailable": "There is no unique winning dish to receive yet."
+        ,"adminSuggestions": "Customer dish suggestions"
+        ,"approve": "Approve and add to menu"
+        ,"reject": "Reject"
+        ,"menuPrice": "Price"
+        ,"menuType": "Dish type"
 },
     rating: {
         starAria: '{{count}} stars',
@@ -367,6 +434,8 @@ const en = {
     },
     dishDetail: {
         noReviews: 'No reviews yet',
+        allDishes: 'All dishes',
+        filterOtherDishes: 'Filter dishes by type',
         duplicateIngredients: 'Duplicate ingredients in recipe: "{{recipe}}".',
     },
 };

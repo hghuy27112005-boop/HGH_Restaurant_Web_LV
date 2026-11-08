@@ -18,6 +18,9 @@ class Stock extends Model
     public const SHELF_SIZE = 50;
     public const DAILY_CAP = 300;
     public const LOW_LIMIT = 15;
+    public const GRAM_SHELF_SIZE = 1000;
+    public const GRAM_DAILY_CAP = 10000;
+    public const GRAM_LOW_LIMIT = 300;
     public const ORDER_LIMIT = 50;
     public const IMMEDIATE_WINDOW_MINUTES = 10;
 
@@ -245,8 +248,16 @@ class Stock extends Model
                 $stock = $stocks[$key];
                 $needed = (int) $requirement['quantity'];
 
-                if ($stock->quantity_left < $needed) {
-                    self::refillShelf($stock, max(self::shelfSizeFor($stock), $needed));
+                while ((int) $stock->quantity_left < $needed) {
+                    $beforeRefill = (int) $stock->quantity_left;
+                    self::refillShelf($stock, $needed);
+                    if ((int) $stock->quantity_left === $beforeRefill) {
+                        break;
+                    }
+                }
+
+                if ((int) $stock->quantity_left < $needed) {
+                    throw new StockUnavailableException(self::buildSuggestions($items, $requirements, self::availableMap($stocks, true)));
                 }
 
                 $before = (int) $stock->quantity_left;
@@ -380,23 +391,27 @@ class Stock extends Model
 
     public static function dailyCapacity(?string $unitCode): int
     {
-        return $unitCode === 'g' ? 30000 : self::DAILY_CAP;
+        return $unitCode === 'g' ? self::GRAM_DAILY_CAP : self::DAILY_CAP;
     }
 
     protected static function shelfSizeFor(IngredientStock $stock): int
     {
-        return $stock->unit_code === 'g' ? 5000 : self::SHELF_SIZE;
+        return $stock->unit_code === 'g' ? self::GRAM_SHELF_SIZE : self::SHELF_SIZE;
     }
 
     protected static function lowLimitFor(IngredientStock $stock): int
     {
-        return $stock->unit_code === 'g' ? 1500 : self::LOW_LIMIT;
+        return $stock->unit_code === 'g' ? self::GRAM_LOW_LIMIT : self::LOW_LIMIT;
     }
 
     /** Đưa kệ lên $target, nhưng không vượt quá quỹ dự phòng. Chưa save. */
     protected static function refillShelf(IngredientStock $stock, int $target): void
     {
-        $add = min(max(0, $target - (int) $stock->quantity_left), self::reserveFund($stock));
+        $add = min(
+            max(0, $target - (int) $stock->quantity_left),
+            self::shelfSizeFor($stock),
+            self::reserveFund($stock)
+        );
         if ($add > 0) {
             $stock->quantity_start += $add;
             $stock->quantity_left += $add;

@@ -239,7 +239,7 @@ const vi = {
         errNeedTieredRecipe: 'Vui lòng tạo, kiểm tra và duyệt công thức cùng định lượng cho ba mức giá trước khi lưu.',
         errNeedReconfirm: 'Vui lòng nhận và xác nhận lại nguyên liệu để tạo công thức trước khi lưu.',
         errNeedNameAndImage: 'Vui lòng nhập tên món và tải hình ảnh trước.',
-        nameInvalid: 'Tên món không hợp lệ hoặc không đúng ngôn ngữ đang chọn. Vui lòng nhập tên món bằng ngôn ngữ hiện tại.',
+        nameInvalid: 'Tên món sai chính tả, không hợp lệ hoặc không đúng ngôn ngữ đang chọn. Vui lòng kiểm tra lại tên món.',
         nameDuplicate: 'Đã có món ăn trùng tên này.',
         imageRejected: 'Hình ảnh không phù hợp. Vui lòng chọn hình khác.',
         translationUnavailable: 'Hiện chưa thể dịch. Món ăn chưa được lưu; vui lòng thử lại.',
@@ -333,6 +333,11 @@ const vi = {
         "search": "Tìm kiếm theo tên món",
         "type": "Loại món",
         "allTypes": "Tất cả loại món",
+        "sortByVotes": "Phiếu",
+        "votesAscending": "Số phiếu tăng dần",
+        "votesDescending": "Số phiếu giảm dần",
+        "switchVotesAscending": "Đang sắp xếp giảm dần; nhấn để chuyển sang tăng dần",
+        "switchVotesDescending": "Đang sắp xếp tăng dần; nhấn để chuyển sang giảm dần",
         "noDishes": "Không tìm thấy món ăn phù hợp.",
         "yourReview": "Đánh giá của bạn",
         "reviewComment": "Viết nhận xét (không bắt buộc)",
@@ -357,6 +362,68 @@ const vi = {
         "recipeSaved": "Đã lưu công thức vào danh sách của bạn.",
         "writeComment": "Viết bình luận",
         "sendComment": "Gửi bình luận"
+        ,"voteTitle": "Bầu chọn thêm món"
+        ,"voteTickets": "Thẻ vote hiện có"
+        ,"receiveTicket": "Nhận lượt vote hàng ngày"
+        ,"claimToday": "Đã nhận lượt vote hôm nay"
+        ,"phoneRequired": "Hãy thêm số điện thoại vào thông tin cá nhân để tham gia bầu chọn. Mỗi số chỉ dùng được cho một tài khoản bình chọn trong tháng."
+        ,"proposeDish": "Đề xuất món mới"
+        ,"proposalName": "Tên món"
+        ,"proposer": "Khách hàng đề xuất"
+        ,"proposalNameEn": "Tên món (tiếng Anh)"
+        ,"proposalImage": "Đường dẫn hình ảnh"
+        ,"proposalIngredients": "Nguyên liệu (phân cách bằng dấu phẩy)"
+        ,"proposalIngredientsEn": "Nguyên liệu (tiếng Anh)"
+        ,"proposalRecipe": "Công thức chế biến"
+        ,"proposalRecipeEn": "Công thức chế biến (tiếng Anh)"
+        ,"aiIngredientsOnly": "AI chỉ hỗ trợ nhận diện nguyên liệu và tạo công thức; nội dung đề xuất chưa được dịch."
+        ,"submitProposal": "Đề xuất món"
+        ,"editComplete": "Chỉnh sửa và hoàn thiện món"
+        ,"confirmReject": "Từ chối món khách hàng đề xuất này?"
+        ,"submittedInEnglish": "Khách đề xuất bằng tiếng Anh; nội dung chưa được dịch."
+        ,"submittedInVietnamese": "Khách đề xuất bằng tiếng Việt; nội dung chưa được dịch."
+        ,"sendProposal": "Gửi đề xuất"
+        ,"vote": "Bình chọn"
+        ,"votes": "phiếu"
+        ,"closesAt": "Kết thúc lúc"
+        ,"noProposals": "Chưa có món được đề xuất trong tháng này."
+        ,"proposalValidationUnavailable": "Hiện chưa thể kiểm tra tên và ảnh món. Vui lòng thử lại sau ít phút."
+        ,"proposalImageMismatch": "Ảnh chưa phù hợp với tên món. Vui lòng chọn ảnh rõ và đúng món đã nhập."
+        ,"proposalLimit": "Mỗi người được đề xuất một món mỗi tháng."
+        ,"proposalSent": "Đã gửi món đề xuất."
+          ,"proposePrompt": "Chia sẻ ý tưởng món mới với nhà hàng"
+          ,"proposalUsed": "Đã đề xuất tháng này"
+          ,"proposalSuccess": "Món ăn đã được thêm vào bầu chọn đề xuất"
+          ,"duplicateSold": "Không thể đề xuất trùng với món đã bán"
+          ,"duplicateProposed": "Không thể đề xuất trùng với món đã được đề xuất"
+          ,"processing": "Đang xử lý..."
+          ,"viewDetails": "Xem chi tiết"
+          ,"close": "Đóng"
+          ,"votePhoneHint": "Phiếu có thể tích lũy đến ngày cuối tháng. Mỗi phiếu được lưu riêng theo người và ngày."
+          ,"voteHours": "Chỉ bình chọn được từ 07:00 đến trước 22:00 mỗi ngày."
+          ,"voteHoursClosed": "Đã hết giờ bình chọn hôm nay. Bạn có thể bình chọn từ 07:00 đến trước 22:00."
+          ,"phoneAlreadyUsed": "Số điện thoại này đã được dùng để vote bởi tài khoản khác trong tháng."
+          ,"phoneLocked": "Bạn đã vote bằng số điện thoại khác trong tháng này; không thể đổi số để vote tiếp."
+          ,"voteClosed": "Đợt vote tháng này đã kết thúc"
+          ,"voteForDish": "Bình chọn món ăn"
+          ,"voteQuantity": "Số phiếu muốn bình chọn"
+          ,"back": "Quay lại"
+          ,"decreaseVote": "Giảm số phiếu"
+          ,"increaseVote": "Tăng số phiếu"
+          ,"winnerTie": "Tháng này có nhiều món đồng hạng nhất nên không có món được chọn."
+          ,"winnerNoVotes": "Tháng này không có món trúng giải vì không có phiếu bình chọn."
+          ,"ballotNotClosed": "Chỉ có thể chốt bình chọn sau 22:00 ngày cuối tháng của đợt bình chọn."
+          ,"receiveWinner": "Nhận món giải nhất"
+          ,"winnerReceived": "Đã nhận món trúng giải. Mở mục Món ăn được khách hàng đề xuất để hoàn thiện món."
+          ,"addToMenu": "Thêm món"
+          ,"addingToMenu": "Đang thêm món…"
+          ,"addedToMenu": "Thêm món thành công."
+          ,"winnerUnavailable": "Chưa có món thắng duy nhất để nhận."
+        ,"adminSuggestions": "Món ăn được khách hàng đề xuất"
+        ,"approve": "Duyệt và thêm vào menu"
+        ,"reject": "Từ chối"
+        ,"menuPrice": "Giá bán"
+        ,"menuType": "Loại món"
 },
     rating: {
         starAria: '{{count}} sao',
@@ -367,6 +434,8 @@ const vi = {
     },
     dishDetail: {
         noReviews: 'Chưa có đánh giá',
+        allDishes: 'Tất cả các món',
+        filterOtherDishes: 'Lọc món ăn theo loại',
         duplicateIngredients: 'Trùng lặp nguyên liệu với công thức: "{{recipe}}".',
     },
 };

@@ -24,7 +24,7 @@ class DishController extends Controller
     public function index(Request $request)
     {
         // Chỉ lấy món đang bán (is_active = true) cho trang menu công khai / đặt hàng
-        $dishes = Dish::with('priceProfile')->where('is_active', true)->orderBy('dish_id', 'asc')->get();
+        $dishes = Dish::with(['priceProfile', 'type'])->where('is_active', true)->orderBy('dish_id', 'asc')->get();
 
         // Số lượng tối đa mỗi món là 50 (kiểm tra theo nguyên liệu ở backend), không còn trả quantity_left.
         $result = $dishes;
@@ -45,13 +45,15 @@ class DishController extends Controller
      */
     public function adminIndex()
     {
-        $dishes = Dish::with(['ingredientRules.ingredient', 'priceProfile', 'recipeMeasurements'])->orderBy('dish_id', 'asc')->get();
+        $pending = DB::table('admin_dish_suggestions')->where('status', 'pending')->whereNotNull('dish_id')->select('dish_id');
+        $dishes = Dish::with(['ingredientRules.ingredient', 'priceProfile', 'recipeMeasurements', 'type'])
+            ->whereNotIn('dish_id', $pending)->orderBy('dish_id', 'asc')->get();
         return response()->json($dishes);
     }
 
     public function show(Request $request, $id, \App\Services\DishCustomizationService $customizationService)
     {
-        $dish = Dish::find($id);
+        $dish = Dish::with(['type', 'priceProfile'])->find($id);
         if (!$dish) {
             if ($request->expectsJson()) {
                 return response()->json([
@@ -75,12 +77,17 @@ class DishController extends Controller
         if ($request->expectsJson()) {
             $reviewStats = $this->reviewStatsForDishIds([(int) $dish->dish_id]);
             $this->applyReviewStats($dish, $reviewStats);
+            $priceProfile = $dish->priceProfile;
+            $dish->unsetRelation('priceProfile');
             $payload = $dish->toArray();
-            $payload['price_options'] = $dish->priceProfile ? [
-                ['key' => 'low', 'price' => (int) $dish->priceProfile->price_low],
-                ['key' => 'standard', 'price' => (int) $dish->priceProfile->price_standard],
-                ['key' => 'high', 'price' => (int) $dish->priceProfile->price_high],
+            $supportsTiered = (bool) ($dish->type?->supports_tiered_portions ?? true);
+            $payload['price_options'] = $supportsTiered && $priceProfile ? [
+                ['key' => 'low', 'price' => (int) $priceProfile->price_low],
+                ['key' => 'standard', 'price' => (int) $priceProfile->price_standard],
+                ['key' => 'high', 'price' => (int) $priceProfile->price_high],
             ] : [];
+            $payload['supports_tiered_portions'] = $supportsTiered;
+            $payload['allows_customer_recipe_customization'] = (bool) ($dish->type?->allows_customer_recipe_customization ?? true);
             // Không còn trả quantity_left (xem ghi chú ở index()).
             if (Auth::check()) {
                 $payload['custom_recipes'] = $dish->customizations()
@@ -129,12 +136,31 @@ class DishController extends Controller
     private function applyPublicPriceOptions(Dish $dish): void
     {
         $profile = $dish->priceProfile;
-        $dish->setAttribute('price_options', $profile ? [
+        $dish->loadMissing('type');
+        $dish->setAttribute('supports_tiered_portions', (bool) ($dish->type?->supports_tiered_portions ?? true));
+        $dish->setAttribute('allows_customer_recipe_customization', (bool) ($dish->type?->allows_customer_recipe_customization ?? true));
+        $supportsTiered = (bool) ($dish->type?->supports_tiered_portions ?? true);
+        $dish->setAttribute('price_options', $supportsTiered && $profile ? [
             ['key' => 'low', 'price' => (int) $profile->price_low],
             ['key' => 'standard', 'price' => (int) $profile->price_standard],
             ['key' => 'high', 'price' => (int) $profile->price_high],
         ] : []);
         $dish->unsetRelation('priceProfile');
+    }
+
+    private function dishTypeSupportsTieredPortions(int|string $typeId): bool
+    {
+        return (bool) DB::table('dish_types')->where('type_id', $typeId)->value('supports_tiered_portions');
+    }
+
+    private function validateFixedPricePayload(string $json, int|float $price, string $language = 'vi'): void
+    {
+        $payload = json_decode($json, true);
+        if (!is_array($payload) || ($payload['mode'] ?? null) !== 'fixed' || (float) ($payload['price'] ?? 0) !== (float) $price || !in_array((float) $price, [15000.0, 30000.0, 40000.0], true)) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['tiered_recipe' => $language === 'en'
+                ? 'Drinks and desserts must use one fixed price: 15,000, 30,000, or 40,000 VND.'
+                : 'Món Nước & chè chỉ được chọn một giá cố định: 15.000đ, 30.000đ hoặc 40.000đ.']);
+        }
     }
 
     private function validateTieredRecipePayload(string $json, array $ingredientIds, \App\Services\TieredRecipeService $service, string $language = 'vi'): array
@@ -549,6 +575,7 @@ class DishController extends Controller
     public function addDish(Request $request, GeminiChatbotService $gemini, \App\Services\TieredRecipeService $tieredService)
     {
         $validated = $request->validate([
+            'suggestion_id' => 'nullable|integer|min:1',
             'dish_name' => 'required|string|max:255',
             'type_id' => 'required|exists:dish_types,type_id',
             'price' => 'required|numeric|min:0',
@@ -564,6 +591,14 @@ class DishController extends Controller
             'image' => 'required|image|mimes:jpeg,jpg|max:5120',
         ]);
 
+        $suggestionId = $validated['suggestion_id'] ?? null;
+        $pendingSuggestion = DB::table('admin_dish_suggestions')->where('id', $suggestionId)
+            ->where('status', 'pending')->whereNotNull('award_paid_at');
+        $suggestion = $suggestionId ? $pendingSuggestion->first() : null;
+        if ($suggestionId && !$suggestion) {
+            return response()->json(['code' => 'suggestion_not_pending', 'message' => 'Món trúng giải này không còn chờ hoàn thiện.'], 409);
+        }
+
         $selected = collect($validated['ingredients'])->keyBy(fn (array $item) => (int) $item['ingredient_id']);
         $ingredients = Ingredient::query()
             ->whereIn('ingredient_id', $selected->keys())
@@ -574,7 +609,18 @@ class DishController extends Controller
                 'message' => 'Danh sách nguyên liệu không hợp lệ.',
             ], 422);
         }
-        $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $validated['language']);
+        $fixedPriceDish = !$this->dishTypeSupportsTieredPortions($validated['type_id']);
+        if ($fixedPriceDish) {
+            $this->validateFixedPricePayload($validated['tiered_recipe'], $validated['price'], $validated['language']);
+            $tieredConfig = null;
+        } else {
+            $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $validated['language']);
+            if ($suggestionId && (float) $validated['price'] !== (float) $tieredConfig['prices']['standard']) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'price' => 'Giá món phải khớp với giá khẩu phần vừa.',
+                ]);
+            }
+        }
 
         $language = $validated['language'];
         $sourceName = trim($validated['dish_name']);
@@ -630,7 +676,7 @@ class DishController extends Controller
             ], 503);
         }
 
-        if ($this->hasDuplicateDishName($vietnamese['dish_name'])) {
+        if ($this->hasDuplicateDishName($vietnamese['dish_name'], $suggestion?->dish_id)) {
             return $this->dishNameDuplicateResponse();
         }
 
@@ -644,12 +690,24 @@ class DishController extends Controller
         $image = $request->file('image');
         $imageName = null;
         $imageWasMoved = false;
+        $previousImage = null;
         try {
-            $dish = DB::transaction(function () use ($validated, $vietnamese, $english, $ingredients, $selected, $ingredientsVi, $ingredientsEn, $missingIngredientTranslations, $language, $image, $directory, $tieredService, $tieredConfig, &$imageName, &$imageWasMoved): Dish {
+            $dish = DB::transaction(function () use ($validated, $vietnamese, $english, $ingredients, $selected, $ingredientsVi, $ingredientsEn, $missingIngredientTranslations, $language, $image, $directory, $tieredService, $tieredConfig, $fixedPriceDish, $suggestionId, $pendingSuggestion, &$imageName, &$imageWasMoved, &$previousImage): Dish {
                 DB::table('dish_types')->orderBy('type_id')->lockForUpdate()->first();
-                $dishId = $this->nextAvailableDishId();
-                $dish = Dish::create([
-                    'dish_id' => $dishId,
+                $suggestion = $suggestionId ? $pendingSuggestion->lockForUpdate()->first() : null;
+                if ($suggestionId && !$suggestion) {
+                    throw new \Illuminate\Http\Exceptions\HttpResponseException(response()->json([
+                        'code' => 'suggestion_not_pending', 'message' => 'Món trúng giải này không còn chờ hoàn thiện.',
+                    ], 409));
+                }
+                $dish = $suggestion?->dish_id ? Dish::lockForUpdate()->findOrFail($suggestion->dish_id) : new Dish();
+                if ($this->hasDuplicateDishName($vietnamese['dish_name'], $dish->dish_id)) {
+                    throw new \Illuminate\Http\Exceptions\HttpResponseException($this->dishNameDuplicateResponse());
+                }
+                $previousImage = $dish->getRawOriginal('image_url');
+                $oldIngredientIds = $dish->exists ? $dish->ingredientRules()->pluck('ingredient_id')->all() : [];
+                $dish->fill([
+                    'dish_id' => $dish->dish_id ?? $this->nextAvailableDishId(),
                     'dish_name' => $vietnamese['dish_name'],
                     'dish_name_en' => $english['dish_name'],
                     'type_id' => $validated['type_id'],
@@ -664,7 +722,7 @@ class DishController extends Controller
                     'recipe_instructions_en' => $english['recipe_instructions'],
                 ]);
 
-                $imageName = $dish->dish_id . '.jpg';
+                $imageName = $dish->exists ? 'proposal-' . bin2hex(random_bytes(8)) . '.jpg' : $dish->dish_id . '.jpg';
                 $imagePath = $directory . DIRECTORY_SEPARATOR . $imageName;
                 if (is_file($imagePath)) {
                     throw new \RuntimeException('A dish image already exists for this dish ID.');
@@ -685,28 +743,43 @@ class DishController extends Controller
 
                 foreach ($validated['ingredients'] as $index => $item) {
                     $ingredientId = (int) $item['ingredient_id'];
-                    DishIngredientRule::create([
-                        'dish_id' => $dish->dish_id,
-                        'ingredient_id' => $ingredientId,
+                    DishIngredientRule::updateOrCreate([
+                        'dish_id' => $dish->dish_id, 'ingredient_id' => $ingredientId,
+                    ], [
                         'role' => $item['role'],
                         'slot_key' => 'ingredient_' . $ingredientId,
                         'sort_order' => $index,
                     ]);
                 }
 
-                app(DishIngredientAvailabilityService::class)->syncForIngredientIds(
-                    collect($validated['ingredients'])->pluck('ingredient_id')->all()
-                );
-                $tieredService->persist($dish, $tieredConfig['input'], $tieredConfig['ingredient_ids'], $tieredConfig['group'], $tieredConfig['prices'], $tieredConfig['normalized'], $tieredConfig['measurements'], $tieredConfig['margin'], $tieredConfig['tax'], $tieredConfig['fixed_cost']);
+                $removedIngredientIds = array_diff($oldIngredientIds, $selected->keys()->all());
+                $dish->ingredientRules()->whereIn('ingredient_id', $removedIngredientIds)->delete();
+                if ($fixedPriceDish) {
+                    $tieredService->persistFixedPriceDish($dish, $selected->keys()->map(fn ($id) => (int) $id)->all(), (int) $validated['price']);
+                } else {
+                    $tieredService->persist($dish, $tieredConfig['input'], $tieredConfig['ingredient_ids'], $tieredConfig['group'], $tieredConfig['prices'], $tieredConfig['normalized'], $tieredConfig['measurements'], $tieredConfig['margin'], $tieredConfig['tax'], $tieredConfig['fixed_cost']);
+                }
+                app(DishIngredientAvailabilityService::class)->syncForIngredientIds([...$oldIngredientIds, ...$selected->keys()->all()]);
+                if ($suggestion) {
+                    DB::table('admin_dish_suggestions')->where('id', $suggestionId)->update([
+                        'dish_id' => $dish->dish_id, 'status' => 'approved', 'reviewed_at' => now(),
+                    ]);
+                }
 
                 return $dish;
             });
 
+            if ($previousImage && str_starts_with($previousImage, 'proposal-')) {
+                $oldPath = public_path('dishes/' . basename($previousImage));
+                if (is_file($oldPath)) @unlink($oldPath);
+            }
             return response()->json([
                 'success' => true,
                 'message' => 'Thêm món ăn thành công!',
                 'data' => $dish,
             ]);
+        } catch (\Illuminate\Http\Exceptions\HttpResponseException $exception) {
+            return $exception->getResponse();
         } catch (UniqueConstraintViolationException $exception) {
             if ($imageWasMoved && $imageName) {
                 $uploadedPath = $directory . DIRECTORY_SEPARATOR . $imageName;
@@ -891,6 +964,7 @@ class DishController extends Controller
     public function updateDish(Request $request, $id, GeminiChatbotService $gemini, \App\Services\TieredRecipeService $tieredService)
     {
         $dish = Dish::findOrFail($id);
+        $this->assertWinningDishCompleted($dish->dish_id);
 
         if (is_array($request->input('ingredients'))) {
             return $this->updateDishWithConfirmedIngredients($request, $dish, $gemini, $tieredService);
@@ -905,6 +979,10 @@ class DishController extends Controller
             'ingredients' => 'required|string',
             'recipe_instructions' => 'required|string',
         ]);
+
+        if (!$this->dishTypeSupportsTieredPortions($validated['type_id'])) {
+            return response()->json(['code' => 'fixed_price_type_requires_confirmed_ingredients', 'message' => 'Hãy xác nhận lại nguyên liệu và công thức của món Nước & chè trước khi lưu.'], 422);
+        }
 
         $language = $validated['language'];
         $name = trim($validated['dish_name']);
@@ -1070,7 +1148,13 @@ class DishController extends Controller
                 'message' => 'Danh sách nguyên liệu chưa được xác nhận.',
             ], 422);
         }
-        $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $validated['language']);
+        $fixedPriceDish = !$this->dishTypeSupportsTieredPortions($validated['type_id']);
+        if ($fixedPriceDish) {
+            $this->validateFixedPricePayload($validated['tiered_recipe'], $validated['price'], $validated['language']);
+            $tieredConfig = null;
+        } else {
+            $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $validated['language']);
+        }
 
         $sourceIngredientNames = $ingredients->map(fn (Ingredient $ingredient) => trim((string) (
             $selected->get((int) $ingredient->ingredient_id)['name']
@@ -1177,7 +1261,8 @@ class DishController extends Controller
                 $language,
                 $request,
                 $tieredService,
-                $tieredConfig
+                $tieredConfig,
+                $fixedPriceDish
             ): void {
                 $lockedDish = Dish::query()->lockForUpdate()->findOrFail($dish->dish_id);
                 $oldIngredientIds = $lockedDish->ingredientRules()
@@ -1232,7 +1317,11 @@ class DishController extends Controller
                     ...($request->hasFile('image') ? ['image_url' => $dish->dish_id . '.jpg'] : []),
                 ]);
 
-                $tieredService->persist($lockedDish, $tieredConfig['input'], $tieredConfig['ingredient_ids'], $tieredConfig['group'], $tieredConfig['prices'], $tieredConfig['normalized'], $tieredConfig['measurements'], $tieredConfig['margin'], $tieredConfig['tax'], $tieredConfig['fixed_cost']);
+                if ($fixedPriceDish) {
+                    $tieredService->persistFixedPriceDish($lockedDish, $newIngredientIds, (int) $validated['price']);
+                } else {
+                    $tieredService->persist($lockedDish, $tieredConfig['input'], $tieredConfig['ingredient_ids'], $tieredConfig['group'], $tieredConfig['prices'], $tieredConfig['normalized'], $tieredConfig['measurements'], $tieredConfig['margin'], $tieredConfig['tax'], $tieredConfig['fixed_cost']);
+                }
 
                 app(DishIngredientAvailabilityService::class)->syncForIngredientIds([
                     ...$oldIngredientIds,
@@ -1307,7 +1396,7 @@ class DishController extends Controller
         return response()->json([
             'success' => false,
             'code' => 'dish_name_invalid',
-            'message' => 'Tên món không hợp lệ hoặc không đúng ngôn ngữ đang chọn. Vui lòng nhập tên món bằng ngôn ngữ hiện tại.',
+            'message' => 'Tên món không đúng chính tả, không hợp lệ hoặc không đúng ngôn ngữ đang chọn. Vui lòng kiểm tra lại tên món.',
         ], 422);
     }
 
@@ -1322,6 +1411,9 @@ class DishController extends Controller
                 return null;
             }
 
+            if (!$dish->is_active) {
+                $this->assertWinningDishCompleted($dish->dish_id);
+            }
             $dish->is_active = !$dish->is_active;
             $dish->save();
 
@@ -1347,6 +1439,15 @@ class DishController extends Controller
                 : 'Đã ẩn món ăn khỏi danh sách bán!',
             'is_active' => $dish->is_active,
         ]);
+    }
+
+    private function assertWinningDishCompleted(int $dishId): void
+    {
+        if (DB::table('admin_dish_suggestions')->where('dish_id', $dishId)->where('status', 'pending')->exists()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'dish_id' => 'Hãy hoàn thiện món trúng giải trong mục đề xuất trước khi đưa ra bán.',
+            ]);
+        }
     }
 
     /**

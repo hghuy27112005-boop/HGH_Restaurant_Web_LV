@@ -10,7 +10,12 @@ class DishType extends Model
     protected $primaryKey = 'type_id';
     public $timestamps = false;
 
-    protected $fillable = ['type_name'];
+    protected $fillable = ['type_name', 'supports_tiered_portions', 'allows_customer_recipe_customization'];
+
+    protected $casts = [
+        'supports_tiered_portions' => 'boolean',
+        'allows_customer_recipe_customization' => 'boolean',
+    ];
 
     public function dishes()
     {

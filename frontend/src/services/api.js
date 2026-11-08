@@ -336,3 +336,26 @@ export const communityRecipeAPI = {
     comment: (id, comment) => axiosInstance.post(`/community-recipes/${id}/comments`, { comment }),
     save: id => axiosInstance.post(`/community-recipes/${id}/save`),
 };
+
+export const dishProposalAPI = {
+    list: () => axiosInstance.get('/dish-proposals'),
+    detail: id => axiosInstance.get(`/dish-proposals/${id}`),
+    claim: () => axiosInstance.post('/dish-proposals/claim'),
+    propose: data => axiosInstance.post('/dish-proposals', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    analyze: data => axiosInstance.post('/dish-proposals/analyze', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    confirmIngredients: (ingredients, language) => axiosInstance.post('/dish-proposals/confirm-ingredients', { ingredients, language }),
+    discardIngredients: ids => axiosInstance.post('/dish-proposals/discard-ingredients', { ingredient_ids: ids }),
+    previewRecipe: data => axiosInstance.post('/dish-proposals/preview-recipe', data),
+    vote: (id, quantity = 1) => axiosInstance.post(`/dish-proposals/${id}/vote`, { quantity }),
+};
+
+export const adminDishSuggestionAPI = {
+    list: () => axiosInstance.get('/admin/dish-suggestions'),
+    image: (id, version) => axiosInstance.get(`/admin/dish-suggestions/${id}/image`, {
+        responseType: 'blob',
+        params: { v: version },
+    }),
+    decide: (id, data) => axiosInstance.post(`/admin/dish-suggestions/${id}/decision`, data),
+    leaders: () => axiosInstance.get('/admin/dashboard/dish-proposal-votes'),
+    claimWinner: () => axiosInstance.post('/admin/dashboard/dish-proposal-votes/claim-winner'),
+};

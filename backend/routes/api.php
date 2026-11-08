@@ -111,6 +111,15 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
     Route::post('/community-recipes/{recipeId}/comments', [\App\Http\Controllers\CommunityRecipeController::class, 'comment']);
     Route::post('/community-recipes/{recipeId}/save', [\App\Http\Controllers\CommunityRecipeController::class, 'save']);
     Route::post('/ratings', [\App\Http\Controllers\RatingController::class, 'store']);
+    Route::get('/dish-proposals', [\App\Http\Controllers\DishProposalController::class, 'index']);
+    Route::post('/dish-proposals/claim', [\App\Http\Controllers\DishProposalController::class, 'claim']);
+    Route::post('/dish-proposals', [\App\Http\Controllers\DishProposalController::class, 'propose']);
+    Route::post('/dish-proposals/analyze', [\App\Http\Controllers\DishProposalController::class, 'analyze']);
+    Route::post('/dish-proposals/confirm-ingredients', [\App\Http\Controllers\DishProposalController::class, 'confirmIngredients']);
+    Route::post('/dish-proposals/discard-ingredients', [\App\Http\Controllers\DishProposalController::class, 'discardIngredients']);
+    Route::post('/dish-proposals/preview-recipe', [\App\Http\Controllers\DishProposalController::class, 'previewRecipe']);
+    Route::post('/dish-proposals/{proposalId}/vote', [\App\Http\Controllers\DishProposalController::class, 'vote']);
+    Route::get('/dish-proposals/{proposalId}', [\App\Http\Controllers\DishProposalController::class, 'proposalDetail']);
 
 });
 
@@ -127,6 +136,8 @@ Route::middleware(['auth:sanctum', 'locked', 'admin'])->group(function () {
     Route::get('admin/dashboard/peak-hours', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'peakHours']);
     Route::get('admin/dashboard/top-users', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'topUsers']);
     Route::get('admin/dashboard/holidays', [\App\Http\Controllers\Admin\Admin_DashboardController::class, 'holidays']);
+    Route::get('admin/dashboard/dish-proposal-votes', [\App\Http\Controllers\DishProposalController::class, 'adminLeaders']);
+    Route::post('admin/dashboard/dish-proposal-votes/claim-winner', [\App\Http\Controllers\DishProposalController::class, 'adminClaimWinner']);
 
     // Bills Management
     Route::get('admin/bills/{bill}/export-pdf', [\App\Http\Controllers\BillController::class, 'exportPDFAdmin']);
@@ -166,6 +177,9 @@ Route::middleware(['auth:sanctum', 'locked', 'admin'])->group(function () {
     // Ratings Management (xem đánh giá của khách theo món)
     Route::get('admin/ratings/stats', [\App\Http\Controllers\Admin\Admin_RatingController::class, 'stats']);
     Route::get('admin/ratings/dish/{dishId}', [\App\Http\Controllers\Admin\Admin_RatingController::class, 'byDish']);
+    Route::get('admin/dish-suggestions', [\App\Http\Controllers\DishProposalController::class, 'adminIndex']);
+    Route::get('admin/dish-suggestions/{id}/image', [\App\Http\Controllers\DishProposalController::class, 'adminImage']);
+    Route::post('admin/dish-suggestions/{id}/decision', [\App\Http\Controllers\DishProposalController::class, 'adminDecide']);
 
     // Promotions
     Route::apiResource('admin/sale-off-events', \App\Http\Controllers\Admin\Admin_SaleOffEventController::class);

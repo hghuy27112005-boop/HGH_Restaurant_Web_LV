@@ -19,7 +19,7 @@ The dedicated seeder is additive. It does not run DatabaseSeeder, reset tables, 
 - Every other existing catalog dish receives 2–4 plausible variants. A stable hash selects changes and authors; Gemini is never called by a seeder.
 - Recipes contain Vietnamese/English titles and instructions, the final ingredient list, and structured kept/replaced/removed/added ingredients. Selections retain the pho profile when a customer saves a copy.
 - Likes use distinct existing users, capped at the available audience; with enough users the seed creates 10–50 likes and 3–10 bilingual comments per recipe. The four admin profiles participate in these interactions too.
-- Unique seed keys prevent duplicate recipes/comments. Rerunning preserves published snapshots and live interactions, including likes a customer has removed.
+- Unique seed keys prevent duplicate recipes/comments. Rerunning refreshes generated recipe snapshots against the current ingredient pricing/quantity rules while keeping existing recipe IDs and live likes/comments (including likes a customer has removed).
 
 The offline seeder uses culinary families from `backend/config/ingredient_substitutions.php`. Live customer suggestions instead use Gemini with the current active warehouse catalog and current recipe selection; new database ingredients are eligible without editing this seed configuration. Suggestions are restricted to inventory IDs, fixed roles and the explicit pho rules. User previews may still use Gemini to write genuinely changed recipes; choosing an untouched seeded pho profile uses its stored bilingual instructions.
 

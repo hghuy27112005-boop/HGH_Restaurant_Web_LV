@@ -25,7 +25,7 @@ class TieredDishPricingSeeder extends Seeder
         'pork_mince' => ['aliases' => ['thịt heo băm', 'thịt heo xay', 'minced pork'], 'category' => 'protein', 'unit' => 'g', 'cost' => 142, 'step' => 10],
         'shrimp_mince' => ['aliases' => ['tôm băm', 'thịt tôm', 'minced shrimp'], 'category' => 'protein', 'unit' => 'g', 'cost' => 455, 'step' => 5],
         'shrimp' => ['aliases' => ['tôm', 'tôm tươi', 'shrimp'], 'category' => 'protein', 'unit' => 'g', 'cost' => 170, 'step' => 5],
-        'pork_belly' => ['aliases' => ['thịt ba chỉ', 'thịt heo ba chỉ', 'thịt ba chỉ/đùi', 'pork belly'], 'category' => 'protein', 'unit' => 'g', 'cost' => 209, 'step' => 10],
+        'pork_belly' => ['aliases' => ['thịt ba chỉ', 'thịt heo ba chỉ', 'thịt ba chỉ/đùi', 'pork belly'], 'category' => 'protein', 'unit' => 'g', 'cost' => 209, 'step' => 5],
         'pork' => ['aliases' => ['thịt heo', 'pork'], 'category' => 'protein', 'unit' => 'g', 'cost' => 142, 'step' => 10],
         'pork_tenderloin' => ['aliases' => ['thịt heo thăn', 'thăn heo', 'pork tenderloin'], 'category' => 'protein', 'unit' => 'g', 'cost' => 150, 'step' => 10],
         'chicken' => ['aliases' => ['thịt gà', 'gà xé', 'thịt gà xé', 'chicken', 'shredded chicken'], 'category' => 'protein', 'unit' => 'g', 'cost' => 104, 'step' => 10],
@@ -68,7 +68,7 @@ class TieredDishPricingSeeder extends Seeder
         1 => [
             ['match' => ['thịt heo băm', 'minced pork'], 'price' => 'pork_mince', 'category' => 'protein', 'q' => [30, 50, 70]],
             ['match' => ['tôm băm', 'minced shrimp'], 'price' => 'shrimp_mince', 'category' => 'protein', 'q' => [20, 30, 40]],
-            ['match' => ['nấm hương', 'shiitake mushroom'], 'price' => 'shiitake', 'category' => 'mushroom', 'q' => [2, 3, 4]],
+            ['match' => ['nấm hương', 'shiitake mushroom'], 'price' => 'shiitake', 'category' => 'mushroom', 'q' => [5, 7, 10]],
         ],
         2 => [['match' => ['thịt heo băm', 'minced pork'], 'price' => 'pork_mince', 'category' => 'protein', 'q' => [40, 60, 80]]],
         3 => [
@@ -130,7 +130,7 @@ class TieredDishPricingSeeder extends Seeder
         25 => [
             ['match' => ['thịt cua', 'cua xay', 'crab meat'], 'price' => 'crab_meat', 'category' => 'protein', 'q' => [30, 40, 50]],
             ['match' => ['gà xé', 'thịt gà xé', 'shredded chicken'], 'price' => 'chicken', 'category' => 'protein', 'q' => [30, 40, 50]],
-            ['match' => ['nấm đông cô', 'nấm hương', 'shiitake mushroom'], 'price' => 'shiitake', 'category' => 'mushroom', 'q' => [2, 3, 4]],
+            ['match' => ['nấm đông cô', 'nấm hương', 'shiitake mushroom'], 'price' => 'shiitake', 'category' => 'mushroom', 'q' => [5, 7, 10]],
         ],
         26 => [
             ['match' => ['thịt ba chỉ', 'pork belly'], 'price' => 'pork_belly', 'category' => 'protein', 'q' => [70, 90, 110]],
@@ -242,6 +242,12 @@ class TieredDishPricingSeeder extends Seeder
                         throw new RuntimeException("Dish {$dishId} is missing a variable ingredient from its bilingual recipe catalog.");
                     }
                     $price = $pricesByKey[$definition['price']];
+                    $ingredient->update([
+                        'quantity_category' => $definition['category'],
+                        'quantity_unit' => $price['unit'],
+                        'cost_per_unit' => $price['cost'],
+                        'quantity_step' => $price['step'],
+                    ]);
                     $variableByIngredientId[(int) $ingredient->ingredient_id] = [
                         'category' => $definition['category'],
                         'unit' => $price['unit'],

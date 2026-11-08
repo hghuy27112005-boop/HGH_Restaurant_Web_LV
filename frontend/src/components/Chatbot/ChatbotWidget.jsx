@@ -574,17 +574,25 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
         } catch (err) {
             const data = err.response?.data;
             setMessages((prev) => prev.filter((message) => message.local_id !== localMessageId));
-            setInputText(text);
-            requestAnimationFrame(autoResizeTextarea);
             if (data?.warning || data?.blocked) {
-                setModerationMessage(data.message);
+                // Block responses use `reply`; moderation warnings use `message`.
+                // Handle both here so the lock notice appears immediately without
+                // requiring a page reload, and do not restore text into a locked input.
+                const notice = data.reply || data.message || t('chatbot.textSendFailed');
+                setModerationMessage(notice);
                 setModerationBlocked(Boolean(data.blocked));
+                if (!data.blocked) {
+                    setInputText(text);
+                    requestAnimationFrame(autoResizeTextarea);
+                }
                 setMessages((prev) => [...prev, {
                     sender: 'bot',
-                    content: data.message,
+                    content: notice,
                     created_at: new Date().toISOString(),
                 }]);
             } else {
+                setInputText(text);
+                requestAnimationFrame(autoResizeTextarea);
                 setTextError(err.response?.status >= 500 ? { key: 'chatbot.textSendFailed' } : (err.response?.status === 404 || err.response?.status === 409 ? { key: 'chatbot.visualUnavailable' } : (data?.errors?.user_input?.[0] || data?.message || { key: 'chatbot.textSendFailed' })));
                 console.error('Lỗi gửi tin nhắn chatbot:', err);
             }

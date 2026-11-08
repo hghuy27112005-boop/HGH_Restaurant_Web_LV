@@ -10,6 +10,8 @@ use App\Services\GeminiChatbotService;
 use App\Services\PhoRecipeProfiles;
 use Database\Seeders\BilingualRecipeIngredientSeeder;
 use Database\Seeders\CommunityRecipesSeeder;
+use Database\Seeders\RecipeIngredientCatalogSeeder;
+use Database\Seeders\TieredDishPricingSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
@@ -21,9 +23,14 @@ class RecipeCustomizationTest extends TestCase
 
     private function catalog(): void
     {
-        foreach (range(1, 6) as $id) DB::table('dish_types')->insert(['type_id' => $id, 'type_name' => 'Type ' . $id]);
+        foreach (range(1, 8) as $id) {
+            DB::table('dish_types')->insert([
+                'type_id' => $id, 'type_name' => 'Type ' . $id,
+                'supports_tiered_portions' => $id !== 8, 'allows_customer_recipe_customization' => $id !== 8,
+            ]);
+        }
         DB::table('dishes')->insert(require database_path('seeders/DishCatalog.php'));
-        $this->seed(BilingualRecipeIngredientSeeder::class);
+        $this->seed([BilingualRecipeIngredientSeeder::class, RecipeIngredientCatalogSeeder::class, TieredDishPricingSeeder::class]);
         User::create(['username' => 'Admin', 'email' => 'admin@recipes.test', 'role' => 'admin']);
         foreach (range(1, 60) as $id) User::create(['username' => 'User ' . $id, 'email' => $id . '@recipes.test', 'role' => 'user']);
         // Any unexpected Gemini call fails, including calls from seeders.
@@ -48,6 +55,7 @@ class RecipeCustomizationTest extends TestCase
         }
         $this->assertCount(1, array_unique($stockIds));
         $this->assertDatabaseCount('ingredient_stocks', 1);
+        Dish::whereNotIn('dish_id', [7, 29])->delete();
         $this->seed(CommunityRecipesSeeder::class);
         $service = app(DishCustomizationService::class);
         $dish = Dish::findOrFail(29);
@@ -79,10 +87,14 @@ class RecipeCustomizationTest extends TestCase
         }
         $counts = [];
         foreach (['dish_customizations', 'community_recipes', 'community_recipe_likes', 'community_recipe_comments', 'ingredients'] as $table) $counts[$table] = DB::table($table)->count();
-        $snapshots = DB::table('community_recipes')->orderBy('id')->pluck('recipe')->all();
+        $snapshots = DB::table('community_recipes')->orderBy('id')->pluck('recipe', 'seed_key')->all();
         $this->seed(CommunityRecipesSeeder::class);
         foreach ($counts as $table => $count) $this->assertDatabaseCount($table, $count);
-        $this->assertSame($snapshots, DB::table('community_recipes')->orderBy('id')->pluck('recipe')->all());
+        $reseeded = DB::table('community_recipes')->orderBy('id')->pluck('recipe', 'seed_key')->all();
+        $this->assertSame(array_keys($snapshots), array_keys($reseeded));
+        foreach ($snapshots as $key => $snapshot) {
+            $this->assertJsonStringEqualsJsonString($snapshot, $reseeded[$key], $key);
+        }
         foreach (DB::table('community_recipes')->get() as $recipe) {
             $data = json_decode($recipe->recipe, true);
             foreach (['recipe_name_en', 'ingredients_structured', 'kept_ingredients_structured', 'removed_ingredients_structured', 'replacements_structured', 'add_ons_structured', 'recipe_instructions', 'recipe_instructions_en'] as $field) $this->assertArrayHasKey($field, $data);
@@ -98,7 +110,9 @@ class RecipeCustomizationTest extends TestCase
 
     public function test_pho_profiles_and_substitution_rules(): void
     {
-        $this->catalog(); $this->seed(CommunityRecipesSeeder::class);
+        $this->catalog();
+        Dish::whereNotIn('dish_id', [27, 29, 30])->delete();
+        $this->seed(CommunityRecipesSeeder::class);
         $dish = Dish::findOrFail(29); $service = app(DishCustomizationService::class); $profiles = app(PhoRecipeProfiles::class);
         $brisket = $profiles->ingredient('brisket')->ingredient_id; $rare = $profiles->ingredient('rare')->ingredient_id;
         $tendon = $profiles->ingredient('tendon')->ingredient_id; $balls = $profiles->ingredient('meatballs')->ingredient_id;
@@ -146,7 +160,8 @@ class RecipeCustomizationTest extends TestCase
             $options = $service->options(Dish::findOrFail($id));
             $shrimp = $options['required']->first(fn ($slot) => in_array($slot['ingredient']['name_en'], ['Shrimp', 'Minced shrimp'], true));
             $this->assertNotNull($shrimp);
-            $this->assertContains('Char siu pork', $shrimp['alternatives']->pluck('name_en')->all());
+            // Ten grams of char siu exceeds the shrimp budget in the smallest portion.
+            $this->assertNotContains('Char siu pork', $shrimp['alternatives']->pluck('name_en')->all());
             $this->assertContains('Minced chicken', $shrimp['alternatives']->pluck('name_en')->all());
         }
     }
@@ -183,10 +198,40 @@ class RecipeCustomizationTest extends TestCase
             $before = $dish->only(['ingredients', 'ingredients_en', 'recipe_instructions', 'recipe_instructions_en']);
             $confirmed = $this->postJson('/api/admin/dishes/confirm-ingredients', ['dish_id' => $dish->dish_id, 'language' => $lang, 'ingredients' => $ingredients])->assertOk()->json('ingredients');
             $this->postJson('/api/admin/dishes/' . $dish->dish_id, ['dish_name' => $name, 'type_id' => $dish->type_id, 'price' => $dish->price, 'language' => $lang,
-                'ingredients' => $confirmed, 'recipe_instructions' => $lang === 'en' ? $dish->recipe_instructions_en : $dish->recipe_instructions])->assertOk();
+                'ingredients' => $confirmed, 'recipe_instructions' => $lang === 'en' ? $dish->recipe_instructions_en : $dish->recipe_instructions,
+                'tiered_recipe' => json_encode($this->savedPricingPayload($dish), JSON_THROW_ON_ERROR),
+            ])->assertOk();
             $this->assertSame($before, $dish->fresh()->only(array_keys($before)));
 
         }
         }
+    }
+
+    private function savedPricingPayload(Dish $dish): array
+    {
+        $profile = $dish->priceProfile;
+        if (!$dish->type->supports_tiered_portions) {
+            return ['mode' => 'fixed', 'price' => (int) $dish->price];
+        }
+
+        $rows = $dish->recipeMeasurements()->with('ingredient')->get();
+
+        return [
+            'price_group' => $profile->price_group,
+            'prices' => ['low' => $profile->price_low, 'standard' => $profile->price_standard, 'high' => $profile->price_high],
+            'minimum_gross_margin_percent' => $profile->minimum_gross_margin_percent,
+            'tax_percent_included' => $profile->tax_percent_included,
+            'fixed_cost_per_serving' => $profile->fixed_cost_per_serving,
+            'quantities' => $rows->map(fn ($row) => [
+                'ingredient_id' => $row->ingredient_id,
+                'category' => $row->is_variable ? $row->ingredient->quantity_category : 'fixed',
+                'unit' => $row->quantity_unit, 'cost_per_unit' => $row->unit_cost_snapshot,
+                'step' => $row->ingredient->quantity_step ?: 50,
+                'minimum_quantity' => $row->minimum_quantity, 'maximum_quantity' => $row->maximum_quantity,
+            ])->all(),
+            'measurements' => $rows->mapWithKeys(fn ($row) => [
+                $row->ingredient_id => ['low' => $row->quantity_low, 'standard' => $row->quantity_standard, 'high' => $row->quantity_high],
+            ])->all(),
+        ];
     }
 }

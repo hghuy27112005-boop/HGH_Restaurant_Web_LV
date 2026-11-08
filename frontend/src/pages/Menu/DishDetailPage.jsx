@@ -319,6 +319,8 @@ const DishDetailPage = () => {
     const { t, i18n: languageI18n } = useTranslation();
     const { isAuthenticated } = useAuthContext();
     const [dishes, setDishes] = useState([]);
+    const [dishTypes, setDishTypes] = useState([]);
+    const [otherDishesFilter, setOtherDishesFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -353,8 +355,13 @@ const DishDetailPage = () => {
     useEffect(() => {
         const loadDishes = async () => {
             try {
-                const listResponse = await dishAPI.getAll();
+                const [listResponse, typesResponse] = await Promise.all([
+                    dishAPI.getAll(),
+                    dishAPI.getDishTypes().catch(() => ({ data: [] })),
+                ]);
                 const availableDishes = getDishData(listResponse);
+                const availableTypes = typesResponse.data?.data || typesResponse.data || [];
+                setDishTypes(Array.isArray(availableTypes) ? availableTypes : []);
                 if (id) {
                     const detailResponse = await dishAPI.getDetail(id);
                     const detail = getDishData(detailResponse);
@@ -374,6 +381,11 @@ const DishDetailPage = () => {
     }, [id]);
 
     const selectedDish = dishes.find((dish) => String(dish.dish_id) === String(id)) || dishes[0];
+    const otherDishes = otherDishesFilter === 'bestseller'
+        ? dishes.filter((dish) => dish.is_bestseller)
+        : otherDishesFilter
+            ? dishes.filter((dish) => String(dish.type_id) === String(otherDishesFilter))
+            : dishes;
 
     const openOrderModal = (type) => {
         if (!isAuthenticated) {
@@ -804,7 +816,7 @@ const DishDetailPage = () => {
                                 {steps.map((step, index) => <li key={`${selectedDish.dish_id}-${index}`}>{step.trim().replace(/[.]$/, '')}.</li>)}
                             </ol>
                         )}
-                        <button onClick={openRecipeModal} className="mt-5 rounded border border-amber-600 px-4 py-2 font-semibold text-amber-700 hover:bg-amber-50">{i18n.t("Xem công thức thay thế", { ns: 'legacy', keySeparator: false }) + " "}</button>
+                        {selectedDish.allows_customer_recipe_customization !== false && <button onClick={openRecipeModal} className="mt-5 rounded border border-amber-600 px-4 py-2 font-semibold text-amber-700 hover:bg-amber-50">{i18n.t("Xem công thức thay thế", { ns: 'legacy', keySeparator: false }) + " "}</button>}
                     </section>
                     <section className="mt-8 border-t pt-6">
                         <h3 className="text-xl font-bold text-red-600 mb-3">{i18n.t("Đánh giá", { ns: 'legacy', keySeparator: false })}</h3>
@@ -816,8 +828,22 @@ const DishDetailPage = () => {
                     </section>
                     <div className="mt-8 border-t pt-6">
                         <h3 className="text-xl font-bold text-red-600 mb-4">{i18n.t("Chọn món khác", { ns: 'legacy', keySeparator: false })}</h3>
+                        <select
+                            value={otherDishesFilter}
+                            onChange={(event) => setOtherDishesFilter(event.target.value)}
+                            aria-label={t('dishDetail.filterOtherDishes')}
+                            className="mb-4 block w-fit max-w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-800 focus:border-red-600 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                        >
+                            <option value="">{t('dishDetail.allDishes')}</option>
+                            <option value="bestseller">{i18n.t("⭐ Bestseller", { ns: 'legacy', keySeparator: false })}</option>
+                            {dishTypes.map((type) => (
+                                <option key={type.type_id} value={type.type_id}>
+                                    {i18n.t(type.type_name, { ns: 'legacy', keySeparator: false })}
+                                </option>
+                            ))}
+                        </select>
                         <div className="flex flex-wrap gap-2">
-                            {dishes.map((dish) => (
+                            {otherDishes.map((dish) => (
                                 <button key={dish.dish_id} onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className={`px-3 py-2 rounded border text-sm ${dish.dish_id === selectedDish.dish_id ? 'bg-red-600 text-white border-red-600' : 'border-gray-300 hover:border-red-600 hover:text-red-600'}`}>
                                     {translateDishName(dish)}
                                 </button>
@@ -834,7 +860,7 @@ const DishDetailPage = () => {
                 confirmText={t('pricing.addToCart')}
             >
                 <div className="flex flex-col gap-4">
-                    {selectedDish.price_options?.length > 0 && <div>
+                    {selectedDish.supports_tiered_portions !== false && selectedDish.price_options?.length > 0 && <div>
                         <label className="mb-2 block font-semibold text-gray-700 dark:text-gray-200">{t('pricing.portionSizes')}</label>
                         <div className="grid grid-cols-3 gap-2">{selectedDish.price_options.map((option) => {
                             const total = Number(option.price) + Number(selectedCustomization?.price_adjustment || 0);
@@ -848,7 +874,7 @@ const DishDetailPage = () => {
                         <span className="text-sm font-semibold text-green-700 dark:text-green-300">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
                     </div>
 
-                    <div>
+                    {selectedDish.allows_customer_recipe_customization !== false && <div>
                         <label className="block font-semibold mb-2 text-gray-700 dark:text-gray-200">{i18n.t("Chọn công thức thay thế", { ns: 'legacy', keySeparator: false })}</label>
                         <div className="flex flex-col items-start gap-2">
                             <button
@@ -871,7 +897,7 @@ const DishDetailPage = () => {
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    </div>}
 
                     <div>
                         <label className="block font-semibold mb-1 text-gray-700 dark:text-gray-200">{i18n.t("Nhập số lượng", { ns: 'legacy', keySeparator: false })}</label>

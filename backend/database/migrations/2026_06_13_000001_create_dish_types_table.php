@@ -11,6 +11,8 @@ return new class extends Migration
         Schema::create('dish_types', function (Blueprint $table) {
             $table->id('type_id'); // BIGSERIAL PRIMARY KEY
             $table->string('type_name', 100)->unique();
+            $table->boolean('supports_tiered_portions')->default(true);
+            $table->boolean('allows_customer_recipe_customization')->default(true);
         });
     }
 

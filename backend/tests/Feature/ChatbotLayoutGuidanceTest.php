@@ -8,6 +8,50 @@ use Tests\TestCase;
 
 class ChatbotLayoutGuidanceTest extends TestCase
 {
+    public function test_ballot_screenshot_gets_customer_layout_and_rules_in_both_languages(): void
+    {
+        Http::preventStrayRequests();
+        $image = ['mimeType' => 'image/png', 'data' => base64_encode('ballot screenshot transport')];
+        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [[
+            'text' => json_encode(['reply' => 'Ballot screen advice', 'visual_audience' => 'customer',
+                'ballot_question' => 'A misclassified result question with no caption']),
+        ]]]]]])]);
+
+        foreach (['vi' => 'Vietnamese', 'en' => 'English'] as $language => $outputLanguage) {
+            $result = app(GeminiChatbotService::class)->answerFreeform('', $language, [], [], [$image], [
+                'current_page' => '/profile/ratings', 'images_attached_this_turn' => 1,
+            ]);
+            $this->assertSame('Ballot screen advice', $result['reply']);
+            $this->assertArrayNotHasKey('ballot_question', $result);
+            Http::assertSent(function ($request) use ($image, $outputLanguage) {
+                $parts = $request['contents'][0]['parts'];
+                return $parts[1]['inlineData'] === $image
+                    && str_contains($parts[0]['text'], 'ĐỀ XUẤT VÀ BÌNH CHỌN MÓN MỚI PHÍA KHÁCH')
+                    && str_contains($parts[0]['text'], 'Receive daily vote ticket')
+                    && str_contains($parts[0]['text'], 'Submit dish suggestion')
+                    && str_contains($parts[0]['text'], '3.000 điểm')
+                    && str_contains($parts[0]['text'], 'entirely in '.$outputLanguage)
+                    && str_contains($parts[0]['text'], '"new_image_without_request":true');
+            });
+        }
+    }
+
+    public function test_ballot_reward_policy_does_not_reuse_a_prior_invoice(): void
+    {
+        Http::preventStrayRequests();
+        $answer = 'Người đề xuất món đứng đầu duy nhất được cộng 3.000 điểm.';
+        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [[
+            'text' => json_encode(['reply' => $answer, 'ballot_help' => true, 'ballot_question' => null]),
+        ]]]]]])]);
+        $result = app(GeminiChatbotService::class)->answerFreeform(
+            'Đề xuất thắng bình chọn thì được cộng bao nhiêu điểm?',
+            'vi',
+            [['sender' => 'user', 'content' => 'Hóa đơn HD-12345 của mình.']],
+            [['invoice_code' => 'HD-12345', 'earned_points' => 10, 'subtotal' => 120000]]
+        );
+        $this->assertSame($answer, $result['reply']);
+    }
+
     public function test_layout_and_completed_steps_reach_the_adviser_in_both_languages(): void
     {
         Http::preventStrayRequests();
