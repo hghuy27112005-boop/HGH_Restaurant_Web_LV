@@ -9,6 +9,9 @@ use RuntimeException;
 
 class DishProposalVotesSeeder extends Seeder
 {
+    private const FEATURED_DISH = 'Bánh đúc nóng thịt băm';
+    private const FEATURED_VOTERS = ['user101', 'user102', 'user103', 'user104'];
+
     public function run(): void
     {
         $now = now();
@@ -28,11 +31,16 @@ class DishProposalVotesSeeder extends Seeder
                 throw new RuntimeException('Expected user101-user200 and the Bronze, Silver, Gold and Platinum demo accounts.');
             }
 
-            $proposals = DB::table('dish_proposals')->where('cycle_key', $cycleKey)
+            $seededProposals = DB::table('dish_proposals')->where('cycle_key', $cycleKey)
                 ->where('image_url', 'like', "dish-proposals/seed-{$cycleKey}-%")
-                ->orderBy('id')->lockForUpdate()->pluck('id');
+                ->orderBy('id')->lockForUpdate()->get(['id', 'dish_name']);
+            $proposals = $seededProposals->pluck('id');
             if ($proposals->count() !== 104) {
                 throw new RuntimeException('Expected 104 seeded proposals in the current ballot.');
+            }
+            $featuredProposal = $seededProposals->firstWhere('dish_name', self::FEATURED_DISH);
+            if (!$featuredProposal) {
+                throw new RuntimeException('The featured demo proposal is missing.');
             }
             // Demo proposals must already exist on the dates of their backfilled votes.
             DB::table('dish_proposals')->whereIn('id', $proposals)->where('created_at', '>', $firstDay)
@@ -69,8 +77,9 @@ class DishProposalVotesSeeder extends Seeder
                     $date = $claim['claim_date'];
                     if ($remaining <= 0 || $votedDays->has($date)) continue;
                     $index = hexdec(substr(hash('sha256', "{$voter->username}:{$date}"), 0, 7)) % $proposals->count();
+                    $isFeaturedVote = $date === $firstDay->toDateString() && in_array($voter->username, self::FEATURED_VOTERS, true);
                     $votes[] = [
-                        'proposal_id' => $proposals[$index], 'user_id' => $voter->user_id,
+                        'proposal_id' => $isFeaturedVote ? $featuredProposal->id : $proposals[$index], 'user_id' => $voter->user_id,
                         'phone' => $phone, 'vote_date' => $date, 'quantity' => 1,
                         'created_at' => $date.' 07:00:00',
                     ];

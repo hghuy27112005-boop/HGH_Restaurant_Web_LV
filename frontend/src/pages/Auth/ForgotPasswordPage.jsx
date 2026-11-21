@@ -1,3 +1,4 @@
+import { isSupportedEmail } from '../../utils/inputValidation';
 import i18n from '../../i18n.js';
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -145,6 +146,10 @@ const ForgotPasswordPage = () => {
     const sendOtp = async () => {
         clearMessages();
         const trimmed = email.trim();
+        if (trimmed && !isSupportedEmail(trimmed)) {
+            setError(i18n.t('inputValidation.emailDomain'));
+            return;
+        }
         if (!trimmed) {
             setError(i18n.t("Vui lòng nhập địa chỉ Email.", { ns: 'legacy', keySeparator: false }));
             return;
@@ -330,6 +335,8 @@ const ForgotPasswordPage = () => {
                                 <label className={labelClass}>{i18n.t("Mật khẩu mới (*):", { ns: 'legacy', keySeparator: false })}</label>
                                 <input
                                     type="password"
+                                    minLength={6}
+                                    maxLength={20}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
@@ -341,6 +348,8 @@ const ForgotPasswordPage = () => {
                                 <label className={labelClass}>{i18n.t("Xác nhận mật khẩu mới (*):", { ns: 'legacy', keySeparator: false })}</label>
                                 <input
                                     type="password"
+                                    minLength={6}
+                                    maxLength={20}
                                     value={passwordConfirm}
                                     onChange={(e) => setPasswordConfirm(e.target.value)}
                                     required

@@ -60,6 +60,9 @@ const I18nText = ({ translationKey }) => i18n.t(translationKey);
 const OrdersPage = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const invoiceCode = searchParams.get('invoice') || '';
+    const invoiceSearch = searchParams.get('invoice_search') || '';
+    const activeLookup = invoiceCode || invoiceSearch;
+    const lookupParams = invoiceCode ? { invoice: invoiceCode } : invoiceSearch ? { invoice_search: invoiceSearch } : undefined;
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -68,35 +71,33 @@ const OrdersPage = () => {
 
     const [detailBill, setDetailBill] = useState(null); // bill đang xem chi tiết (null = đóng modal)
     const [errorMessage, setErrorMessage] = useState(null);
-    const [searchBillId, setSearchBillId] = useState(invoiceCode);
-    const [dateFilter, setDateFilter] = useState(() => invoiceCode ? '' : getTodayDateKey());
+    const [searchBillId, setSearchBillId] = useState(activeLookup.replace(/\D/g, '').slice(0, 10));
+    const [dateFilter, setDateFilter] = useState(() => activeLookup ? '' : getTodayDateKey());
 
     useEffect(() => {
         fetchOrders();
-    }, [invoiceCode]);
+    }, [invoiceCode, invoiceSearch]);
 
     useEffect(() => {
-        setSearchBillId(invoiceCode);
-        setDateFilter(invoiceCode ? '' : getTodayDateKey());
+        setSearchBillId(activeLookup.replace(/\D/g, '').slice(0, 10));
+        setDateFilter(activeLookup ? '' : getTodayDateKey());
         setTypeFilter('all');
         setStatusFilter('all');
-        if (!invoiceCode) {
-            setDetailBill(null);
-            return;
-        }
-    }, [invoiceCode]);
+        setDetailBill(null);
+    }, [invoiceCode, invoiceSearch]);
 
     useEffect(() => {
-        if (!invoiceCode) return;
-        const bill = orders.find((item) => String(item.bill_id) === invoiceCode);
-        setDetailBill(bill || null);
-    }, [invoiceCode, orders]);
+        if (activeLookup) {
+            const bill = orders.find((item) => String(item.bill_id) === activeLookup);
+            setDetailBill(bill || null);
+        }
+    }, [activeLookup, orders]);
 
     const fetchOrders = async () => {
         try {
             setLoading(true);
             setError(null);
-            const response = await billService.getBills(invoiceCode ? { invoice: invoiceCode } : undefined); // lấy tất cả loại đơn
+            const response = await billService.getBills(lookupParams); // lấy tất cả loại đơn
             setOrders(extractListData(response));
         } catch (err) {
             if (err.response?.status === 401) return;
@@ -117,15 +118,16 @@ const OrdersPage = () => {
         event.preventDefault();
 
         const nextInvoice = searchBillId.trim();
-        if (!nextInvoice && !invoiceCode) {
+        if (!nextInvoice && !activeLookup) {
             setDateFilter((current) => current || getTodayDateKey());
             return;
         }
-        if (nextInvoice === invoiceCode) return;
+        if (nextInvoice === activeLookup) return;
 
         const nextParams = new URLSearchParams(searchParams);
-        if (nextInvoice) nextParams.set('invoice', nextInvoice);
-        else nextParams.delete('invoice');
+        nextParams.delete('invoice');
+        if (nextInvoice) nextParams.set('invoice_search', nextInvoice);
+        else nextParams.delete('invoice_search');
         setSearchParams(nextParams);
     };
 
@@ -196,8 +198,8 @@ const OrdersPage = () => {
         if (typeFilter === 'booking_table' && statusFilter !== 'all') {
             result = result.filter(o => o.booking_table?.booking_status === statusFilter);
         }
-        if (searchBillId.trim()) {
-            result = result.filter(o => String(o.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase()));
+        if (searchBillId.trim() && (!invoiceCode || searchBillId !== invoiceCode.replace(/\D/g, '').slice(0, 10))) {
+            result = result.filter(o => [o.bill_id, o.order_id].some(code => String(code || '').includes(searchBillId.trim())));
         }
         if (dateFilter) {
             result = result.filter(o => getOrderFilterDate(o) === dateFilter);
@@ -265,9 +267,9 @@ const OrdersPage = () => {
                     <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                         <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{i18n.t("Tìm theo mã hóa đơn", { ns: 'legacy', keySeparator: false })}</span>
                         <input
-                            type="text"
+                            type="text" inputMode="numeric" maxLength={10}
                             value={searchBillId}
-                            onChange={e => setSearchBillId(e.target.value)}
+                            onChange={e => setSearchBillId(e.target.value.replace(/\D/g, '').slice(0, 10))}
                             onKeyDown={handleInvoiceSearchKeyDown}
                             placeholder={i18n.t("Nhập mã hóa đơn...", { ns: 'legacy', keySeparator: false })}
                             className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"

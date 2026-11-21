@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Models\ContentModerationWarning;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\ValidationException;
+
 class ContentModerationService
 {
     private const WARNING_MESSAGE = 'Nhà hàng nhận thấy lời nhắn của quý khách có dấu hiệu không phù hợp. Quý khách vui lòng sử dụng ngôn từ lịch sự. Nếu tiếp tục vi phạm, quý khách sẽ bị tạm khóa chatbot và đánh giá đến hết ngày.';
@@ -24,24 +27,49 @@ class ContentModerationService
 
     public function __construct(private GeminiChatbotService $gemini) {}
 
-    public function check(string $content, int $userId, string $source): ?array
+    public function requireAppropriateName(string $name, string $field, string $language): void
+    {
+        $en = $language === 'en';
+        $inappropriate = RestaurantContentPolicy::containsKnownAbuse($name) ? true : $this->gemini->detectsInappropriateName($name);
+        if ($inappropriate === null) {
+            throw new HttpResponseException(response()->json([
+                'code' => 'name_review_unavailable',
+                'message' => $en ? 'Name review is unavailable. Please try again.' : 'Chưa thể kiểm duyệt tên. Vui lòng thử lại.',
+            ], 503));
+        }
+        if ($inappropriate) {
+            $message = match ($field) {
+                'recipe_name' => $en ? 'This recipe name is inappropriate. Please choose another name.' : 'Tên công thức không phù hợp. Vui lòng đặt lại.',
+                'username' => $en ? 'This username is inappropriate. Please choose another name.' : 'Tên người dùng không phù hợp. Vui lòng đặt lại.',
+                default => $en ? 'This name is inappropriate. Please choose another name.' : 'Tên này không phù hợp. Vui lòng đặt lại.',
+            };
+            throw ValidationException::withMessages([$field => $message]);
+        }
+    }
+
+    public function check(string $content, int $userId, string $source, string $lang = 'vi'): ?array
     {
         $status = $this->status($userId);
         if ($status['blocked']) {
             return [
                 'blocked' => true,
                 'warning' => false,
-                'message' => self::BLOCKED_MESSAGE,
+                'message' => $lang === 'en' ? 'Chat and reviews are suspended until the end of today after two content-policy violations.' : self::BLOCKED_MESSAGE,
                 ...$status,
             ];
         }
 
-        $aiDetected = $this->gemini->detectsProfanity($content);
-        if ($aiDetected !== true && !$this->containsProfanity($content)) {
-            return null;
+        $aiDetected = RestaurantContentPolicy::containsKnownAbuse($content) ? true : $this->gemini->detectsProfanity($content);
+        if ($aiDetected === true || $this->containsProfanity($content)) {
+            return $this->recordViolation($userId, $source, $content, $lang);
         }
-
-        return $this->recordViolation($userId, $source, $content);
+        if ($aiDetected === null) {
+            throw new HttpResponseException(response()->json([
+                'code' => 'content_review_unavailable',
+                'message' => $lang === 'en' ? 'Content review is unavailable. Please try again.' : 'Chưa thể kiểm duyệt nội dung. Vui lòng thử lại.',
+            ], 503));
+        }
+        return null;
     }
 
     public function recordViolation(int $userId, string $source, string $content, string $lang = 'vi'): array
@@ -63,7 +91,7 @@ class ContentModerationService
     private function containsProfanity(string $content): bool
     {
         $normalized = mb_strtolower($content, 'UTF-8');
-        $normalized = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $normalized) ?? $normalized;
+        $normalized = ' ' . (preg_replace('/[^\p{L}\p{M}\p{N}]+/u', ' ', $normalized) ?? $normalized) . ' ';
         $terms = [
             'đụ', 'địt', 'đĩ', 'lồn', 'cặc', 'buồi', 'dmm', 'đmm', 'dm', 'vcl',
             'vl', 'cc', 'fuck', 'fck', 'shit', 'bitch', 'motherfucker', 'đéo',
@@ -71,7 +99,7 @@ class ContentModerationService
         ];
 
         foreach ($terms as $term) {
-            if (str_contains($normalized, $term)) {
+            if (str_contains($normalized, ' ' . $term . ' ')) {
                 return true;
             }
         }

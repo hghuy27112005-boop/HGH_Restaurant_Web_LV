@@ -42,7 +42,7 @@ class IngredientStock extends Model
         return \App\Support\IngredientIdentity::key($name);
     }
 
-    public static function getOrCreateForDate(string $name, string $date, string $language = 'vi', ?string $requestedUnit = null): self
+    public static function getOrCreateForDate(string $name, string $date, string $language = 'vi', ?string $requestedUnit = null, ?int $ingredientId = null): self
     {
         $name = trim($name);
         $key = self::keyFor($name);
@@ -51,7 +51,8 @@ class IngredientStock extends Model
             ? ['ingredient_name' => null, 'ingredient_name_vi' => $name]
             : ['ingredient_name' => $name];
 
-        $ingredient = Ingredient::where('ingredient_key', $key)->first() ?? Ingredient::query()->get()->first(fn ($item) => collect([
+        $ingredient = ($ingredientId ? Ingredient::find($ingredientId) : null)
+            ?? Ingredient::where('ingredient_key', $key)->first() ?? Ingredient::query()->get()->first(fn ($item) => collect([
             $item->ingredient_key, $item->ingredient_name, $item->ingredient_name_vi, ...($item->aliases ?? []),
         ])->filter()->contains(fn ($label) => self::keyFor($label) === $key)) ?? Ingredient::firstOrCreate(
             ['ingredient_key' => $key],
@@ -63,7 +64,7 @@ class IngredientStock extends Model
         $stock = self::firstOrCreate(
             ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date, 'unit_code' => $unitCode],
             [
-                'ingredient_key' => $key,
+                'ingredient_key' => $ingredient->ingredient_key,
                 // This snapshot column stores English names; language is explicit
                 // because Vietnamese names may not contain diacritics.
                 // Stock snapshots are English-only and the legacy schema requires

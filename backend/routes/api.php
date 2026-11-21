@@ -61,7 +61,8 @@ Route::middleware(['auth:sanctum', 'locked'])->group(function () {
     Route::get('/my-bills', [\App\Http\Controllers\OrderController::class, 'myBillsJson']);
     Route::put('/user', [\App\Http\Controllers\UserController::class, 'updateProfile']);
     Route::put('/user/language', [\App\Http\Controllers\UserController::class, 'updatePreferredLanguage']);
-    Route::post('/user/avatar', [\App\Http\Controllers\UserController::class, 'uploadAvatar']);
+    Route::post('/user/avatar/review', [\App\Http\Controllers\UserController::class, 'reviewAvatar'])->middleware('throttle:10,1');
+    Route::post('/user/avatar', [\App\Http\Controllers\UserController::class, 'uploadAvatar'])->middleware('throttle:10,1');
     Route::post('/logout', [\App\Http\Controllers\AuthController::class, 'logout']);
 
     // Bills (Booking & Delivery)

@@ -327,8 +327,10 @@ const DishDetailPage = () => {
     const [selectedPriceTier, setSelectedPriceTier] = useState('standard');
     const [successMessage, setSuccessMessage] = useState('');
     const [alertMessage, setAlertMessage] = useState('');
-    const [ingredientError, setIngredientError] = useState(null); // { message, overLimit } khi giỏ vượt 50 nguyên liệu
+    const [ingredientError, setIngredientError] = useState(null);
     const [quantity, setQuantity] = useState(1);
+    const [quantityError, setQuantityError] = useState(false);
+
     const [orderType, setOrderType] = useState('mang-ve');
     const [recipeModalOpen, setRecipeModalOpen] = useState(false);
     const [recipeModalView, setRecipeModalView] = useState('list');
@@ -400,38 +402,28 @@ const DishDetailPage = () => {
         setIsModalOpen(true);
     };
 
-    const handleDecreaseQty = () => {
-        setQuantity((previous) => Math.max(1, (parseInt(previous, 10) || 1) - 1));
-    };
-
-    const handleIncreaseQty = () => {
-        const max = MAX_ORDER_QTY;
-        setQuantity((previous) => Math.min(max, (parseInt(previous, 10) || 1) + 1));
-    };
-
-    const handleDecrease10Qty = () => {
-        setQuantity((previous) => Math.max(1, (parseInt(previous, 10) || 1) - 10));
-    };
-
-    const handleIncrease10Qty = () => {
-        const max = MAX_ORDER_QTY;
-        setQuantity((previous) => Math.min(max, (parseInt(previous, 10) || 1) + 10));
-    };
-
-    const handleSetMinQty = () => setQuantity(1);
-    const handleSetMaxQty = () => setQuantity(MAX_ORDER_QTY);
-
-    const confirmAddToCart = async () => {
-        const qty = parseInt(quantity, 10);
-        const maxQty = MAX_ORDER_QTY;
-
-        if (Number.isNaN(qty) || qty < 1) {
-            setAlertMessage(i18n.t("Vui lòng nhập số lượng hợp lệ!", { ns: 'legacy', keySeparator: false }));
+    const adjustQuantity = (amount) => {
+        const current = Number(quantity);
+        if (!/^\d+$/.test(String(quantity)) || current < 1 || current > MAX_ORDER_QTY) {
+            setQuantityError(true);
             return;
         }
+        setQuantity(Math.max(1, Math.min(MAX_ORDER_QTY, current + amount)));
+    };
 
-        if (qty > maxQty) {
-            setAlertMessage(i18n.t("Mỗi lần chỉ được đặt tối đa 50 phần cho một món.", { ns: 'legacy', keySeparator: false }));
+    const handleDecreaseQty = () => adjustQuantity(-1);
+    const handleDecrease10Qty = () => adjustQuantity(-10);
+    const handleIncreaseQty = () => adjustQuantity(1);
+    const handleIncrease10Qty = () => adjustQuantity(10);
+    const handleSetMinQty = () => { setQuantity(1); setQuantityError(false); };
+    const handleSetMaxQty = () => { setQuantity(MAX_ORDER_QTY); setQuantityError(false); };
+
+    useEffect(() => setQuantityError(false), [quantity, selectedDish]);
+
+    const confirmAddToCart = async () => {
+        const qty = Number(quantity);
+        if (!/^\d+$/.test(String(quantity)) || qty < 1 || qty > MAX_ORDER_QTY) {
+            setQuantityError(true);
             return;
         }
 
@@ -445,6 +437,10 @@ const DishDetailPage = () => {
         const baseUnitPrice = Number(selectedDish.price_options?.find((option) => option.key === selectedPriceTier)?.price ?? selectedDish.price);
         const unitPrice = baseUnitPrice + Number(selectedCustomization?.price_adjustment || 0);
         const existing = cart.find((item) => item.dish_id === selectedDish.dish_id && (item.customization_id ?? null) === selectedRecipeId && (item.price_tier ?? 'standard') === selectedPriceTier);
+        if (Number(existing?.quantity ?? 0) + qty > MAX_ORDER_QTY) {
+            setQuantityError('inputValidation.cartLineLimit');
+            return;
+        }
         if (existing) { existing.quantity += qty; existing.price = unitPrice; existing.has_price_options = Boolean(selectedDish.price_options?.length); }
         else cart.push({
             dish_id: selectedDish.dish_id,
@@ -473,7 +469,7 @@ const DishDetailPage = () => {
             const data = err.response?.data;
             if (err.response?.status === 422 && data?.over_limit) {
                 setIsModalOpen(false);
-                setIngredientError({ message: data.message, overLimit: data.over_limit });
+                setIngredientError({ overLimit: data.over_limit });
             } else {
                 setAlertMessage(data?.message || 'Không thể kiểm tra nguyên liệu lúc này. Vui lòng thử lại.');
             }
@@ -679,6 +675,7 @@ const DishDetailPage = () => {
         try {
             const response = await dishCustomizationAPI.preview(selectedDish.dish_id, {
                 selection: previewSelection,
+                recipe_name: recipeName.trim(),
                 language: isEnglish ? 'en' : 'vi',
             });
             const revisedInstructions = response.data.revised_instructions;
@@ -713,7 +710,7 @@ const DishDetailPage = () => {
             });
             setRecipeModalView('preview');
         } catch (previewError) {
-            setAlertMessage(previewError.response?.data?.message || i18n.t("Không thể tạo công thức mới lúc này. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
+            setAlertMessage(previewError.response?.data?.errors?.recipe_name?.[0] || previewError.response?.data?.message || i18n.t("Không thể tạo công thức mới lúc này. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
         } finally {
             setGeneratingPreview(false);
         }
@@ -752,7 +749,7 @@ const DishDetailPage = () => {
         } catch (saveError) {
             setAlertMessage(saveError.response?.data?.code === 'recipe_save_duplicate'
                 ? t('recipeEditing.saveDuplicate', { recipe: translateRecipeName(saveError.response.data.duplicate) })
-                : saveError.response?.data?.message || i18n.t("Không thể lưu công thức thay thế. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
+                : saveError.response?.data?.errors?.recipe_name?.[0] || saveError.response?.data?.message || i18n.t("Không thể lưu công thức thay thế. Vui lòng thử lại.", { ns: 'legacy', keySeparator: false }));
         } finally {
             setSavingRecipe(false);
         }
@@ -871,7 +868,6 @@ const DishDetailPage = () => {
                         {Number(selectedCustomization?.price_adjustment || 0) > 0 && <p className="text-sm text-gray-600 dark:text-gray-300">{t('pricing.surcharge', { amount: formatCurrency(Number(selectedCustomization.price_adjustment)) })}</p>}
                     </div>}
                     <div>
-                        <span className="text-sm font-semibold text-green-700 dark:text-green-300">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
                     </div>
 
                     {selectedDish.allows_customer_recipe_customization !== false && <div>
@@ -906,15 +902,23 @@ const DishDetailPage = () => {
                             <button type="button" onClick={handleDecreaseQty} className="w-9 h-9 flex-shrink-0 flex items-center justify-center border border-gray-300 rounded font-bold text-lg hover:bg-gray-100">−</button>
                             <button type="button" onClick={handleSetMinQty} className="px-3 h-9 flex-shrink-0 border border-gray-300 rounded text-sm font-semibold hover:bg-gray-100">Min</button>
                             <input
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 value={quantity}
-                                onChange={(event) => setQuantity(event.target.value)}
+                                aria-invalid={quantityError}
+                                aria-describedby={quantityError ? 'dish-quantity-error' : undefined}
+                                onChange={(event) => { setQuantity(event.target.value); setQuantityError(false); }}
                                 className="order-first w-full sm:order-none sm:w-auto sm:flex-1 min-w-0 border border-gray-300 rounded px-3 py-2 text-center focus:outline-none focus:border-red-600"
                             />
                             <button type="button" onClick={handleSetMaxQty} className="px-3 h-9 flex-shrink-0 border border-gray-300 rounded text-sm font-semibold hover:bg-gray-100">Max</button>
                             <button type="button" onClick={handleIncreaseQty} className="w-9 h-9 flex-shrink-0 flex items-center justify-center border border-gray-300 rounded font-bold text-lg hover:bg-gray-100">+</button>
                             <button type="button" onClick={handleIncrease10Qty} className="px-2 h-9 flex-shrink-0 border border-gray-300 rounded text-xs font-semibold hover:bg-gray-100">+10</button>
                         </div>
+                        {quantityError && (
+                            <p id="dish-quantity-error" role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">
+                                {t(typeof quantityError === 'string' ? quantityError : 'inputValidation.dishQuantity', { max: MAX_ORDER_QTY })}
+                            </p>
+                        )}
                     </div>
                 </div>
             </Modal>
@@ -930,7 +934,6 @@ const DishDetailPage = () => {
             <IngredientLimitModal
                 isOpen={ingredientError !== null}
                 onClose={() => setIngredientError(null)}
-                message={ingredientError?.message}
                 overLimit={ingredientError?.overLimit}
                 formatIngredient={translateIngredients}
             />
@@ -941,7 +944,7 @@ const DishDetailPage = () => {
                 showFooterClose={false}
                 onClose={() => setAlertMessage('')}
             >
-                <p className="text-gray-700">{alertMessage}</p>
+                <p role="alert" className="break-words text-gray-700 dark:text-gray-200">{alertMessage}</p>
             </Modal>
             <Modal
                 isOpen={recipeModalOpen}
@@ -1021,7 +1024,7 @@ const DishDetailPage = () => {
                     <div className="flex flex-col gap-4">
                         <div>
                             <label className="mb-1 block font-semibold text-red-600">{i18n.t("Tên công thức", { ns: 'legacy', keySeparator: false })}</label>
-                            <input value={recipeName} onChange={(event) => setRecipeName(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2 focus:border-amber-600 focus:outline-none" placeholder={i18n.t("Ví dụ: Bò kho không rau mùi", { ns: 'legacy', keySeparator: false })} />
+                            <input maxLength={255} value={recipeName} onChange={(event) => setRecipeName(event.target.value)} className="w-full rounded border border-gray-300 px-3 py-2 focus:border-amber-600 focus:outline-none" placeholder={i18n.t("Ví dụ: Bò kho không rau mùi", { ns: 'legacy', keySeparator: false })} />
                         </div>
                         {loadingRecipeOptions ? (
                             <p className="text-sm text-gray-600">{i18n.t("Đang tải danh sách nguyên liệu...", { ns: 'legacy', keySeparator: false })}</p>

@@ -1,6 +1,10 @@
 import i18n from '../../i18n.js';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useAuthContext } from '../../context/AuthContext';
+import { userAPI } from '../../services/api';
+import { hasOrderPhone } from '../../utils/inputValidation';
+import { Loading } from '../../components/Shared';
 import { getCartStatus } from '../../utils/cartStorage';
 
 // Thứ tự hiển thị: Đặt bàn bên trái, Đặt ship bên phải
@@ -13,6 +17,34 @@ const TABS = [
 const CartLayout = () => {
     const { pathname } = useLocation();
     const activeTab = TABS.find((tab) => pathname.startsWith(tab.path));
+
+    const { user } = useAuthContext();
+    const [result, setResult] = useState(null);
+    const [attempt, setAttempt] = useState(0);
+    const userId = user?.user_id;
+
+    useEffect(() => {
+        let active = true;
+        userAPI.getProfile().then(({ data }) => {
+            if (active) setResult({ userId, attempt, status: hasOrderPhone(data.data.tele_number) ? 'ready' : 'missing' });
+        }).catch(() => {
+            if (active) setResult({ userId, attempt, status: 'error' });
+        });
+        return () => { active = false; };
+    }, [userId, attempt]);
+
+    if (!result || result.userId !== userId || result.attempt !== attempt) return <Loading />;
+    if (result.status === 'missing') return <Navigate to="/profile" replace state={{ orderPhoneRequired: true }} />;
+    if (result.status === 'error') {
+        return (
+            <div className="mx-auto max-w-xl p-8 text-center" role="alert">
+                <p>{i18n.t('inputValidation.orderPhoneCheckFailed')}</p>
+                <button type="button" className="mt-3 rounded bg-red-600 px-4 py-2 text-white" onClick={() => setAttempt(value => value + 1)}>
+                    {i18n.t('inputValidation.retryPhoneCheck')}
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-gray-50 min-h-screen">

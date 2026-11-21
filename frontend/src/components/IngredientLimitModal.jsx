@@ -1,52 +1,35 @@
-import i18n from '../i18n.js';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from './Shared';
 import { translateDishName } from '../dishTranslations';
 
-// Modal báo lỗi vượt định lượng dùng chung (giỏ hàng / đặt ship / đặt bàn):
-// - overLimit: [{ ingredient_name, requested, dish_names[] }] — nguyên liệu bị yêu cầu vượt 50
 const IngredientLimitModal = ({
-    isOpen,
-    onClose,
-    message,
-    overLimit = [],
-    formatIngredient = (name) => name,
-}) => (
-    <Modal
-        isOpen={isOpen}
-        title={i18n.t("Vượt định lượng tối đa", { ns: 'legacy', keySeparator: false })}
-        onClose={onClose}
-        cancelText="Đóng"
-        className="max-w-2xl"
-    >
-        <div className="space-y-4 text-sm text-gray-700">
-            {message && <p>{message}</p>}
+    isOpen, onClose, overLimit = [], stock = null, formatIngredient = name => name, footer,
+}) => {
+    const { t } = useTranslation();
+    const groups = [
+        ['needsStock', stock?.needs_stock ?? []],
+        ['overLimit', stock?.over_limit ?? overLimit],
+        ['outOfStock', stock?.out_of_stock ?? []],
+    ].filter(([, items]) => items.length);
+    const dishes = [...new Set(groups.flatMap(([, items]) => items.flatMap(item => item.dish_names ?? [])))];
+    const status = stock?.stock_status ?? 'over_limit';
+    const message = status === 'refilled' ? 'wait' : status === 'insufficient' ? 'unavailable' : 'split';
 
-            {overLimit.length > 0 && (
-                <div>
-                    <p className="mb-2 text-gray-600">{i18n.t("Mỗi nguyên liệu chỉ dùng tối đa 50 phần cho một đơn. Nguyên liệu trùng giữa các món được cộng dồn.", { ns: 'legacy', keySeparator: false }) + " "}</p>
-                    <table className="w-full text-sm bg-white border border-black border-t-4 border-t-red-600">
-                        <thead>
-                            <tr>
-                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">{i18n.t("Nguyên liệu", { ns: 'legacy', keySeparator: false })}</th>
-                                <th className="text-left py-2 px-3 font-semibold text-gray-700 border border-black">{i18n.t("Các món dùng nguyên liệu này", { ns: 'legacy', keySeparator: false })}</th>
-                                <th className="text-center py-2 px-3 font-semibold text-gray-700 border border-black">{i18n.t("Tổng cần", { ns: 'legacy', keySeparator: false })}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {overLimit.map((item, i) => (
-                                <tr key={i}>
-                                    <td className="py-2 px-3 border border-black">{formatIngredient(item.ingredient_name)}</td>
-                                    <td className="py-2 px-3 border border-black">{(item.dish_names || []).map(translateDishName).join(', ')}</td>
-                                    <td className="py-2 px-3 text-center font-bold text-red-600 border border-black">{item.requested} / 50</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-        </div>
-    </Modal>
-);
+    return (
+        <Modal isOpen={isOpen} title={t('stockNotice.title')} onClose={onClose} className="max-w-2xl dark:bg-gray-800">
+            <div className="space-y-3 break-words text-sm text-gray-700 dark:text-gray-200">
+                {dishes.length > 0 && <p><strong>{t('stockNotice.dishes')}</strong> {dishes.map(translateDishName).join(', ')}</p>}
+                {groups.map(([label, items]) => (
+                    <p key={label}><strong>{t(`stockNotice.${label}`)}</strong> {[...new Set(items.map(item => formatIngredient(item.ingredient_name)))].join(', ')}</p>
+                ))}
+                <p>{t(`stockNotice.${message}`)}</p>
+                {status !== 'refilled' && groups.some(([label]) => label === 'needsStock') && <p>{t('stockNotice.afterAdjust')}</p>}
+                {status !== 'over_limit' && groups.some(([label]) => label === 'overLimit') && <p>{t('stockNotice.split')}</p>}
+                {footer && <p>{footer}</p>}
+            </div>
+        </Modal>
+    );
+};
 
 export default IngredientLimitModal;

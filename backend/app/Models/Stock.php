@@ -28,55 +28,45 @@ class Stock extends Model
     // KIỂM TRA GIỚI HẠN CỨNG MỖI ĐƠN
     // ============================================
 
-    /**
-     * Kiểm tra tổng nhu cầu MỘT nguyên liệu trong đơn có vượt quá 50 hay không
-     * (không phụ thuộc kho hiện có — đây là giới hạn cứng của hệ thống).
-     */
-    public static function findIngredientDemandOver50(array $items): ?array
+    public static function assertCartLineLimits(array $items): void
     {
-        $dishes = Dish::whereIn('dish_id', collect($items)->pluck('dish_id')->unique())->get()->keyBy('dish_id');
-        $requirements = [];
-
-        foreach ($items as $item) {
-            if (!empty($item['ingredient_quantities'])) {
-                continue;
-            }
-            $dish = $dishes->get($item['dish_id']);
-            if (!empty($item['price_tier']) && $dish?->priceProfile()->exists()) {
-                continue;
-            }
-            $ingredients = collect(self::resolveItemIngredients($dish, $item))
-                ->unique(fn ($ingredient) => IngredientStock::keyFor($ingredient));
-
-            foreach ($ingredients as $ingredient) {
-                $key = IngredientStock::keyFor($ingredient);
-                $requirements[$key] = $requirements[$key] ?? [
-                    'name' => $ingredient,
-                    'quantity' => 0,
-                    'dish_ids' => [],
-                ];
-                $requirements[$key]['quantity'] += (int) $item['quantity'];
-                $requirements[$key]['dish_ids'][] = $item['dish_id'];
-            }
+        $lines = collect($items)->groupBy(fn (array $item) => implode(':', [
+            (int) $item['dish_id'], (int) ($item['customization_id'] ?? 0), $item['price_tier'] ?? 'standard',
+        ]));
+        if ($lines->contains(fn ($line) => $line->sum('quantity') > self::ORDER_LIMIT)) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'items' => request()->getPreferredLanguage(['vi', 'en']) === 'en'
+                    ? 'A cart line can contain up to 50 servings.'
+                    : 'Một dòng trong giỏ chỉ được tối đa 50 suất.',
+            ]);
         }
-
-        $over = [];
-        foreach ($requirements as $requirement) {
-            if ($requirement['quantity'] > self::ORDER_LIMIT) {
-                $over[] = [
-                    'ingredient_name' => $requirement['name'],
-                    'requested' => $requirement['quantity'],
-                    'dish_names' => collect($requirement['dish_ids'])
-                        ->unique()
-                        ->map(fn ($id) => $dishes->get($id)?->dish_name)
-                        ->filter()
-                        ->values(),
-                ];
-            }
-        }
-
-        return count($over) > 0 ? $over : null;
     }
+
+    public static function orderLimitIssues(array $items): array
+    {
+        return self::issuesAbove(self::buildRequirements($items), self::orderLimit(...));
+    }
+
+    private static function orderLimit(array $row): int
+    {
+        return match ($row['unit_code']) {
+            'g' => self::GRAM_SHELF_SIZE,
+            default => self::ORDER_LIMIT,
+        };
+    }
+
+    private static function issuesAbove(array $requirements, callable $limit): array
+    {
+        $affected = array_filter($requirements, fn ($row, $key) => $row['quantity'] > $limit($row, $key), ARRAY_FILTER_USE_BOTH);
+        if (!$affected) return [];
+
+        $names = Dish::whereIn('dish_id', collect($affected)->pluck('dish_ids')->flatten()->unique())->pluck('dish_name', 'dish_id');
+        return array_values(array_map(fn ($row) => [
+            'ingredient_name' => $row['name'],
+            'dish_names' => $names->only(array_unique($row['dish_ids']))->values()->all(),
+        ], $affected));
+    }
+
 
     // ============================================
     // PHÂN LOẠI ĐƠN: NẤU NGAY (TH1) HAY NẤU SAU (TH2)
@@ -140,7 +130,7 @@ class Stock extends Model
      * Trừ nháp. Trả về null nếu đủ hàng và không cần làm gì thêm.
      * - ['status' => 'refilled']: nấu ngay mà kệ thiếu, đã refill thật từ quỹ dự phòng,
      *   khách cần thử lại sau.
-     * - ['status' => 'insufficient', 'suggestions' => [...]]: hết hàng, kèm số lượng nên giảm.
+     * - ['status' => 'insufficient']: hết hàng cho đơn này.
      * Đơn nấu ngay tính theo kệ + quỹ dự phòng; đơn nấu sau chỉ tính theo quỹ dự phòng
      * và không ghi gì vào kho.
      */
@@ -151,32 +141,38 @@ class Stock extends Model
             return null;
         }
 
-        $refilled = false;
+        $overLimit = self::issuesAbove($requirements, self::orderLimit(...));
+        $requirements = array_filter($requirements, fn ($row) => $row['quantity'] <= self::orderLimit($row));
 
-        try {
-            DB::transaction(function () use ($items, $requirements, $date, $immediate, &$refilled) {
-                $stocks = self::lockStocks($requirements, $date);
-                self::assertAvailable($items, $requirements, $stocks, $immediate);
-
-                if (!$immediate) {
-                    return;
-                }
-
+        return DB::transaction(function () use ($requirements, $date, $immediate, $overLimit) {
+            $stocks = self::lockStocks($requirements, $date);
+            $available = self::availableMap($stocks, $immediate);
+            $unavailable = self::issuesAbove($requirements, fn ($row, $key) => $available[$key]);
+            $needsStock = $immediate ? self::issuesAbove(
+                $requirements,
+                fn ($row, $key) => $row['quantity'] <= $available[$key]
+                    ? (int) $stocks[$key]->quantity_left : PHP_INT_MAX
+            ) : [];
+            if (!$overLimit && !$unavailable && $needsStock) {
                 foreach ($requirements as $key => $requirement) {
                     $stock = $stocks[$key];
-                    if ($requirement['quantity'] > $stock->quantity_left) {
+                    if ($requirement['quantity'] <= $stock->quantity_left) continue;
                     self::refillShelf($stock, max(self::shelfSizeFor($stock), $requirement['quantity']));
-                        $stock->save();
-                        $refilled = true;
-                    }
+                    $stock->save();
                 }
-            });
-        } catch (StockUnavailableException $e) {
-            return ['status' => 'insufficient', 'suggestions' => $e->suggestions];
-        }
+            }
 
-        return $refilled ? ['status' => 'refilled'] : null;
+            if (!$overLimit && !$unavailable && !$needsStock) return null;
+
+            return [
+                'status' => $unavailable ? 'insufficient' : ($overLimit ? 'over_limit' : 'refilled'),
+                'over_limit' => $overLimit,
+                'needs_stock' => $needsStock,
+                'out_of_stock' => $unavailable,
+            ];
+        });
     }
+
 
     // ============================================
     // GHI KHO SAU KHI THANH TOÁN
@@ -203,13 +199,13 @@ class Stock extends Model
         $items = self::itemsFromOrder($order);
         $requirements = self::buildRequirements($items);
 
-        DB::transaction(function () use ($order, $items, $requirements, $date) {
+        DB::transaction(function () use ($order, $requirements, $date) {
             if (IngredientReservation::where('order_id', $order->order_id)->exists()) {
                 return;
             }
 
             $stocks = self::lockStocks($requirements, $date);
-            self::assertAvailable($items, $requirements, $stocks, false);
+            self::assertAvailable($requirements, $stocks, false);
 
             foreach ($requirements as $key => $requirement) {
                 IngredientReservation::create([
@@ -242,7 +238,7 @@ class Stock extends Model
 
             // Nhả giữ chỗ trước: phần đó quay về quỹ dự phòng rồi mới tính đủ/thiếu.
             IngredientReservation::where('order_id', $order->order_id)->delete();
-            self::assertAvailable($items, $requirements, $stocks, true);
+            self::assertAvailable($requirements, $stocks, true);
 
             foreach ($requirements as $key => $requirement) {
                 $stock = $stocks[$key];
@@ -257,7 +253,7 @@ class Stock extends Model
                 }
 
                 if ((int) $stock->quantity_left < $needed) {
-                    throw new StockUnavailableException(self::buildSuggestions($items, $requirements, self::availableMap($stocks, true)));
+                    throw new StockUnavailableException(self::issuesAbove($requirements, fn ($row, $issueKey) => $issueKey === $key ? (int) $stock->quantity_left : PHP_INT_MAX));
                 }
 
                 $before = (int) $stock->quantity_left;
@@ -358,22 +354,49 @@ class Stock extends Model
         });
     }
 
-    /** Nội dung JSON trả về khi kiểm tra nháp không qua. Không để lộ mốc 300. */
     public static function shortagePayload(array $result): array
     {
-        if (($result['status'] ?? null) === 'refilled') {
-            return [
-                'message' => 'Một số nguyên liệu không đủ định lượng trong kho. Quý khách vui lòng đợi một chút để chúng tôi bổ sung hàng vào kho. Sau đó quý khách có thể tiếp tục thực hiện thanh toán.',
-                'stock_status' => 'refilled',
-            ];
-        }
+        $status = $result['status'];
+        $english = \App\Support\PreferredLanguage::fromRequest(request()) === 'en';
+        $message = match ($status) {
+            'refilled' => $english ? 'Please wait a moment while we restock, then try again.' : 'Vui lòng đợi một chút để nhà hàng bổ sung hàng vào kho rồi thử lại.',
+            'over_limit' => $english ? 'Some ingredients exceed the limit for one order. Please reduce the quantity or split your order.' : 'Một số nguyên liệu vượt giới hạn cho một đơn. Vui lòng giảm số lượng hoặc tách đơn.',
+            default => $english ? 'Some ingredients are currently out of stock for this order.' : 'Một số nguyên liệu hiện đã hết hàng cho đơn này.',
+        };
 
-        return [
-            'message' => 'Không còn đủ lượng nguyên liệu theo yêu cầu, vui lòng giảm số lượng món.',
-            'stock_status' => 'insufficient',
-            'suggestions' => $result['suggestions'] ?? [],
+        $localize = static function (array $issues) use ($english): array {
+            if (!$english || !$issues) return $issues;
+
+            $dishNames = Dish::whereIn('dish_name', collect($issues)->pluck('dish_names')->flatten()->unique())
+                ->get(['dish_name', 'dish_name_en'])->pluck('dish_name_en', 'dish_name');
+            $labels = collect($issues)->pluck('ingredient_name')->unique();
+            $ingredients = Ingredient::whereIn('ingredient_name_vi', $labels)
+                ->orWhereIn('ingredient_key', $labels->map(IngredientStock::keyFor(...)))
+                ->get(['ingredient_key', 'ingredient_name', 'ingredient_name_vi']);
+            $ingredientNames = $ingredients->mapWithKeys(fn ($ingredient) => [
+                IngredientStock::keyFor($ingredient->ingredient_name_vi ?: $ingredient->ingredient_key) => $ingredient->ingredient_name,
+                $ingredient->ingredient_key => $ingredient->ingredient_name,
+            ]);
+
+            return array_map(static function (array $issue) use ($dishNames, $ingredientNames): array {
+                $name = $issue['ingredient_name'];
+                return [
+                    'ingredient_name' => $ingredientNames->get(IngredientStock::keyFor($name)) ?: $name,
+                    'dish_names' => array_map(fn ($dish) => $dishNames->get($dish) ?: $dish, $issue['dish_names']),
+                ];
+            }, $issues);
+        };
+        $payload = [
+            'message' => $message,
+            'stock_status' => $status,
+            'needs_stock' => $localize($result['needs_stock'] ?? []),
+            'out_of_stock' => $localize($result['out_of_stock'] ?? []),
         ];
+        if (!empty($result['over_limit'])) $payload['over_limit'] = $localize($result['over_limit']);
+
+        return $payload;
     }
+
 
     // ============================================
     // HÀM NỘI BỘ
@@ -429,7 +452,7 @@ class Stock extends Model
         foreach ($requirements as $key => $requirement) {
             // The dish ingredient list is stored in Vietnamese, so locale is data,
             // not something to guess from whether the name contains diacritics.
-            $stocks[$key] = IngredientStock::getOrCreateForDate($requirement['name'], $date, 'vi', $requirement['unit_code'] ?? null);
+            $stocks[$key] = IngredientStock::getOrCreateForDate($requirement['name'], $date, 'vi', $requirement['unit_code'] ?? null, $requirement['ingredient_id'] ?? null);
         }
 
         uasort($stocks, fn ($first, $second) => $first->ingredient_id <=> $second->ingredient_id);
@@ -453,61 +476,14 @@ class Stock extends Model
         return $map;
     }
 
-    protected static function assertAvailable(array $items, array $requirements, array $stocks, bool $immediate): void
+    protected static function assertAvailable(array $requirements, array $stocks, bool $immediate): void
     {
         $available = self::availableMap($stocks, $immediate);
 
-        foreach ($requirements as $key => $requirement) {
-            if ($requirement['quantity'] > $available[$key]) {
-                throw new StockUnavailableException(self::buildSuggestions($items, $requirements, $available));
-            }
-        }
+        $issues = self::issuesAbove($requirements, fn ($row, $key) => $available[$key]);
+        if ($issues) throw new StockUnavailableException($issues);
     }
 
-    /**
-     * Gợi ý số lượng tối đa cho từng món có nguyên liệu bị thiếu: lấy min theo các nguyên liệu
-     * của món, đã trừ phần các món khác trong đơn dùng chung nguyên liệu.
-     */
-    protected static function buildSuggestions(array $items, array $requirements, array $available): array
-    {
-        $dishes = Dish::whereIn('dish_id', collect($items)->pluck('dish_id')->unique())->get()->keyBy('dish_id');
-        $suggestions = [];
-
-        foreach ($items as $item) {
-            $dish = $dishes->get($item['dish_id']);
-            $max = null;
-            $touchesShortage = false;
-            if (!empty($item['ingredient_quantities'])) {
-                foreach ($item['ingredient_quantities'] as $row) {
-                    $key = self::requirementKey((string) ($row['name'] ?? ''), (string) ($row['unit'] ?? 'portion'));
-                    if (!isset($requirements[$key])) continue;
-                    $amountPerServing = max(1, (int) ($row['quantity'] ?? 1));
-                    $others = $requirements[$key]['quantity'] - ($amountPerServing * (int) $item['quantity']);
-                    $room = max(0, (int) floor(($available[$key] - $others) / $amountPerServing));
-                    $max = $max === null ? $room : min($max, $room);
-                    if ($requirements[$key]['quantity'] > $available[$key]) $touchesShortage = true;
-                }
-            } else {
-                foreach (self::itemIngredientKeys($dish, $item) as $key) {
-                    $others = $requirements[$key]['quantity'] - (int) $item['quantity'];
-                    $room = max(0, $available[$key] - $others);
-                    $max = $max === null ? $room : min($max, $room);
-                    if ($requirements[$key]['quantity'] > $available[$key]) $touchesShortage = true;
-                }
-            }
-
-            if ($touchesShortage) {
-                $suggestions[] = [
-                    'dish_id' => $item['dish_id'],
-                    'dish_name' => $dish?->dish_name,
-                    'customization_id' => $item['customization_id'] ?? null,
-                    'max_quantity' => (int) $max,
-                ];
-            }
-        }
-
-        return $suggestions;
-    }
 
     /** Gộp nhu cầu theo nguyên liệu: [key => ['name' => ..., 'quantity' => ...]], đã sắp theo key. */
     protected static function buildRequirements(array $items): array
@@ -516,21 +492,25 @@ class Stock extends Model
         $requirements = [];
 
         foreach ($items as $item) {
-            if (!empty($item['ingredient_quantities'])) {
-                foreach ($item['ingredient_quantities'] as $row) {
+            $quantities = $item['ingredient_quantities_snapshot'] ?? $item['ingredient_quantities'] ?? null;
+            if (is_array($quantities)) {
+                foreach ($quantities as $row) {
                     $ingredient = (string) ($row['name'] ?? '');
                     if ($ingredient === '') continue;
                     $unit = (string) ($row['unit'] ?? 'portion');
                     $key = self::requirementKey($ingredient, $unit);
-                    $requirements[$key] = $requirements[$key] ?? ['name' => $ingredient, 'quantity' => 0, 'unit_code' => $unit];
+                    $requirements[$key] = $requirements[$key] ?? ['name' => $ingredient, 'quantity' => 0, 'unit_code' => $unit, 'dish_ids' => []];
+                    if (!empty($row['ingredient_id'])) $requirements[$key]['ingredient_id'] = (int) $row['ingredient_id'];
                     if ($requirements[$key]['unit_code'] !== $unit) throw new \RuntimeException('One ingredient is configured with incompatible stock units.');
+                    $requirements[$key]['dish_ids'][] = $item['dish_id'];
                     $requirements[$key]['quantity'] += (int) $row['quantity'] * (int) $item['quantity'];
                 }
                 continue;
             }
             foreach (self::resolveItemIngredientsUnique($dishes->get($item['dish_id']), $item) as $nameKey => $ingredient) {
                 $key = self::requirementKey($ingredient, 'portion');
-                $requirements[$key] = $requirements[$key] ?? ['name' => $ingredient, 'quantity' => 0, 'unit_code' => 'portion'];
+                $requirements[$key] = $requirements[$key] ?? ['name' => $ingredient, 'quantity' => 0, 'unit_code' => 'portion', 'dish_ids' => []];
+                $requirements[$key]['dish_ids'][] = $item['dish_id'];
                 $requirements[$key]['quantity'] += (int) $item['quantity'];
             }
         }
@@ -538,11 +518,6 @@ class Stock extends Model
         ksort($requirements);
 
         return $requirements;
-    }
-
-    protected static function itemIngredientKeys(?Dish $dish, array $item): array
-    {
-        return array_map(fn ($ingredient) => self::requirementKey($ingredient, 'portion'), array_values(self::resolveItemIngredientsUnique($dish, $item)));
     }
 
     protected static function requirementKey(string $name, string $unit): string
@@ -570,7 +545,7 @@ class Stock extends Model
             'quantity' => (int) $item->quantity,
             'customization_id' => $item->customization_id,
             'ingredients' => $item->ingredients,
-            'ingredient_quantities' => $item->ingredient_quantities_snapshot,
+            'ingredient_quantities_snapshot' => $item->ingredient_quantities_snapshot,
             'is_order_snapshot' => true,
         ])->all();
     }

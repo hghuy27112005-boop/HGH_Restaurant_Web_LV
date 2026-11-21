@@ -382,7 +382,7 @@ class BookingTableController extends Controller
             } catch (\App\Exceptions\StockUnavailableException $e) {
                 DB::rollBack();
                 return response()->json(
-                    \App\Models\Stock::shortagePayload(['status' => 'insufficient', 'suggestions' => $e->suggestions]),
+                    \App\Models\Stock::shortagePayload(['status' => 'insufficient', 'out_of_stock' => $e->issues]),
                     422
                 );
             }

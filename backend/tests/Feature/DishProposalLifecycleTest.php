@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Dish;
 use App\Models\Ingredient;
 use App\Models\OrderItem;
 use App\Models\User;
@@ -107,6 +108,7 @@ class DishProposalLifecycleTest extends TestCase
             $observer = User::create(['username' => 'lifecycle-observer', 'email' => 'lifecycle-observer@example.test']);
             $admin = User::create(['username' => 'lifecycle-admin', 'email' => 'lifecycle-admin@example.test', 'role' => 'admin']);
             $chicken = $this->protein('Thịt gà', 'Chicken', 100);
+            $chicken->update(['quantity_step' => 50]);
             $pork = $this->protein('Thịt heo', 'Pork', 80);
             $chickenId = $chicken->ingredient_id;
             $porkId = $pork->ingredient_id;
@@ -124,6 +126,21 @@ class DishProposalLifecycleTest extends TestCase
                     'recipe_instructions' => 'Hấp thịt gà theo định lượng đã chọn.',
                     'quantities' => [['ingredient_id' => $chickenId, 'low' => 100, 'standard' => 150, 'high' => 200]],
                 ]);
+                $mock->shouldReceive('validateDishContentLanguage')->once()->with([
+                    'recipe_instructions' => ['kind' => 'recipe', 'text' => $instructions],
+                ], 'vi')->andReturn([true]);
+                $mock->shouldReceive('validateRecipeQuality')->with($instructions)->once()
+                    ->andReturn(['appropriate' => true, 'meaningful' => true]);
+                $mock->shouldReceive('validateRecipeQuality')->with('Hấp thịt gà theo định lượng đã chọn.')->once()
+                    ->andReturn(['appropriate' => true, 'meaningful' => true]);
+                $mock->shouldReceive('detectsInappropriateName')->with('Thay thịt heo')->once()->andReturn(false);
+                $mock->shouldReceive('detectsInappropriateName')->with($completedName)->twice()->andReturn(false);
+                $mock->shouldReceive('validateDishContentLanguage')->once()->with([
+                    'recipe_instructions' => ['kind' => 'recipe', 'text' => 'Steam the chicken.'],
+                ], 'vi')->andReturn([false]);
+                $mock->shouldReceive('validateDishContentLanguage')->once()->with([
+                    'recipe_instructions' => ['kind' => 'recipe', 'text' => 'Hấp thịt gà theo định lượng đã chọn.'],
+                ], 'vi')->andReturn([true]);
                 $mock->shouldReceive('translateDishContent')->once()->with($completedName, 'Thịt gà', 'Hấp thịt gà theo định lượng đã chọn.', 'vi')->andReturn([
                     'dish_name' => 'Steamed Chicken', 'ingredients' => 'Chicken', 'recipe_instructions' => 'Steam chicken according to the selected portion.',
                 ]);
@@ -142,18 +159,29 @@ class DishProposalLifecycleTest extends TestCase
             $analysis = $this->post('/api/dish-proposals/analyze', [
                 'dish_name' => $name, 'language' => 'vi', 'image' => UploadedFile::fake()->createWithContent('dish.png', $image),
             ], ['Accept' => 'application/json', 'Accept-Language' => 'vi'])->assertOk()->assertJsonPath('ingredients.0.ingredient_id', $chickenId);
-            $this->postJson('/api/dish-proposals/confirm-ingredients', ['language' => 'vi', 'ingredients' => $analysis->json('ingredients')])
-                ->assertOk()->assertJsonPath('ingredients.0.ingredient_id', $chickenId);
+            $draftToken = $analysis->json('draft_token');
+            $ingredientsInput = ['draft_token' => $draftToken, 'language' => 'vi', 'ingredients' => $analysis->json('ingredients')];
+            $staleToken = $this->postJson('/api/dish-proposals/confirm-ingredients', $ingredientsInput)->assertOk()->json('confirmation_token');
+            $confirmation = $this->postJson('/api/dish-proposals/confirm-ingredients', $ingredientsInput)
+                ->assertOk()->assertJsonPath('ingredients.0.ingredient_id', $chickenId)->json('confirmation_token');
+            $tokens = ['draft_token' => $draftToken, 'confirmation_token' => $confirmation];
+            $this->postJson('/api/dish-proposals/preview-recipe', [...$tokens, 'confirmation_token' => $staleToken])
+                ->assertUnprocessable()->assertJsonPath('code', 'proposal_draft_invalid');
+            $other = User::create(['username' => 'Other draft user', 'email' => 'other-draft@gmail.com']);
+            Sanctum::actingAs($other);
+            $this->postJson('/api/dish-proposals/preview-recipe', $tokens)
+                ->assertUnprocessable()->assertJsonPath('code', 'proposal_draft_invalid');
+            Sanctum::actingAs($customer);
             $recipe = $this->postJson('/api/dish-proposals/preview-recipe', [
-                'language' => 'vi', 'dish_name' => $name, 'ingredient_ids' => [$chickenId],
+                ...$tokens, 'ingredient_ids' => [$porkId], 'dish_name' => 'Forced other recipe',
             ])->assertOk()->assertJsonPath('recipe_instructions', $instructions);
             $this->post('/api/dish-proposals', [
                 'dish_name' => $name, 'type_id' => $type, 'language' => 'vi',
                 'image' => UploadedFile::fake()->createWithContent('dish.png', $image),
-                'ingredients' => 'Thịt gà', 'recipe_instructions' => $recipe->json('recipe_instructions'),
+                ...$tokens, 'ingredients' => 'Injected different ingredient', 'recipe_instructions' => $recipe->json('recipe_instructions'),
             ], ['Accept' => 'application/json', 'Accept-Language' => 'vi'])->assertCreated();
             $proposal = $this->getJson('/api/dish-proposals')->assertOk()
-                ->assertJsonPath('proposals.0.dish_name', $name)->assertJsonPath('can_propose', false)->json('proposals.0');
+                ->assertJsonPath('proposals.0.dish_name', $name)->assertJsonPath('proposals.0.ingredients', 'Thịt gà')->assertJsonPath('can_propose', false)->json('proposals.0');
             $this->postJson('/api/dish-proposals/claim')->assertOk();
             $this->postJson("/api/dish-proposals/{$proposal['id']}/vote", ['quantity' => 1])->assertOk();
 
@@ -169,37 +197,80 @@ class DishProposalLifecycleTest extends TestCase
             $this->assertSame('diamond', $customer->fresh()->membership);
             $this->assertDatabaseHas('user_notifications', ['user_id' => $observer->user_id, 'type' => 'monthly_dish_winner']);
             $this->getJson('/api/admin/dish-suggestions')->assertOk()->assertJsonPath('data.0.id', $suggestionId)
-                ->assertJsonPath('data.0.dish_id', null);
+                ->assertJsonPath('data.0.dish_id', null)
+                ->assertJsonPath('data.0.ingredient_drafts.0.ingredient_id', $chickenId)
+                ->assertJsonPath('data.0.ingredient_drafts.0.quantity_category', 'protein')
+                ->assertJsonPath('data.0.ingredient_drafts.0.quantity_unit', 'g')
+                ->assertJsonPath('data.0.ingredient_drafts.0.cost_per_unit', '100.0000');
             $imageResponse = $this->get("/api/admin/dish-suggestions/{$suggestionId}/image")->assertOk();
             $this->assertTrue($imageResponse->headers->hasCacheControlDirective('no-store'));
             $this->assertDatabaseCount('dishes', 0);
             $this->getJson('/api/admin/dishes')->assertOk()->assertJsonCount(0);
             $this->getJson('/api/dishes')->assertOk()->assertJsonCount(0);
 
-            $confirmed = $this->postJson('/api/admin/dishes/confirm-ingredients', [
-                'language' => 'vi', 'ingredients' => $ingredients,
-            ])->assertOk()->json('ingredients');
+            $confirmation = [
+                'language' => 'vi', 'fixed_cost_per_serving' => 0,
+                'ingredients' => [[
+                    ...$ingredients[0], 'quantity_category' => 'protein', 'cost_per_unit' => 100,
+                    'quantity_step' => 50, 'minimum_quantity' => 0, 'maximum_quantity' => 200,
+                ]],
+            ];
+            $this->postJson('/api/admin/dishes/confirm-ingredients', [
+                ...$confirmation,
+                'ingredients' => [[...$confirmation['ingredients'][0], 'cost_per_unit' => '100 VND']],
+            ])->assertUnprocessable()->assertJsonValidationErrors('ingredients.0.cost_per_unit');
+            $confirmed = $this->postJson('/api/admin/dishes/confirm-ingredients', $confirmation)->assertOk()
+                ->assertJsonPath('ingredients.0.stock_settings_locked', true)
+                ->assertJsonPath('ingredients.0.quantity_step', '50.00')->json('ingredients');
             $tiered = [
                 'price_group' => 'medium', 'prices' => $prices, 'minimum_gross_margin_percent' => 10,
                 'tax_percent_included' => 0, 'fixed_cost_per_serving' => 0,
                 'quantities' => [[
                     'ingredient_id' => $chickenId, 'category' => 'protein', 'unit' => 'g',
-                    'cost_per_unit' => 100, 'step' => 50, 'minimum_quantity' => 100, 'maximum_quantity' => 200,
+                    'cost_per_unit' => 100, 'step' => 50, 'minimum_quantity' => 0, 'maximum_quantity' => 200,
                 ]],
             ];
             $adminIngredients = [[...$confirmed[0], 'name' => 'Thịt gà']];
+            $fixedIngredientPayload = [
+                'language' => 'vi',
+                'ingredients' => [[...$ingredients[0], 'quantity_category' => 'fixed', 'maximum_quantity' => 200]],
+            ];
+            foreach ([999, 10001] as $invalidCost) {
+                $this->postJson('/api/admin/dishes/confirm-ingredients', [
+                    ...$fixedIngredientPayload, 'fixed_cost_per_serving' => $invalidCost,
+                ])->assertUnprocessable()->assertJsonValidationErrors('fixed_cost_per_serving');
+            }
+            foreach ([1000, 10000] as $validCost) {
+                $this->postJson('/api/admin/dishes/confirm-ingredients', [
+                    ...$fixedIngredientPayload, 'fixed_cost_per_serving' => $validCost,
+                ])->assertOk();
+            }
+            $this->postJson('/api/admin/dishes/preview-tiered-recipe', [
+                ...$tiered, 'tax_percent_included' => '1e999',
+                'dish_name' => $completedName, 'language' => 'vi', 'ingredients' => $adminIngredients,
+            ])->assertUnprocessable();
             $preview = $this->postJson('/api/admin/dishes/preview-tiered-recipe', [
-                ...$tiered, 'dish_name' => $name, 'language' => 'vi', 'ingredients' => $adminIngredients,
+                ...$tiered, 'dish_name' => $completedName, 'language' => 'vi', 'ingredients' => $adminIngredients,
             ])->assertOk();
             $save = [
                 'suggestion_id' => $suggestionId, 'dish_name' => $completedName, 'type_id' => $type, 'price' => 30000, 'language' => 'vi',
                 'ingredients' => $adminIngredients, 'recipe_instructions' => $preview->json('recipe_instructions'),
-                'tiered_recipe' => json_encode([...$tiered, 'measurements' => [$chickenId => $measurements]], JSON_THROW_ON_ERROR),
+                'tiered_recipe' => json_encode([...$tiered, 'measurements' => [$chickenId => $measurements], 'preview_token' => $preview->json('preview_token')], JSON_THROW_ON_ERROR),
             ];
             $jpeg = File::get($originalPublic . '/dish_proposals_seed/001.jpg');
             $this->post('/api/admin/dishes', [
                 ...$save, 'tiered_recipe' => '{}', 'image' => UploadedFile::fake()->createWithContent('dish.jpg', $jpeg),
             ], ['Accept' => 'application/json'])->assertUnprocessable();
+            $this->post('/api/admin/dishes', [
+                ...$save, 'tiered_recipe' => json_encode([
+                    ...$tiered, 'measurements' => [$chickenId => [...$measurements, 'standard' => 200]],
+                    'preview_token' => $preview->json('preview_token'),
+                ], JSON_THROW_ON_ERROR), 'image' => UploadedFile::fake()->createWithContent('dish.jpg', $jpeg),
+            ], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('tiered_recipe');
+            $this->post('/api/admin/dishes', [
+                ...$save, 'recipe_instructions' => 'Steam the chicken.',
+                'image' => UploadedFile::fake()->createWithContent('dish.jpg', $jpeg),
+            ], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('recipe_instructions');
             $this->assertDatabaseHas('admin_dish_suggestions', ['id' => $suggestionId, 'status' => 'pending']);
             $dishId = $this->post('/api/admin/dishes', [
                 ...$save, 'image' => UploadedFile::fake()->createWithContent('dish.jpg', $jpeg),
@@ -213,6 +284,11 @@ class DishProposalLifecycleTest extends TestCase
                 ...$save, 'image' => UploadedFile::fake()->createWithContent('dish.jpg', $jpeg),
             ], ['Accept' => 'application/json'])->assertConflict();
             $this->postJson("/api/admin/dishes/{$dishId}", [...$save, 'dish_name' => 'Another name'])->assertUnprocessable();
+            $this->postJson("/api/admin/dishes/{$dishId}", [
+                ...$save, 'tiered_recipe' => json_encode([
+                    ...$tiered, 'measurements' => [$chickenId => [...$measurements, 'standard' => 200]],
+                ], JSON_THROW_ON_ERROR),
+            ])->assertUnprocessable()->assertJsonValidationErrors('tiered_recipe');
             $this->getJson("/api/dishes/{$dishId}")->assertNotFound();
             $this->postJson("/api/admin/dishes/{$dishId}/toggle-status")->assertOk()->assertJsonPath('is_active', true);
             $this->assertDatabaseHas('admin_dish_suggestions', ['dish_id' => $dishId, 'status' => 'approved']);
@@ -237,7 +313,11 @@ class DishProposalLifecycleTest extends TestCase
             ]]];
             $previewToken = $this->postJson("{$url}/preview", ['selection' => $selection, 'language' => 'vi'])
                 ->assertOk()->assertJsonPath('ingredients_structured.0.ingredient_id', $porkId)->json('preview_token');
-            $variant = $this->putJson($url, ['recipe_name' => 'Thay thịt heo', 'selection' => $selection, 'preview_token' => $previewToken])
+            $saveVariant = ['recipe_name' => 'Thay thịt heo', 'selection' => $selection, 'preview_token' => $previewToken];
+            Sanctum::actingAs($observer);
+            $this->putJson($url, $saveVariant)->assertUnprocessable();
+            Sanctum::actingAs($customer);
+            $variant = $this->putJson($url, $saveVariant)
                 ->assertOk()->json('custom_recipe');
             $customOrder = $this->orderPortions($dishId, $variant['dish_customization_id']);
             $replacementGrams = ['low' => 120, 'standard' => 180, 'high' => 240];
@@ -251,12 +331,28 @@ class DishProposalLifecycleTest extends TestCase
             $this->postJson("/api/orders/{$orderId}/pay-with-points")->assertOk()
                 ->assertJsonPath('data.points_used', 950);
             Sanctum::actingAs($admin);
-            $stocks = $this->getJson('/api/admin/stocks/ingredients/by-date?date=' . now()->toDateString())
-                ->assertOk()->assertJsonCount(2, 'data')->json('data');
-            $byIngredient = array_column($stocks, null, 'ingredient_id');
-            $this->assertSame(460, $byIngredient[$porkId]['quantity_left']);
-            $this->assertSame('g', $byIngredient[$porkId]['unit_code']);
-            $this->assertSame(1000, $byIngredient[$chickenId]['quantity_left']);
+            $stockDate = now()->toDateString();
+            $this->getJson('/api/admin/stocks/ingredients/by-date?date=' . $stockDate)
+                ->assertOk()->assertJsonCount(1, 'data')
+                ->assertJsonPath('data.0.ingredient_id', $chickenId)
+                ->assertJsonPath('data.0.quantity_left', 1000);
+            $this->assertDatabaseHas('ingredient_stocks', [
+                'ingredient_id' => $porkId, 'stock_date' => $stockDate, 'unit_code' => 'g', 'quantity_left' => 460,
+            ]);
+            $this->getJson('/api/admin/stocks/ingredients/history?date=' . $stockDate)
+                ->assertOk()->assertJsonFragment(['ingredient_name_vi' => 'Thịt heo', 'unit_code' => 'g']);
+
+            $legacyDish = Dish::create(['dish_name' => 'Legacy chicken dish', 'image_url' => '00.jpg', 'type_id' => $type, 'is_active' => true]);
+            $legacyDish->ingredientRules()->create(['ingredient_id' => $chickenId, 'role' => 'required_fixed']);
+            $hiddenDish = Dish::create(['dish_name' => 'Hidden chicken dish', 'image_url' => '00.jpg', 'type_id' => $type, 'is_active' => false]);
+            $hiddenDish->ingredientRules()->create(['ingredient_id' => $chickenId, 'role' => 'required_fixed']);
+            $this->getJson('/api/admin/stocks/ingredients/by-date?date=' . $stockDate)
+                ->assertOk()->assertJsonCount(2, 'data')
+                ->assertJsonPath('data.0.ingredient_id', $chickenId)->assertJsonPath('data.0.unit_code', 'g')
+                ->assertJsonPath('data.1.ingredient_id', $chickenId)->assertJsonPath('data.1.unit_code', 'portion')
+                ->assertJsonPath("stock_keys_by_dish.{$dishId}", ["{$chickenId}|g"])
+                ->assertJsonPath("stock_keys_by_dish.{$legacyDish->dish_id}", ["{$chickenId}|portion"])
+                ->assertJsonMissingPath("stock_keys_by_dish.{$hiddenDish->dish_id}");
         } finally {
             $this->restorePublicPath($originalPublic, $isolatedPublic);
         }

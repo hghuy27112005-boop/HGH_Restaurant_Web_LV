@@ -1,9 +1,9 @@
 import { sendVisualJob, applyVisualRejection } from './sendVisualJob';
 import ImageLibrary from './ImageLibrary';
 import i18n from '../../i18n.js';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { chatbotAPI } from '@/services/chatbotApi';
+import { createChatbotAPI } from '@/services/chatbotApi';
 import { useAuthContext } from '@/context/AuthContext';
 import chatbotScripts from '@/data/chatbot_customer_scripts';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,7 @@ const getNavLabelKey = (route) => {
     if (route === '/menu') return 'chatbot.nav.menu';
     if (/^\/dish-details\//.test(route)) return 'chatbot.nav.dishDetail';
     if (route.split('?')[0] === '/profile/orders') return 'chatbot.nav.orders';
+    if (route === '/profile/ratings') return 'chatbot.nav.ratings';
     if (route === '/profile') return 'chatbot.nav.profile';
     return 'chatbot.nav.related';
 };
@@ -20,7 +21,7 @@ const getNavLabelKey = (route) => {
 const detectReplyLanguage = (text, fallbackLanguage) => {
     if (/[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/iu.test(text)) return 'vi';
     const normalized = String(text || '').toLowerCase().trim().replace(/\s+/g, ' ');
-    const vietnameseMarkers = /\b(toi|minh|muon|ban|nha hang|mon|dat|giao|hom nay|giup|bao nhieu|khong|cho|voi|cua|sao|nao|xin chao)\b/;
+    const vietnameseMarkers = /\b(toi|tui|minh|muon|ban|nha hang|mon|dat|giao|hom nay|giup|bao nhieu|khong|cho|voi|cua|sao|nao|xin chao)\b/;
     if (vietnameseMarkers.test(normalized)) return 'vi';
 
     // Short greetings like "hi" have no language markers, but are unambiguously
@@ -36,7 +37,9 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     const replyLangRef = useRef(i18n.resolvedLanguage?.startsWith('en') ? 'en' : 'vi');
     const navigate = useNavigate();
     const location = useLocation();
-    const { logout, isAuthenticated } = useAuthContext();
+    const { isAuthenticated } = useAuthContext();
+    const authToken = sessionStorage.getItem('auth_token');
+    const chatbotAPI = useMemo(() => createChatbotAPI(authToken), [authToken]);
 
     const [dragging, setDragging] = useState(false);
     const [loaded, setLoaded] = useState(false);
@@ -44,7 +47,6 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const [loading, setLoading] = useState(false);
-    const [processingImages, setProcessingImages] = useState(false);
     const [activeVisualJobId, setActiveVisualJobId] = useState(null);
     const visualJobsRef = useRef(new Map());
     const [suppressOptions, setSuppressOptions] = useState(false);
@@ -156,7 +158,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                 if (!data.moderation?.blocked && (!data.messages || data.messages.length === 0)) {
                     handleAutoNext(nodeId);
                 }
-            });
+            }).catch(() => { /* The session can be loaded again when the widget reopens. */ });
         }
     }, [isOpen, loaded, isAuthenticated]);
 
@@ -251,7 +253,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             contents.push(t(node.afterNoteKey, { lng }));
         }
 
-        return [contents.filter(Boolean).join('\n')].filter(Boolean);
+        return contents.filter(Boolean);
     };
 
     const appendBotMessages = (nodeId, replyText, imageUrl = null, imageFilename = null) => {
@@ -404,12 +406,18 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             visualJobsRef.current.delete(job.id);
         } catch (error) {
             const data = error.response?.data;
-            const rejected = Boolean(data?.warning || data?.blocked || data?.code === 'off_topic' || data?.code === 'image_rejected');
+            const rejected = Boolean(data?.warning || data?.blocked || ['off_topic', 'image_rejected', 'unclear_image'].includes(data?.code));
             if (data?.blocked) setModerationBlocked(true);
             const message = rejected ? data.message : (job.images.every((image) => image.serverId)
                 ? { key: 'chatbot.visualReplyFailed' } : { key: 'chatbot.visualUploadFailed' });
             if (rejected) {
-                setMessages((current) => applyVisualRejection(current, job, data.message));
+                const unapproved = job.images.filter((image) => !image.serverId);
+                const unapprovedIds = new Set(unapproved.map((image) => image.localId));
+                setMessages((current) => applyVisualRejection(
+                    current.filter((item) => !unapprovedIds.has(item.local_id)), job, data.message
+                ));
+                unapproved.forEach((image) => URL.revokeObjectURL(image.url));
+                visualJobsRef.current.delete(job.id);
             } else {
                 updateStatus('failed', message);
             }
@@ -475,28 +483,6 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
     };
 
     // Tìm lại object option gốc (để lấy đúng "action") khi matched_id có thể là
-    // con trực tiếp hoặc cháu của node hiện tại
-    const findOptionByIdRecursive = (node, id) => {
-        const direct = (node.options || []).find((o) => o.id === id);
-        if (direct) return direct;
-
-        for (const opt of node.options || []) {
-            const childNode = chatbotScripts[opt.id];
-            const found = (childNode?.options || []).find((o) => o.id === id);
-            if (found) return found;
-        }
-        return null;
-    };
-
-    const runNodeAction = (option) => {
-        if (!option?.action) return;
-        if (option.action.type === 'navigate') {
-            navigate(option.action.path, { state: option.action.state });
-        } else if (option.action.type === 'logout') {
-            logout();
-        }
-    };
-
     const handleOptionClick = async (option) => {
         if (loading) return;
         setSuppressOptions(false);
@@ -517,7 +503,9 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             });
             appendBotMessages(res.data.matched_id, res.data.reply, res.data.invoice_image_url, res.data.invoice_image_filename);
             setCurrentNodeId(res.data.matched_id);
-            runNodeAction(option);
+            if (option.action?.type === 'navigate') {
+                setSuggestedNav({ route: option.action.path });
+            }
         } finally {
             setLoading(false);
         }
@@ -552,14 +540,11 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
             textSendRef.current.text = null;
             setModerationMessage('');
             appendBotMessages(res.data.matched_id, res.data.reply, res.data.invoice_image_url, res.data.invoice_image_filename);
-            if (res.data.navigate_to) navigate(res.data.navigate_to);
 
             if (res.data.matched_id && res.data.matched_id !== 'unclear') {
                 setSuppressOptions(false);
                 setSuggestedNav(null);
                 setCurrentNodeId(res.data.matched_id);
-                const matchedOption = findOptionByIdRecursive(currentNode, res.data.matched_id);
-                runNodeAction(matchedOption);
             } else {
                 // AI trả lời tự do (không khớp lựa chọn nào) — ẩn danh sách nút bấm
                 // cho lượt này, tránh làm rối khi khách chỉ đang hỏi thông tin.
@@ -805,7 +790,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                         </div>
                         {imagesExpanded && (
                             <div style={styles.imageHistoryList}>
-                                <ImageLibrary groups={imageGroups} styles={styles} onPreview={openImageViewer} onDeleted={async () => {
+                                <ImageLibrary groups={imageGroups} styles={styles} onPreview={openImageViewer} deleteImages={chatbotAPI.deleteImages} onDeleted={async () => {
                                     setPreviewIndex(null);
                                     setLoaded(false);
                                     await loadChatDays();
@@ -857,7 +842,12 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                             <div style={styles.historyBanner}>{i18n.t("Đang xem lại đoạn chat cũ — chỉ xem, không thể nhắn tiếp", { ns: 'legacy', keySeparator: false }) + " "}</div>
                         )}
 
-                        {(historyDate ? historyMessages : messages).map((msg, idx) => (
+                        {(historyDate ? historyMessages : messages).flatMap((msg) => {
+                            if (msg.sender !== 'bot' || msg.image_url || !msg.content) return [msg];
+                            const stepReply = /^(?:Bước|Step)\s+\d+[:.]/im.test(msg.content);
+                            return msg.content.split(stepReply ? /\r?\n/ : /\r?\n[ \t]*\r?\n/).map((line) => line.trim()).filter(Boolean)
+                                .map((content) => ({ ...msg, content }));
+                        }).map((msg, idx) => (
                             <div key={idx} style={msg.sender === 'user' ? styles.userMsgRow : styles.botMsgRow}>
                                 <div style={{ ...(msg.sender === 'user' ? styles.userMsg : styles.botMsg), ...(msg.image_url ? styles.imageMsg : {}) }}>
                                     {msg.image_url && (
@@ -892,7 +882,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
 
                         {!historyDate && loading && !activeVisualJobId && (
                             <div style={styles.botMsgRow}>
-                                <div style={styles.botMsg} role="status" aria-live="polite">{processingImages ? t('chatbot.processingImages') : '...'}</div>
+                                <div style={styles.botMsg} role="status" aria-live="polite">...</div>
                             </div>
                         )}
 
@@ -983,7 +973,7 @@ const ChatbotWidget = ({ isOpen, setIsOpen }) => {
                                 ref={inputRef}
                                 rows={1}
                                 style={styles.textarea}
-                                value={inputText}
+                                maxLength={500} value={inputText}
                                 onChange={(e) => { setInputText(e.target.value); autoResizeTextarea(); }}
                                 onKeyDown={handleTextareaKeyDown}
                                 placeholder={historyDate ? i18n.t("Đang xem đoạn chat cũ...", { ns: 'legacy', keySeparator: false }) : i18n.t("Nhập tin nhắn...", { ns: 'legacy', keySeparator: false })}

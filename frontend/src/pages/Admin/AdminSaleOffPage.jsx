@@ -453,7 +453,7 @@ const AdminSaleOffPage = () => {
                                 <label className="block text-sm font-semibold mb-1">{i18n.t("Tên sự kiện", { ns: 'legacy', keySeparator: false })}</label>
                                 <input
                                     type="text"
-                                    value={form.name}
+                                    maxLength={100} value={form.name}
                                     onChange={(e) => setForm({ ...form, name: e.target.value })}
                                     placeholder={i18n.t("VD: Sự kiện cuối tuần", { ns: 'legacy', keySeparator: false })}
                                     className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
@@ -492,9 +492,9 @@ const AdminSaleOffPage = () => {
                                 <div>
                                     <label className="block text-sm font-semibold mb-1">{i18n.t("Giờ bắt đầu", { ns: 'legacy', keySeparator: false })}</label>
                                     <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
-                                        <input type="text" maxLength="2" placeholder="07" value={form.startH} onChange={e => setForm({ ...form, startH: e.target.value })} className="w-10 text-center outline-none bg-transparent" />
+                                        <input type="text" maxLength="2" inputMode="numeric" placeholder="07" value={form.startH} onChange={e => setForm({ ...form, startH: e.target.value.replace(/\D/g, '') })} className="w-10 text-center outline-none bg-transparent" />
                                         <span className="font-bold text-gray-500">:</span>
-                                        <input type="text" maxLength="2" placeholder="00" value={form.startM} onChange={e => setForm({ ...form, startM: e.target.value })} className="w-10 text-center outline-none bg-transparent" />
+                                        <input type="text" maxLength="2" inputMode="numeric" placeholder="00" value={form.startM} onChange={e => setForm({ ...form, startM: e.target.value.replace(/\D/g, '') })} className="w-10 text-center outline-none bg-transparent" />
                                     </div>
                                 </div>
                             </div>
@@ -512,9 +512,9 @@ const AdminSaleOffPage = () => {
                                 <div>
                                     <label className="block text-sm font-semibold mb-1">{i18n.t("Giờ kết thúc", { ns: 'legacy', keySeparator: false })}</label>
                                     <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
-                                        <input type="text" maxLength="2" placeholder="22" value={form.endH} onChange={e => setForm({ ...form, endH: e.target.value })} className="w-10 text-center outline-none bg-transparent" />
+                                        <input type="text" maxLength="2" inputMode="numeric" placeholder="22" value={form.endH} onChange={e => setForm({ ...form, endH: e.target.value.replace(/\D/g, '') })} className="w-10 text-center outline-none bg-transparent" />
                                         <span className="font-bold text-gray-500">:</span>
-                                        <input type="text" maxLength="2" placeholder="00" value={form.endM} onChange={e => setForm({ ...form, endM: e.target.value })} className="w-10 text-center outline-none bg-transparent" />
+                                        <input type="text" maxLength="2" inputMode="numeric" placeholder="00" value={form.endM} onChange={e => setForm({ ...form, endM: e.target.value.replace(/\D/g, '') })} className="w-10 text-center outline-none bg-transparent" />
                                     </div>
                                 </div>
                             </div>

@@ -3,8 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\DishIngredientRule;
-use App\Models\Ingredient;
+use App\Models\Dish;
 use App\Models\IngredientStock;
 use App\Models\IngredientStockTransaction;
 use App\Models\IngredientReservation;
@@ -14,28 +13,37 @@ use Illuminate\Http\Request;
 class Admin_StockController extends Controller
 {
     /**
-     * Lấy kho theo ngày, gồm nguyên liệu thực đơn và nguyên liệu đã dùng hoặc giữ cho đơn.
+     * Lấy kho theo ngày cho nguyên liệu thuộc món đang bán.
      */
     public function ingredientsByDate(Request $request)
     {
+        $request->validate(['date' => 'sometimes|required|date_format:Y-m-d']);
         $date = $request->get('date', now()->format('Y-m-d'));
-        $ingredientIds = DishIngredientRule::query()
-            ->distinct()
-            ->pluck('ingredient_id')
-            ->merge(
-                Ingredient::query()->where('is_add_on', true)->pluck('ingredient_id')
-            )
-            ->unique()
-            ->values();
-
-        $ingredients = Ingredient::query()
-            ->where('is_active', true)
-            ->whereIn('ingredient_id', $ingredientIds)
-            ->orderBy('ingredient_id')
+        $dishes = Dish::where('is_active', true)
+            ->with(['ingredientRules.ingredient', 'recipeMeasurements', 'priceProfile', 'type'])
             ->get();
+        $definitions = [];
+        $stockKeysByDish = [];
+        foreach ($dishes as $dish) {
+            $supportsTieredPortions = $dish->type?->supports_tiered_portions ?? true;
+            $measurements = $dish->recipeMeasurements->keyBy('ingredient_id');
+            foreach ($dish->ingredientRules as $rule) {
+                $ingredient = $rule->ingredient;
+                if (!$ingredient) continue;
+                $measurement = $measurements->get($rule->ingredient_id);
+                $hasMeasuredStock = $supportsTieredPortions
+                    ? $dish->priceProfile !== null && $measurement?->is_variable
+                    : $measurement?->quantity_standard !== null;
+                $unitCode = $hasMeasuredStock ? $measurement->quantity_unit : 'portion';
+                if ($unitCode === 'kg') $unitCode = 'g';
+                $stockKey = $rule->ingredient_id . '|' . $unitCode;
+                $definitions[$stockKey] = [$ingredient, $unitCode];
+                $stockKeysByDish[$dish->dish_id][$stockKey] = $stockKey;
+            }
+        }
 
-        $stocks = $ingredients->map(function (Ingredient $ingredient) use ($date): IngredientStock {
-            $unitCode = $ingredient->quantity_category === 'fixed' ? 'portion' : ($ingredient->quantity_unit === 'kg' ? 'g' : ($ingredient->quantity_unit ?: 'portion'));
+        $stocks = collect($definitions)->map(function (array $definition) use ($date): IngredientStock {
+            [$ingredient, $unitCode] = $definition;
             return IngredientStock::firstOrCreate(
                 ['ingredient_id' => $ingredient->ingredient_id, 'stock_date' => $date, 'unit_code' => $unitCode],
                 [
@@ -48,21 +56,7 @@ class Admin_StockController extends Controller
                 ]
             )->setAttribute('ingredient_name_en', $ingredient->ingredient_name)
                 ->setAttribute('ingredient_name_vi', $ingredient->ingredient_name_vi);
-        })->values();
-
-        $orderStocks = IngredientStock::query()->with('ingredient')->where('stock_date', $date)
-            ->where(function ($query): void {
-                $query->has('transactions')->orWhereExists(function ($reservation): void {
-                    $reservation->selectRaw('1')->from('ingredient_stock_reservations')
-                        ->whereColumn('ingredient_stock_reservations.stock_date', 'ingredient_stocks.stock_date')
-                        ->whereColumn('ingredient_stock_reservations.ingredient_id', 'ingredient_stocks.ingredient_id')
-                        ->whereColumn('ingredient_stock_reservations.unit_code', 'ingredient_stocks.unit_code');
-                });
-            })->get()->map(fn (IngredientStock $stock) => $stock
-                ->setAttribute('ingredient_name_en', $stock->ingredient?->ingredient_name)
-                ->setAttribute('ingredient_name_vi', $stock->ingredient?->ingredient_name_vi)
-                ->unsetRelation('ingredient'));
-        $stocks = $stocks->concat($orderStocks)->unique('ingredient_stock_id')->sortBy('ingredient_id')->values();
+        })->sortBy([['ingredient_id', 'asc'], ['unit_code', 'asc']])->values();
 
         $reservedByIngredient = IngredientReservation::where('stock_date', $date)
             ->selectRaw('ingredient_id, unit_code, SUM(quantity) as total')
@@ -79,6 +73,7 @@ class Admin_StockController extends Controller
 
         return response()->json([
             'data' => $stocks,
+            'stock_keys_by_dish' => (object) array_map('array_values', $stockKeysByDish),
             'date' => $date,
             'pagination' => [
                 'total' => $stocks->count(),
@@ -94,6 +89,7 @@ class Admin_StockController extends Controller
      */
     public function ingredientHistory(Request $request)
     {
+        $request->validate(['date' => 'sometimes|required|date_format:Y-m-d']);
         $date = $request->get('date');
         $query = IngredientStockTransaction::with(['stock.ingredient', 'order.user', 'order.bill', 'order.items.dish'])
             ->orderByDesc('created_at');

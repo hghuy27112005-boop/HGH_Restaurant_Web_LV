@@ -12,6 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trimStrings(except: ['new_password', 'new_password_confirmation']);
         $middleware->trustProxies(at: '*');
         $middleware->trustHosts(at: ['^.+\.ngrok-free\.dev$', '^.+\.trycloudflare\.com$']);
         // Bỏ qua CSRF cho tất cả API routes (React dùng Bearer Token, không cần CSRF)

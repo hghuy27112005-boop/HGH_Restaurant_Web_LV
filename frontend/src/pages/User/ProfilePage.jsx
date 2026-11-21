@@ -1,13 +1,15 @@
+import { hasOrderPhone, isSupportedEmail } from '../../utils/inputValidation';
 import i18n from '../../i18n.js';
 import { useState, useRef, useEffect, useCallback } from "react";
 import Cropper from "react-easy-crop"; // npm install react-easy-crop
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthContext } from "../../context/AuthContext";
 
 import { userAPI, dishProposalAPI } from "../../services/api";
 
 // ── Giới hạn file ảnh upload ────────────────────────────────────────────────
-const MAX_AVATAR_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_AVATAR_FILE_SIZE = 4 * 1024 * 1024;
+const AVATAR_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const EMPTY_PASSWORD_FORM = {
   current_password: "",
   new_password: "",
@@ -248,6 +250,7 @@ function Btn({ children, onClick, variant = "outline", disabled, style = {}, typ
 export default function ProfilePage() {
   const { updateUser, logout } = useAuthContext();
   const navigate = useNavigate();
+  const { state } = useLocation();
   const { toast, show: showToast } = useToast();
 
   const [user, setUser] = useState(null);
@@ -289,6 +292,7 @@ export default function ProfilePage() {
         const res = await userAPI.getProfile();
         const u = res.data.data;
         setUser(u);
+        if (state?.orderPhoneRequired && !hasOrderPhone(u.tele_number)) setEditMode(true);
         setForm({ username: u.username, email: u.email, tele_number: u.tele_number ?? "" });
         if (u.role !== 'admin') {
           try {
@@ -318,29 +322,37 @@ export default function ProfilePage() {
   }, [previewAvatarUrl]);
 
   // ── Chọn file ──────────────────────────────────────────────────────────
-  function handleFileChange(e) {
+  async function handleFileChange(e) {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      showToast(i18n.t("Vui lòng chọn một file ảnh hợp lệ!", { ns: 'legacy', keySeparator: false }), "warning");
-      e.target.value = "";
+    if (!AVATAR_IMAGE_TYPES.includes(file.type)) {
+      showToast(i18n.t("avatarReview.invalidImage"), "warning");
       return;
     }
     if (file.size > MAX_AVATAR_FILE_SIZE) {
-      showToast(i18n.t("Ảnh quá lớn, vui lòng chọn ảnh dưới 5MB!", { ns: 'legacy', keySeparator: false }), "warning");
-      e.target.value = "";
+      showToast(i18n.t("avatarReview.tooLarge"), "warning");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setPreviewUrl(ev.target.result);
+    setBusy("avatarReview");
+    try {
+      const data = new FormData();
+      data.append("avatar", file);
+      await userAPI.reviewAvatar(data);
+      setPreviewUrl(URL.createObjectURL(file));
       setCropperModal(true);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
+    } catch (error) {
+      showToast(error.response?.data?.message || i18n.t("avatarReview.unavailable"), "error");
+    } finally {
+      setBusy(null);
+    }
   }
+
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   // ── Sau khi crop xong ──────────────────────────────────────────────────
   function handleCropDone(blob) {
@@ -379,6 +391,10 @@ export default function ProfilePage() {
 
   // ── Lưu profile ────────────────────────────────────────────────────────
   async function handleSaveProfile() {
+    if (form.email !== user?.email && !isSupportedEmail(form.email)) {
+      showToast(i18n.t('inputValidation.emailDomain'), "warning");
+      return;
+    }
     setBusy("profile");
     try {
       const res = await userAPI.updateProfile(form);
@@ -483,13 +499,13 @@ export default function ProfilePage() {
           </div>
           <div style={{ marginBottom: 18 }}>
             <label style={labelStyle}>{i18n.t("Mật khẩu mới (*):", { ns: 'legacy', keySeparator: false })}</label>
-            <input className="pw-input" type="password" required minLength={6}
+            <input className="pw-input" type="password" required minLength={6} maxLength={20}
               placeholder={i18n.t("Nhập mật khẩu mới", { ns: 'legacy', keySeparator: false })} value={pwForm.new_password}
               onChange={(e) => setPwForm((f) => ({ ...f, new_password: e.target.value }))} />
           </div>
           <div style={{ marginBottom: 6 }}>
             <label style={labelStyle}>{i18n.t("Xác nhận mật khẩu mới (*):", { ns: 'legacy', keySeparator: false })}</label>
-            <input className="pw-input" type="password" required minLength={6}
+            <input className="pw-input" type="password" required minLength={6} maxLength={20}
               placeholder={i18n.t("Nhập lại mật khẩu mới", { ns: 'legacy', keySeparator: false })} value={pwForm.new_password_confirmation}
               onChange={(e) => setPwForm((f) => ({ ...f, new_password_confirmation: e.target.value }))} />
           </div>
@@ -558,17 +574,18 @@ export default function ProfilePage() {
             {/* Upload avatar */}
             <div style={{ textAlign: "left" }}>
               <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 5, color: "#555" }}>{i18n.t("Đổi ảnh đại diện (Tuỳ chọn)", { ns: 'legacy', keySeparator: false }) + " "}</label>
-              <input type="file" ref={fileInputRef} accept="image/*"
-                disabled={busy === "profile" || editMode}
+              <input type="file" ref={fileInputRef} accept={AVATAR_IMAGE_TYPES.join(",")}
+                disabled={Boolean(busy) || editMode}
                 onChange={handleFileChange}
                 style={{
                   width: "100%", fontSize: 12, padding: 6,
                   border: "1px dashed #ccc", borderRadius: 4, background: "#fafafa",
                   cursor: "pointer", boxSizing: "border-box",
-                  opacity: (busy === "profile" || editMode) ? 0.5 : 1
+                  opacity: (busy || editMode) ? 0.5 : 1
                 }} />
+              {busy === "avatarReview" && <p role="status">{i18n.t("avatarReview.checking")}</p>}
               {croppedBlob && (
-                <Btn variant="primary" onClick={handleSaveAvatar} disabled={busy === "avatar"}
+                <Btn variant="primary" onClick={handleSaveAvatar} disabled={Boolean(busy)}
                   style={{ marginTop: 10, padding: "7px 12px", fontSize: 13 }}>
                   {busy === "avatar" ? i18n.t("Đang lưu...", { ns: 'legacy', keySeparator: false }) : i18n.t("💾 Lưu ảnh đại diện", { ns: 'legacy', keySeparator: false })}
                 </Btn>
@@ -586,24 +603,28 @@ export default function ProfilePage() {
             <div>
               <Field label={i18n.t("Tên người dùng (*):", { ns: 'legacy', keySeparator: false })}>
                 <input className="profile-input" value={form.username}
-                  readOnly={!editMode} maxLength={50}
+                  readOnly={!editMode} maxLength={20}
                   onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} />
               </Field>
               <Field label="Email (*):">
                 <input className="profile-input" type="email" value={form.email}
-                  readOnly={!editMode} maxLength={255}
+                  readOnly={!editMode} maxLength={50}
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
               </Field>
               <Field label={i18n.t("Số điện thoại:", { ns: 'legacy', keySeparator: false })}>
+                {state?.orderPhoneRequired && !hasOrderPhone(user?.tele_number) && (
+                  <p id="order-phone-required" role="alert" className="mb-2 text-sm text-red-700 dark:!text-red-400">{i18n.t('inputValidation.orderPhoneRequired')}</p>
+                )}
                 <input className="profile-input" value={form.tele_number}
-                  readOnly={!editMode} maxLength={20}
-                  onChange={(e) => setForm((f) => ({ ...f, tele_number: e.target.value }))} />
+                  aria-describedby={state?.orderPhoneRequired && !hasOrderPhone(user?.tele_number) ? "order-phone-required" : undefined}
+                  readOnly={!editMode} maxLength={10} inputMode="numeric"
+                  onChange={(e) => setForm((f) => ({ ...f, tele_number: e.target.value.replace(/\D/g, '') }))} />
               </Field>
             </div>
 
             <div style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 12 }}>
               {!editMode ? (
-                <Btn onClick={() => setEditMode(true)} disabled={busy === "avatar"}>{i18n.t("Thay đổi thông tin cá nhân", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
+                <Btn onClick={() => setEditMode(true)} disabled={Boolean(busy)}>{i18n.t("Thay đổi thông tin cá nhân", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
               ) : (
                 <>
                   <Btn variant="primary" onClick={handleSaveProfile} disabled={busy === "profile"}>
@@ -615,8 +636,8 @@ export default function ProfilePage() {
                   }} disabled={busy === "profile"}>{i18n.t("Huỷ", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
                 </>
               )}
-              <Btn onClick={openPasswordModal} disabled={editMode || busy === "avatar"}>{i18n.t("Đổi mật khẩu", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
-              <Btn variant="danger" onClick={handleLogout} disabled={editMode || busy === "avatar"}>{i18n.t("Đăng xuất", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
+              <Btn onClick={openPasswordModal} disabled={editMode || Boolean(busy)}>{i18n.t("Đổi mật khẩu", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
+              <Btn variant="danger" onClick={handleLogout} disabled={editMode || Boolean(busy)}>{i18n.t("Đăng xuất", { ns: 'legacy', keySeparator: false }) + " "}</Btn>
             </div>
           </div>
         </div>

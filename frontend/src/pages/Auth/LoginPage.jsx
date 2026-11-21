@@ -1,3 +1,4 @@
+import { isSupportedEmail } from '../../utils/inputValidation';
 import React, { useState, useEffect } from 'react';
 import { useAuthContext } from '../../context/AuthContext';
 import { ErrorMessage, SuccessMessage, Modal } from '../../components/Shared';
@@ -99,6 +100,10 @@ const LoginPage = () => {
             return;
         }
 
+        if (loginData.username.includes('@') && !isSupportedEmail(loginData.username)) {
+            setLocalError(i18n.t('inputValidation.emailDomain'));
+            return;
+        }
         const result = await login(loginData.username, loginData.password);
         if (result?.success) {
             window.location.href = '/';
@@ -117,6 +122,10 @@ const LoginPage = () => {
             return;
         }
 
+        if (!isSupportedEmail(regData.email)) {
+            setLocalError(i18n.t('inputValidation.emailDomain'));
+            return;
+        }
         const result = await register(regData);
 
         if (result?.success) {
@@ -185,6 +194,7 @@ const LoginPage = () => {
                                     <label className={labelClass}>{i18n.t("Mật khẩu (*):", { ns: 'legacy', keySeparator: false })}</label>
                                     <input
                                         type="password"
+                                        minLength={6}
                                         name="password"
                                         value={loginData.password}
                                         onChange={handleLoginChange}
@@ -278,7 +288,7 @@ const LoginPage = () => {
                                         name="phone"
                                         value={regData.phone}
                                         onChange={handleRegChange}
-                                        required
+                                        pattern="[0-9]{10}"
                                         inputMode="numeric"
                                         maxLength="10"
                                         placeholder={i18n.t("Nhập số điện thoại (10 số)", { ns: 'legacy', keySeparator: false })}
@@ -291,6 +301,8 @@ const LoginPage = () => {
                                     <input
                                         type="password"
                                         name="password"
+                                        minLength={6}
+                                        maxLength={20}
                                         value={regData.password}
                                         onChange={handleRegChange}
                                         required
@@ -304,6 +316,8 @@ const LoginPage = () => {
                                     <input
                                         type="password"
                                         name="password_confirmation"
+                                        minLength={6}
+                                        maxLength={20}
                                         value={regData.password_confirmation}
                                         onChange={handleRegChange}
                                         required

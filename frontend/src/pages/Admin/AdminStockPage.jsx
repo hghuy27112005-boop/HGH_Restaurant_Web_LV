@@ -1,9 +1,10 @@
 import i18n from '../../i18n.js';
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import axiosInstance from '../../services/api';
+import axiosInstance, { adminAPI, dishAPI } from '../../services/api';
 import { TableLoading, Card, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
+import DishTypeFilter from '../../components/DishTypeFilter';
 import { translateIngredients } from '../Menu/DishDetailPage';
 import { translateDishName } from '../../dishTranslations';
 
@@ -31,12 +32,54 @@ const formatStockUnit = (unit, isEnglish) => ({
 // Màu theo mức tồn: hết hàng / sắp hết / đủ
 const isOutOfStock = (item) => item.quantity_left + (item.reserve_fund ?? 0) === 0;
 const lowLimitFor = (item) => item.unit_code === 'g' ? GRAM_LOW_LIMIT : LOW_LIMIT;
+const isLowStock = (item) => item.quantity_left <= lowLimitFor(item);
+const stockPriority = (item) => isOutOfStock(item) ? 2 : isLowStock(item) ? 1 : 0;
 
 const getLevel = (item) => {
     if (isOutOfStock(item)) return { bar: 'bg-red-500', text: 'text-red-600', bg: 'bg-red-50' };
-    if (item.quantity_left <= lowLimitFor(item)) return { bar: 'bg-yellow-400', text: 'text-yellow-600', bg: 'bg-yellow-50' };
+    if (isLowStock(item)) return { bar: 'bg-yellow-400', text: 'text-yellow-600', bg: 'bg-yellow-50' };
     return { bar: 'bg-green-500', text: 'text-green-600', bg: 'bg-white' };
 };
+
+const StockGrid = ({ items, isEnglish }) => (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+        {items.map(item => {
+            const mostUrgent = item.balances.reduce((first, second) => stockPriority(first) >= stockPriority(second) ? first : second);
+            const level = getLevel(mostUrgent);
+            const ingredientName = (isEnglish
+                ? item.ingredient_name_en
+                : item.ingredient_name_vi
+            ) || item.ingredient_name;
+            return (
+                <div
+                    key={item.ingredient_id}
+                    className={`${level.bg} border border-gray-200 rounded-lg overflow-hidden flex`}
+                >
+                    <div className={`w-1.5 flex-shrink-0 ${level.bar}`}></div>
+                    <div className="flex-1 min-w-0 px-3 py-2">
+                        <p className="font-mono text-[11px] text-gray-400">{item.code}</p>
+                        <p className="font-semibold text-gray-800 truncate" title={ingredientName || ''}>
+                            {ingredientName || 'N/A'}
+                        </p>
+                        {item.balances.map(balance => (
+                            <div key={balance.ingredient_stock_id} className="mt-1 border-t border-gray-100 pt-1 first-of-type:border-0 first-of-type:pt-0">
+                                <p className={`text-xl font-bold leading-tight ${getLevel(balance).text}`}>
+                                    {balance.quantity_left} / {balance.quantity_start} {formatStockUnit(balance.unit_code, isEnglish)}
+                                </p>
+                                <div className="mt-1 text-[11px] text-gray-500 leading-4">
+                                    <p>{isEnglish ? 'Refills:' : 'Số lần nạp:'} {balance.refill_count ?? 0} · {isEnglish ? 'Reserved:' : 'Đang giữ:'} {balance.reserved ?? 0}</p>
+                                    <p className="break-words">
+                                        {balance.updated_at ? new Date(balance.updated_at).toLocaleString(isEnglish ? 'en-US' : 'vi-VN') : '-'}
+                                    </p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        })}
+    </div>
+);
 
 const AdminStockPage = () => {
     const { t, i18n } = useTranslation();
@@ -50,13 +93,35 @@ const AdminStockPage = () => {
     const [selectedDate, setSelectedDate] = useState(getLocalDateString());
     const [search, setSearch] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
-    const [sortBy, setSortBy] = useState('code'); // code | stock
+    const [sortBy, setSortBy] = useState('code');
     const [sortDir, setSortDir] = useState('asc'); // asc | desc
+    const [dishCatalog, setDishCatalog] = useState(null);
+    const [dishCatalogError, setDishCatalogError] = useState(false);
+    const [dishType, setDishType] = useState('');
+    const [stockKeysByDish, setStockKeysByDish] = useState({});
+    const byDish = view === 'stocks' && sortBy === 'dish';
 
     useEffect(() => {
         if (view === 'stocks') fetchStock();
         else fetchHistory();
     }, [selectedDate, view]);
+
+    useEffect(() => {
+        if (!byDish) return;
+        let current = true;
+
+        setDishCatalog(null);
+        setDishCatalogError(false);
+        Promise.all([adminAPI.dishes.getAll(), dishAPI.getDishTypes()])
+            .then(([dishes, types]) => {
+                if (current) setDishCatalog({ dishes: dishes.data, types: types.data });
+            })
+            .catch(() => {
+                if (current) setDishCatalogError(true);
+            });
+
+        return () => { current = false; };
+    }, [byDish]);
 
     const fetchStock = async () => {
         try {
@@ -64,6 +129,7 @@ const AdminStockPage = () => {
             setError(null);
             const res = await axiosInstance.get('/admin/stocks/ingredients/by-date', { params: { date: selectedDate } });
             setStocks(res.data?.data || []);
+            setStockKeysByDish(res.data?.stock_keys_by_dish || {});
         } catch (err) {
             setError(t('adminStock.loadError', { details: err.response?.data?.message || err.message }));
             console.error(err);
@@ -85,9 +151,22 @@ const AdminStockPage = () => {
         }
     };
 
+    const stocksByIngredient = new Map();
+    for (const stock of stocks) {
+        const balances = stocksByIngredient.get(stock.ingredient_id) ?? [];
+        balances.push(stock);
+        stocksByIngredient.set(stock.ingredient_id, balances);
+    }
+    const stockGroups = [...stocksByIngredient.values()].map((balances, index) => ({
+        ...balances[0],
+        balances,
+        code: index + 1,
+        lowestCoverage: Math.min(...balances.map(item => item.quantity_left / Math.max(1, item.quantity_start))),
+    }));
+
     const getFiltered = () => {
-        let list = stocks;
-        if (filter === 'low') list = list.filter(s => s.quantity_left <= lowLimitFor(s));
+        let list = stockGroups;
+        if (filter === 'low') list = list.filter(group => group.balances.some(isLowStock));
         if (searchTerm.trim()) {
             const keyword = normalize(searchTerm.trim());
             list = list.filter(s => {
@@ -99,21 +178,36 @@ const AdminStockPage = () => {
             });
         }
         const byCode = (first, second) => first.ingredient_id - second.ingredient_id;
-        const dir = sortDir === 'asc' ? 1 : -1;
+        const dir = sortDir === 'asc' || sortBy === 'dish' ? 1 : -1;
         return [...list].sort((first, second) => {
-            if (sortBy === 'stock') return ((first.quantity_left - second.quantity_left) * dir) || byCode(first, second);
+            if (sortBy === 'stock') return ((first.lowestCoverage - second.lowestCoverage) * dir) || byCode(first, second);
             return byCode(first, second) * dir;
         });
     };
 
-    const lowStockCount = stocks.filter(s => s.quantity_left <= lowLimitFor(s)).length;
-    const outOfStockCount = stocks.filter(isOutOfStock).length;
+    const lowStockCount = stockGroups.filter(group => group.balances.some(isLowStock)).length;
+    const outOfStockCount = stockGroups.filter(group => group.balances.some(isOutOfStock)).length;
     const filtered = getFiltered();
-    const stockCodeByStockId = new Map(
-        [...stocks]
-            .sort((first, second) => first.ingredient_id - second.ingredient_id)
-            .map((stock, index) => [stock.ingredient_stock_id, index + 1])
-    );
+    const dishSections = [];
+    if (byDish && dishCatalog) {
+        for (const dish of dishCatalog.dishes) {
+            if (dishType === 'bestseller' && !dish.is_bestseller) continue;
+            if (dishType && dishType !== 'bestseller' && String(dish.type_id) !== dishType) continue;
+
+            const stockKeys = new Set(stockKeysByDish[dish.dish_id]);
+            const ingredients = dish.is_active ? filtered.flatMap(item => {
+                const balances = item.balances.filter(balance => stockKeys.has(`${item.ingredient_id}|${balance.unit_code}`));
+                if (!balances.length || (filter === 'low' && !balances.some(isLowStock))) return [];
+                return [{ ...item, balances }];
+            }) : [];
+
+            dishSections.push({ dish, ingredients });
+        }
+        if (sortDir === 'desc') dishSections.reverse();
+    }
+    const ingredientCount = byDish
+        ? new Set(dishSections.flatMap(section => section.ingredients.map(item => item.ingredient_id))).size
+        : filtered.length;
 
     const formatOrderItemName = (item) => {
         const removedIngredients = Array.isArray(item.removed_ingredients)
@@ -144,7 +238,7 @@ const AdminStockPage = () => {
         >
             {view === 'stocks' && (
                 <StatGrid>
-                    <StatCard label={i18n.t("Tổng nguyên liệu trong kho", { ns: 'legacy', keySeparator: false })} value={stocks.length} icon="fa-boxes-stacked" tone="red" />
+                    <StatCard label={i18n.t("Tổng nguyên liệu trong kho", { ns: 'legacy', keySeparator: false })} value={stockGroups.length} icon="fa-boxes-stacked" tone="red" />
                     <StatCard label={i18n.t("Cần nhập thêm hàng", { ns: 'legacy', keySeparator: false })} value={lowStockCount} icon="fa-triangle-exclamation" tone="yellow" />
                     <StatCard label={i18n.t("Hết hàng", { ns: 'legacy', keySeparator: false })} value={outOfStockCount} icon="fa-ban" tone="gray" />
                 </StatGrid>
@@ -153,11 +247,16 @@ const AdminStockPage = () => {
             {/* Thanh công cụ */}
             <div className="mb-4 flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm p-3">
                 <div className="flex items-center gap-2">
-                    <label className="text-sm font-semibold text-gray-700">{t('common.dateLabel')}</label>
+                    <label htmlFor="stock-date" className="text-sm font-semibold text-gray-700">{t('common.dateLabel')}</label>
                     <input
+                        id="stock-date"
                         type="date"
+                        required
                         value={selectedDate}
-                        onChange={e => setSelectedDate(e.target.value)}
+                        onChange={e => {
+                            const { value, validity } = e.currentTarget;
+                            if (value && validity.valid) setSelectedDate(value);
+                        }}
                         className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-red-600"
                     />
                 </div>
@@ -178,7 +277,7 @@ const AdminStockPage = () => {
                                 <input
                                     type="text"
                                     placeholder={i18n.t("Tìm nguyên liệu, nhấn Enter...", { ns: 'legacy', keySeparator: false })}
-                                    value={search}
+                                    maxLength={50} value={search}
                                     onChange={e => setSearch(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter') setSearchTerm(search); }}
                                     className="pl-9 pr-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-red-600 w-56"
@@ -192,6 +291,7 @@ const AdminStockPage = () => {
                             >
                                 <option value="code">{i18n.t("Mã kho", { ns: 'legacy', keySeparator: false })}</option>
                                 <option value="stock">{i18n.t("Tồn kho", { ns: 'legacy', keySeparator: false })}</option>
+                                <option value="dish">{t('adminStock.dishSort')}</option>
                             </select>
                             <button
                                 type="button"
@@ -208,46 +308,52 @@ const AdminStockPage = () => {
             </div>
 
             {view === 'stocks' ? (
-                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-4 py-3 border-b font-semibold text-gray-800">{i18n.t("Còn trong kho ngày", { ns: 'legacy', keySeparator: false }) + " "}{selectedDate} ({filtered.length}{" " + i18n.t("nguyên liệu)", { ns: 'legacy', keySeparator: false }) + " "}</div>
+                <div className={byDish ? 'space-y-4' : 'bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden'}>
+                    <div className={`flex flex-wrap items-center justify-between gap-2 py-3 ${byDish ? '' : 'border-b border-gray-200 px-4'}`}>
+                        <h2 className="font-semibold text-gray-800">
+                            {i18n.t("Còn trong kho ngày", { ns: 'legacy', keySeparator: false })} {selectedDate} ({ingredientCount} {i18n.t("nguyên liệu)", { ns: 'legacy', keySeparator: false })}
+                        </h2>
+                        {byDish && dishCatalog && (
+                            <DishTypeFilter
+                                types={dishCatalog.types}
+                                value={dishType}
+                                onChange={setDishType}
+                                className="ml-auto w-full rounded border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-red-600 focus:outline-none sm:w-auto"
+                            />
+                        )}
+                    </div>
 
-                    {loading ? (
+                    {byDish && dishCatalogError ? (
+                        <p role="alert" className="px-4 py-8 text-center text-red-600">
+                            {i18n.t("Lỗi tải danh sách thực đơn", { ns: 'legacy', keySeparator: false })}
+                        </p>
+                    ) : loading || (byDish && !dishCatalog) ? (
                         <TableLoading />
+                    ) : byDish ? (
+                        dishSections.length ? (
+                            <>
+                                {dishSections.map(({ dish, ingredients }) => (
+                                    <section key={dish.dish_id} className="space-y-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm sm:p-4">
+                                        <h3 className="break-words text-lg font-bold text-gray-800 sm:text-xl">
+                                            {dish.dish_id} {translateDishName(dish)}
+                                        </h3>
+                                        {!dish.is_active ? (
+                                            <p className="text-sm text-gray-600">{t('adminStock.hiddenDish')}</p>
+                                        ) : ingredients.length ? (
+                                            <StockGrid items={ingredients} isEnglish={isEnglish} />
+                                        ) : (
+                                            <p className="text-sm text-gray-600">{t('adminStock.noDishIngredients')}</p>
+                                        )}
+                                    </section>
+                                ))}
+                            </>
+                        ) : (
+                            <p className="px-4 py-8 text-center text-gray-500">{t('adminStock.noDishes')}</p>
+                        )
                     ) : filtered.length === 0 ? (
                         <p className="py-8 text-center text-gray-500">{i18n.t("Không có dữ liệu", { ns: 'legacy', keySeparator: false })}</p>
                     ) : (
-                        <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
-                            {filtered.map(item => {
-                                const level = getLevel(item);
-                                const ingredientName = (isEnglish
-                                    ? item.ingredient_name_en
-                                    : item.ingredient_name_vi
-                                ) || item.ingredient_name;
-                                return (
-                                    <div
-                                        key={item.ingredient_stock_id}
-                                        className={`${level.bg} border border-gray-200 rounded-lg overflow-hidden flex`}
-                                    >
-                                        <div className={`w-1.5 flex-shrink-0 ${level.bar}`}></div>
-                                        <div className="flex-1 min-w-0 px-3 py-2">
-                                            <p className="font-mono text-[11px] text-gray-400">{stockCodeByStockId.get(item.ingredient_stock_id)}</p>
-                                            <p className="font-semibold text-gray-800 truncate" title={ingredientName || ''}>
-                                                {ingredientName || 'N/A'}
-                                            </p>
-                                            <p className={`text-xl font-bold leading-tight ${level.text}`}>
-                                                {item.quantity_left} / {item.quantity_start} {formatStockUnit(item.unit_code, isEnglish)}
-                                            </p>
-                                            <div className="mt-1 text-[11px] text-gray-500 leading-4">
-                                                <p>{isEnglish ? 'Refills:' : 'Số lần nạp:'} {item.refill_count ?? 0} · {isEnglish ? 'Reserved:' : 'Đang giữ:'} {item.reserved ?? 0}</p>
-                                                <p className="whitespace-nowrap">
-                                                    {item.updated_at ? new Date(item.updated_at).toLocaleString(document.documentElement.lang === 'en' ? 'en-US' : 'vi-VN') : '-'}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        <div className="p-4"><StockGrid items={filtered} isEnglish={isEnglish} /></div>
                     )}
                 </div>
             ) : (

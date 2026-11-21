@@ -15,7 +15,7 @@ const Footer = () => {
                     </p>
                     <p className="flex items-start gap-3">
                         <i className="fas fa-location-dot w-6 flex-shrink-0 text-center mt-1"></i>
-                        <span>{i18n.t("Khu 2, Đ. 3/2, P. Ninh Kiều, TP. Cần Thơ", { ns: 'legacy', keySeparator: false })}</span>
+                        <span>{i18n.t("Số 52, đường số 2, Khu CBGV ĐHCT, Phường An Khánh, Quận Ninh Kiều, TP. Cần Thơ", { ns: 'legacy', keySeparator: false })}</span>
                     </p>
                 </div>
                 <div>

@@ -22,6 +22,12 @@ class Admin_BookingController extends Controller
      */
     private function baseQuery(Request $request, bool $withStatus)
     {
+        $request->validate([
+            'bill_id' => ['nullable', 'string', 'regex:/\A[0-9]{1,10}\z/'],
+            'user_id' => ['nullable', 'integer', 'between:1,9999', 'regex:/\A[0-9]{1,4}\z/'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+        ]);
+
         $created = $this->parseDateFilter($request, 'created_');
         $arrival = $this->parseDateFilter($request, 'arrival_');
 
@@ -41,7 +47,11 @@ class Admin_BookingController extends Controller
 
         if ($request->filled('bill_id')) {
             $billId = $request->bill_id;
-            $query->whereHas('bill', fn ($q) => $q->where('bill_id', 'like', '%' . $billId . '%'));
+            $pattern = '%' . $billId . '%';
+            $query->where(function ($q) use ($pattern) {
+                $q->where('order_id', 'like', $pattern)
+                    ->orWhereHas('bill', fn ($bill) => $bill->where('bill_id', 'like', $pattern));
+            });
         }
 
         if ($request->filled('user_id')) {

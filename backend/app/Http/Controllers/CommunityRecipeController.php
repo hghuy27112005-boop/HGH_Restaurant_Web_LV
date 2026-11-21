@@ -6,6 +6,7 @@ use App\Models\Dish;
 use App\Models\DishCustomization;
 use App\Services\ContentModerationService;
 use App\Services\DishCustomizationService;
+use App\Support\PreferredLanguage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +18,9 @@ class CommunityRecipeController extends Controller
     {
         Dish::findOrFail($dishId);
         $rows = DB::table('community_recipes as r')->join('users as u', 'u.user_id', '=', 'r.user_id')
-            ->where('r.dish_id', $dishId)->select('r.*', 'u.username')->orderByDesc('r.id')->get();
+            ->where('r.dish_id', $dishId)->select('r.*', 'u.username', 'u.role as author_role')
+            ->orderByRaw('CASE WHEN u.role = ? THEN 0 ELSE 1 END', ['admin'])
+            ->orderByDesc('r.id')->get();
         $ids = $rows->pluck('id');
         $likes = DB::table('community_recipe_likes')->whereIn('recipe_id', $ids)
             ->selectRaw('recipe_id, COUNT(*) as total')->groupBy('recipe_id')->pluck('total', 'recipe_id');
@@ -29,6 +32,8 @@ class CommunityRecipeController extends Controller
             ->whereIn('c.recipe_id', $ids)->select($commentFields)
             ->orderBy('c.id')->get()->groupBy('recipe_id');
         foreach ($rows as $row) {
+            $row->is_restaurant_recipe = $row->author_role === 'admin';
+            unset($row->author_role);
             $row->recipe = json_decode($row->recipe);
             $row->likes = (int) ($likes[$row->id] ?? 0);
             $row->liked = $liked->has($row->id);
@@ -54,15 +59,16 @@ class CommunityRecipeController extends Controller
             } else {
                 Dish::whereKey($dishId)->lockForUpdate()->firstOrFail();
             }
-            foreach (DB::table('community_recipes as r')->join('users as u', 'u.user_id', '=', 'r.user_id')->select('r.id', 'r.recipe', 'r.dish_id', 'u.username')->orderBy('r.id')->get() as $existing) {
+            foreach (DB::table('community_recipes as r')->join('users as u', 'u.user_id', '=', 'r.user_id')->select('r.id', 'r.recipe', 'r.dish_id', 'u.username', 'u.role')->orderBy('r.id')->get() as $existing) {
                 $other = json_decode($existing->recipe, true);
                 if (!$other || $sets->fingerprint($other) !== $fingerprint) continue;
-                $en = \App\Support\PreferredLanguage::fromRequest(request()) === 'en';
+                $en = PreferredLanguage::fromRequest(request()) === 'en';
                 $name = $en ? ($other['recipe_name_en'] ?? $other['recipe_name']) : $other['recipe_name'];
+                $author = $existing->role === 'admin' ? ($en ? 'Administrator' : 'Quản trị viên') : $existing->username;
                 return response()->json(['code' => 'recipe_duplicate', 'duplicate' => ['id' => $existing->id, 'dish_id' => $existing->dish_id,
-                    'recipe_name' => $other['recipe_name'], 'recipe_name_en' => $other['recipe_name_en'] ?? null, 'username' => $existing->username],
-                    'message' => $en ? "Recipe \"{$name}\" has already been shared by {$existing->username}. Cannot share a duplicate recipe."
-                        : "Công thức \"{$name}\" đã được chia sẻ bởi {$existing->username}. Không thể chia sẻ trùng lặp công thức."], 409);
+                    'recipe_name' => $other['recipe_name'], 'recipe_name_en' => $other['recipe_name_en'] ?? null, 'username' => $author],
+                    'message' => $en ? "Recipe \"{$name}\" has already been shared by {$author}. Cannot share a duplicate recipe."
+                        : "Công thức \"{$name}\" đã được chia sẻ bởi {$author}. Không thể chia sẻ trùng lặp công thức."], 409);
             }
             DB::table('community_recipes')->insert(['dish_id' => $dishId, 'user_id' => Auth::id(), 'recipe' => json_encode($snapshot, JSON_UNESCAPED_UNICODE), 'created_at' => now(), 'updated_at' => now()]);
             return response()->json(['success' => true], 201);
@@ -95,6 +101,15 @@ class CommunityRecipeController extends Controller
     {
         $row = DB::table('community_recipes')->where('id', $recipeId)->firstOrFail();
         $recipe = json_decode($row->recipe, true);
+        if (\App\Services\RestaurantContentPolicy::containsKnownAbuse(implode(' ', [
+            $recipe['recipe_name'] ?? '', $recipe['recipe_name_en'] ?? '',
+            $recipe['recipe_instructions'] ?? '', $recipe['recipe_instructions_en'] ?? '',
+        ]))) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'recipe' => PreferredLanguage::fromRequest(request()) === 'en'
+                    ? 'This recipe contains inappropriate content.' : 'Công thức này có nội dung không phù hợp.',
+            ]);
+        }
         $attributes = array_intersect_key($recipe, array_flip((new DishCustomization)->getFillable()));
         if (Schema::hasColumn('dish_customizations', 'seed_key')) $attributes['seed_key'] = null;
         else unset($attributes['seed_key']);
@@ -123,7 +138,7 @@ class CommunityRecipeController extends Controller
 
     private function moderate(string $text)
     {
-        $result = app(ContentModerationService::class)->check($text, Auth::id(), 'rating');
+        $result = app(ContentModerationService::class)->check($text, Auth::id(), 'rating', PreferredLanguage::fromRequest(request()));
         return $result ? response()->json($result, ($result['blocked'] ?? false) ? 403 : 422) : null;
     }
 }

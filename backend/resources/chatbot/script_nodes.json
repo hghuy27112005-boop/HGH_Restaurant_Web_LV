@@ -43,7 +43,8 @@
     ]
   },
   "modify_dish": {
-    "intentSummary": "Ở Chi tiết món, cuộn tới Công thức nấu, bấm Xem công thức thay thế rồi Tạo công thức mới hoặc chọn bản riêng và Chỉnh sửa. Đặt tên, thay/bỏ/thêm theo lựa chọn cho phép, xem trước rồi lưu; nguyên liệu cố định phải giữ.",
+    "intentSummary": "Mở đầu rằng tui sẽ hướng dẫn khách mở Chi tiết món từ Thực đơn và mời khách làm theo các bước bên dưới.",
+    "afterNoteKey": "chatbot.script.afterOpenDish",
     "options": [
       {
         "id": "modify_dish.goto_menu",
@@ -59,16 +60,25 @@
         "labelKey": "chatbot.options.backToRoot",
         "intent": "Khách muốn quay lại danh sách chức năng chính"
       }
+    ],
+    "stepsKeys": [
+      "chatbot.script.stepOpenMenu",
+      "chatbot.script.stepOpenDish"
     ]
   },
   "modify_dish.goto_menu": {
-    "intentSummary": "Ở Thực đơn, bấm Xem chi tiết món trên thẻ món; trong Chi tiết món, cuộn tới cuối Công thức nấu, bấm Xem công thức thay thế để tạo hoặc chỉnh bản riêng.",
+    "intentSummary": "Mở đầu rằng tui sẽ hướng dẫn khách mở Chi tiết món từ Thực đơn và mời khách làm theo các bước bên dưới.",
+    "afterNoteKey": "chatbot.script.afterOpenDish",
     "options": [
       {
         "id": "root",
         "labelKey": "chatbot.options.backToRoot",
         "intent": "Khách muốn quay lại danh sách chức năng chính"
       }
+    ],
+    "stepsKeys": [
+      "chatbot.script.stepOpenMenu",
+      "chatbot.script.stepOpenDish"
     ]
   },
   "order_food": {
@@ -138,7 +148,8 @@
     ]
   },
   "order_food.booking.goto_menu": {
-    "intentSummary": "Ở trang Thực đơn, bạn có thể chọn món và số lượng. Chọn xong, bấm nút bên dưới để tiếp tục hoàn tất đơn.",
+    "intentSummary": "Mở đầu rằng tui sẽ hướng dẫn chọn món để đặt bàn ở Thực đơn và mời khách làm theo các bước bên dưới.",
+    "afterNoteKey": "chatbot.script.afterAddBooking",
     "options": [
       {
         "id": "order_food.booking.goto_table",
@@ -149,13 +160,20 @@
           "path": "/cart/bookings"
         }
       }
+    ],
+    "stepsKeys": [
+      "chatbot.script.stepOpenMenu",
+      "chatbot.script.stepAddBooking"
     ]
   },
   "order_food.booking.goto_table": {
-    "intentSummary": "Ở Đặt bàn, bạn kiểm tra món, chọn ngày giờ và bàn rồi xác nhận, thanh toán theo các bước bên dưới.",
+    "intentSummary": "Mở đầu rằng tui sẽ hướng dẫn hoàn tất đặt bàn và mời khách làm theo các bước bên dưới.",
+    "afterNoteKey": "chatbot.script.afterPayment",
     "stepsKeys": [
+      "chatbot.script.stepOpenBooking",
       "chatbot.script.stepEditQty",
       "chatbot.script.stepPickDateTime",
+      "chatbot.script.stepPickTableTypes",
       "chatbot.script.stepPickTables",
       "chatbot.script.stepConfirmBooking",
       "chatbot.script.stepPay"
@@ -215,7 +233,8 @@
     ]
   },
   "order_food.delivery.goto_menu": {
-    "intentSummary": "Ở trang Thực đơn, bạn có thể chọn món và số lượng. Chọn xong, bấm nút bên dưới để tiếp tục hoàn tất đơn.",
+    "intentSummary": "Mở đầu rằng tui sẽ hướng dẫn chọn món giao tận nơi ở Thực đơn và mời khách làm theo các bước bên dưới.",
+    "afterNoteKey": "chatbot.script.afterAddDelivery",
     "options": [
       {
         "id": "order_food.delivery.goto_delivery",
@@ -226,11 +245,17 @@
           "path": "/cart/deliveries"
         }
       }
+    ],
+    "stepsKeys": [
+      "chatbot.script.stepOpenMenu",
+      "chatbot.script.stepAddDelivery"
     ]
   },
   "order_food.delivery.goto_delivery": {
-    "intentSummary": "Ở Đặt ship, bạn kiểm tra món, nhập địa chỉ, xem phí và ngày giờ giao dự kiến rồi xác nhận, thanh toán theo các bước bên dưới.",
+    "intentSummary": "Mở đầu rằng tui sẽ hướng dẫn hoàn tất đặt ship và mời khách làm theo các bước bên dưới.",
+    "afterNoteKey": "chatbot.script.afterPayment",
     "stepsKeys": [
+      "chatbot.script.stepOpenDelivery",
       "chatbot.script.stepEditQty",
       "chatbot.script.stepAddress",
       "chatbot.script.stepPickDeliveryTime",
@@ -284,7 +309,7 @@
     ]
   },
   "cancel_order.booking": {
-    "intentSummary": "Ở Đặt bàn, bạn tìm đơn và chọn Hủy nếu còn đủ điều kiện: trước giờ đến ít nhất 60 phút và còn lượt hủy. Chỉ xác nhận hủy sau khi đọc thông tin hoàn tiền hoặc điểm trên màn hình.",
+    "intentSummary": "Ở Đặt bàn, bạn tìm đơn và chọn Hủy nếu còn đủ điều kiện: còn hơn 60 phút đến giờ đã đặt và còn lượt hủy. Chỉ xác nhận hủy sau khi đọc thông tin hoàn tiền hoặc điểm trên màn hình.",
     "options": [
       {
         "id": "root",
@@ -314,25 +339,17 @@
     ]
   },
   "logout": {
-    "intentSummary": "Xác nhận khách muốn đăng xuất khỏi tài khoản.",
+    "intentSummary": "Chỉ cách tự đăng xuất: mở trang cá nhân, vào tab Thông tin, cuộn xuống dưới các ô tài khoản tới nút Đăng xuất rồi bấm.",
     "options": [
       {
         "id": "root",
         "labelKey": "chatbot.options.noBackToRoot",
         "intent": "Khách đổi ý, không muốn đăng xuất nữa"
-      },
-      {
-        "id": "logout.confirm",
-        "labelKey": "chatbot.options.confirmLogout",
-        "intent": "Khách xác nhận chắc chắn muốn đăng xuất",
-        "action": {
-          "type": "logout"
-        }
       }
     ]
   },
   "logout.confirm": {
-    "intentSummary": "Đã đăng xuất thành công, tạm biệt khách.",
+    "intentSummary": "Chỉ cách tự đăng xuất: mở trang cá nhân, vào tab Thông tin, cuộn xuống dưới các ô tài khoản tới nút Đăng xuất rồi bấm.",
     "options": []
   }
 }

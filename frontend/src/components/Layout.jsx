@@ -106,7 +106,7 @@ const Layout = ({ children }) => {
             <LocaleAwarePage><SessionEndedModal /></LocaleAwarePage>
             {!isAdmin && (
                 <LocaleAwarePage>
-                    <ChatbotWidget isOpen={chatbotOpen} setIsOpen={setChatbotOpen} />
+                    <ChatbotWidget key={user?.user_id} isOpen={chatbotOpen} setIsOpen={setChatbotOpen} />
                 </LocaleAwarePage>
             )}
         </div>

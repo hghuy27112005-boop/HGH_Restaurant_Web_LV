@@ -40,4 +40,11 @@ class Ingredient extends Model
     {
         return $this->hasMany(DishIngredientRule::class, 'ingredient_id', 'ingredient_id');
     }
+
+    public function hasStockSettings(): bool
+    {
+        return $this->quantity_unit !== null || $this->cost_per_unit !== null
+            || ($this->dish_rules_exists ?? $this->dishRules()->exists())
+            || ($this->stocks_exists ?? $this->stocks()->exists());
+    }
 }

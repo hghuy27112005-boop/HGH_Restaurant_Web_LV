@@ -2,8 +2,11 @@
 
 namespace Database\Seeders;
 
-use App\Models\IngredientStock;
+use App\Models\Dish;
+use App\Models\Stock;
+use App\Services\DishCustomizationService;
 use App\Services\OrderCodeGenerator;
+use App\Services\TieredRecipeService;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +19,7 @@ use Illuminate\Support\Facades\Hash;
  * - Ship: không hẹn giờ thì nấu ngay (>= 7:30), hẹn giờ thì nấu = giờ tới - thời gian giao - 15';
  *   giao xong trước 22:00 (không có đơn dời sang hôm sau).
  * - Đơn chưa tới giờ nấu: giữ chỗ trong ingredient_stock_reservations.
- * - Kho: mô phỏng đúng consumeForOrder (kệ 50, nạp lại khi <= 15, tổng ra kệ + giữ chỗ <= 300).
+ * - Kho: mô phỏng consumeForOrder theo định lượng và đơn vị của từng nguyên liệu.
  */
 class OrdersSeeder extends Seeder
 {
@@ -25,11 +28,6 @@ class OrdersSeeder extends Seeder
     private const IMMEDIATE_WINDOW = 10;
     private const OPEN_MINUTE = 450;    // 7:30
     private const CLOSE_MINUTE = 1320;  // 22:00
-    private const SHELF = 50;
-    private const LOW_LIMIT = 15;
-    private const DAILY_CAP = 300;
-    private const DEMAND_CAP = 250;     // 300 trừ phần kệ, để tổng nhu cầu mỗi nguyên liệu/ngày không bao giờ chạm trần
-    private const ORDER_LIMIT = 50;
 
     public function run(): void
     {
@@ -60,7 +58,7 @@ class OrdersSeeder extends Seeder
             return;
         }
 
-        $dishes = DB::table('dishes')->orderBy('dish_id')->get()->keyBy('dish_id');
+        $dishes = Dish::where('is_active', true)->orderBy('dish_id')->get()->keyBy('dish_id');
         if ($dishes->isEmpty()) {
             $this->command->error('No dishes found. Run dish seeder first.');
             return;
@@ -74,48 +72,37 @@ class OrdersSeeder extends Seeder
         }
 
         // ===== 2) Nguyên liệu của từng món =====
-        $ingredientIdByKey = DB::table('ingredients')->pluck('ingredient_id', 'ingredient_key')->all();
-        $ingredientNameById = DB::table('ingredients')->pluck('ingredient_name', 'ingredient_id')
-            ->map(fn ($name) => $name ?? '')
-            ->all();
-        $dishIngredients = [];
+        $pricing = app(TieredRecipeService::class);
+        $legacyRecipes = app(DishCustomizationService::class);
+        $dishRequirements = [];
+        $dishSnapshots = [];
+        $stockDefinitions = [];
         foreach ($dishes as $dish) {
-            $ids = [];
-            foreach (explode(',', (string) $dish->ingredients) as $raw) {
-                $name = trim($raw);
-                if ($name === '') {
-                    continue;
-                }
-                $key = IngredientStock::keyFor($name);
-                if (!isset($ingredientIdByKey[$key])) {
-                    $existingIngredientId = DB::table('ingredients')
-                        ->whereNotNull('ingredient_name_vi')
-                        ->whereRaw('LOWER(TRIM(ingredient_name_vi)) = ?', [mb_strtolower(trim($name), 'UTF-8')])
-                        ->value('ingredient_id');
-
-                    if ($existingIngredientId !== null) {
-                        $ingredientIdByKey[$key] = (int) $existingIngredientId;
-                    } else {
-                        $newId = DB::table('ingredients')->insertGetId([
-                            'ingredient_key' => $key,
-                            'ingredient_name_vi' => $name,
-                            'ingredient_name' => null,
-                            'created_at' => $now,
-                            'updated_at' => $now,
-                        ], 'ingredient_id');
-                        $ingredientIdByKey[$key] = $newId;
-                        // Snapshot columns named ingredient_name are English-only.
-                        // Store an empty string when an English translation is absent.
-                        $ingredientNameById[$newId] = '';
-                    }
-                }
-                $ids[$ingredientIdByKey[$key]] = true;
+            // Seeded order items retain their existing standard-tier menu price.
+            $snapshot = $pricing->orderQuantitySnapshot($dish, 'standard', null, (int) $users[0]) ?: null;
+            $dishSnapshots[$dish->dish_id] = $snapshot === null ? null : json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            if ($snapshot === null) {
+                $legacyRecipes->createRequiredRulesFromDishIngredients($dish);
+                $snapshot = $dish->ingredientRules()->get(['ingredient_id'])->map(fn ($rule) => [
+                    'ingredient_id' => (int) $rule->ingredient_id, 'unit' => 'portion', 'quantity' => 1,
+                ])->all();
             }
-            $dishIngredients[$dish->dish_id] = array_keys($ids);
+            $dishRequirements[$dish->dish_id] = [];
+            foreach ($snapshot as $ingredient) {
+                $id = (int) $ingredient['ingredient_id'];
+                $unit = $ingredient['unit'];
+                $key = $id . '|' . $unit;
+                $shelf = $unit === 'g' ? Stock::GRAM_SHELF_SIZE : Stock::SHELF_SIZE;
+                $stockDefinitions[$key] = [
+                    'id' => $id, 'unit' => $unit, 'shelf' => $shelf,
+                    'low' => $unit === 'g' ? Stock::GRAM_LOW_LIMIT : Stock::LOW_LIMIT,
+                    'capacity' => Stock::dailyCapacity($unit),
+                ];
+                $dishRequirements[$dish->dish_id][$key] = (int) $ingredient['quantity'];
+            }
         }
-        $ingredientKeyById = array_flip($ingredientIdByKey);
-        $allIngredientIds = array_keys($ingredientNameById);
-        sort($allIngredientIds);
+        ksort($stockDefinitions, SORT_NATURAL);
+        $catalog = DB::table('ingredients')->get(['ingredient_id', 'ingredient_key', 'ingredient_name'])->keyBy('ingredient_id');
 
         // ===== 3) Hàm hỗ trợ =====
         $pick = function (array $weights) {
@@ -164,7 +151,7 @@ class OrdersSeeder extends Seeder
         $paidAtFor = fn (Carbon $c, string $method) => $c->copy()->addSeconds($method === 'Points' ? rand(60, 300) : rand(120, 720));
 
         $buildItems = function (int $maxDishes, int $maxQty) use ($dishIds) {
-            $picked = (array) array_rand(array_flip($dishIds), rand(1, $maxDishes));
+            $picked = (array) array_rand(array_flip($dishIds), rand(1, min($maxDishes, count($dishIds))));
             $items = [];
             foreach ($picked as $dishId) {
                 $items[] = ['dish_id' => $dishId, 'qty' => rand(1, $maxQty)];
@@ -175,20 +162,25 @@ class OrdersSeeder extends Seeder
         // Nhu cầu nguyên liệu theo ngày kho, dùng để khống chế trần
         $demand = [];
 
-        // Giảm số lượng món cho tới khi không nguyên liệu nào vượt 50/đơn hoặc trần 250/ngày.
-        // Trả về [ingredient_id => số lượng] hoặc null nếu không thể (cực hiếm).
-        $fit = function (array &$items, string $stockDate) use (&$demand, $dishIngredients) {
+        // Giảm số lượng món cho tới khi nhu cầu khớp sức chứa kho theo từng đơn vị.
+        $fit = function (array &$items, string $stockDate) use (&$demand, $dishRequirements, $dishSnapshots, $stockDefinitions) {
             for ($guard = 0; $guard < 300; $guard++) {
                 $req = [];
+                $legacyPortions = [];
                 foreach ($items as $it) {
-                    foreach ($dishIngredients[$it['dish_id']] as $ing) {
-                        $req[$ing] = ($req[$ing] ?? 0) + $it['qty'];
+                    foreach ($dishRequirements[$it['dish_id']] as $ing => $quantity) {
+                        $req[$ing] = ($req[$ing] ?? 0) + $quantity * $it['qty'];
+                        if ($dishSnapshots[$it['dish_id']] === null) {
+                            $legacyPortions[$ing] = ($legacyPortions[$ing] ?? 0) + $it['qty'];
+                        }
                     }
                 }
 
                 $bad = [];
                 foreach ($req as $ing => $q) {
-                    if ($q > self::ORDER_LIMIT || ($demand[$stockDate][$ing] ?? 0) + $q > self::DEMAND_CAP) {
+                    $stock = $stockDefinitions[$ing];
+                    if (($legacyPortions[$ing] ?? 0) > Stock::ORDER_LIMIT
+                        || ($demand[$stockDate][$ing] ?? 0) + $q > $stock['capacity'] - $stock['shelf']) {
                         $bad[] = $ing;
                     }
                 }
@@ -202,7 +194,7 @@ class OrdersSeeder extends Seeder
 
                 $target = null;
                 foreach ($items as $k => $it) {
-                    if (!array_intersect($dishIngredients[$it['dish_id']], $bad)) {
+                    if (!array_intersect(array_keys($dishRequirements[$it['dish_id']]), $bad)) {
                         continue;
                     }
                     if ($target === null || $it['qty'] > $items[$target]['qty']) {
@@ -557,6 +549,8 @@ class OrdersSeeder extends Seeder
                     'dish_id' => $it['dish_id'],
                     'quantity' => $it['qty'],
                     'unit_price' => $price,
+                    'price_tier' => 'standard',
+                    'ingredient_quantities_snapshot' => $dishSnapshots[$it['dish_id']],
                     'created_at' => $fmt($createdAt),
                     'updated_at' => $fmt($createdAt),
                 ];
@@ -588,7 +582,8 @@ class OrdersSeeder extends Seeder
                 foreach ($d['req'] as $ing => $qty) {
                     $reservationRows[] = [
                         'order_id' => $orderId,
-                        'ingredient_id' => $ing,
+                        'ingredient_id' => $stockDefinitions[$ing]['id'],
+                        'unit_code' => $stockDefinitions[$ing]['unit'],
                         'stock_date' => $d['stock_date'],
                         'quantity' => $qty,
                         'created_at' => $fmt($d['paid_at']),
@@ -712,16 +707,10 @@ class OrdersSeeder extends Seeder
             $isPastOrToday = $date <= $todayKey;
             $state = [];
 
-            if ($isPastOrToday) {
-                foreach ($allIngredientIds as $ing) {
-                    $state[$ing] = ['start' => 50, 'left' => 50, 'refill' => 0, 'upd' => null];
-                }
-            } else {
-                $reservedIngredients = array_keys($reservedByDate[$date]);
-                sort($reservedIngredients);
-                foreach ($reservedIngredients as $ing) {
-                    $state[$ing] = ['start' => 50, 'left' => 50, 'refill' => 0, 'upd' => null];
-                }
+            $stockKeys = $isPastOrToday ? array_keys($stockDefinitions) : array_keys($reservedByDate[$date]);
+            foreach ($stockKeys as $ing) {
+                $shelf = $stockDefinitions[$ing]['shelf'];
+                $state[$ing] = ['start' => $shelf, 'left' => $shelf, 'refill' => 0, 'upd' => null];
             }
 
             $rowId = [];
@@ -736,12 +725,13 @@ class OrdersSeeder extends Seeder
 
             foreach ($events as $ev) {
                 foreach ($ev['req'] as $ing => $needed) {
+                    $stock = $stockDefinitions[$ing];
                     $st = &$state[$ing];
                     $held = $reserved[$ing] ?? 0;
 
                     if ($st['left'] < $needed) {
-                        $fund = max(0, self::DAILY_CAP - $st['start'] - $held);
-                        $add = min(max(0, max(self::SHELF, $needed) - $st['left']), $fund);
+                        $fund = max(0, $stock['capacity'] - $st['start'] - $held);
+                        $add = min(max(0, max($stock['shelf'], $needed) - $st['left']), $fund);
                         if ($add > 0) {
                             $st['start'] += $add;
                             $st['left'] += $add;
@@ -749,16 +739,16 @@ class OrdersSeeder extends Seeder
                         }
                     }
                     if ($needed > $st['left']) {
-                        $needed = $st['left'];   // phòng hờ, với trần 250 thì không xảy ra
+                        throw new \RuntimeException("Seeded order {$ev['order_id']} exceeds stock capacity for {$ing} on {$date}.");
                     }
 
                     $before = $st['left'];
                     $after = $before - $needed;
                     $st['left'] = $after;
 
-                    if ($after <= self::LOW_LIMIT) {
-                        $fund = max(0, self::DAILY_CAP - $st['start'] - $held);
-                        $add = min(max(0, self::SHELF - $st['left']), $fund);
+                    if ($after <= $stock['low']) {
+                        $fund = max(0, $stock['capacity'] - $st['start'] - $held);
+                        $add = min(max(0, $stock['shelf'] - $st['left']), $fund);
                         if ($add > 0) {
                             $st['start'] += $add;
                             $st['left'] += $add;
@@ -770,7 +760,7 @@ class OrdersSeeder extends Seeder
                     $dayTx[] = [
                         'order_id' => $ev['order_id'],
                         'ingredient_stock_id' => $rowId[$ing],
-                        'ingredient_name' => $ingredientNameById[$ing],
+                        'ingredient_name' => $catalog[$stock['id']]->ingredient_name ?? '',
                         'quantity_before' => $before,
                         'quantity_deducted' => $needed,
                         'quantity_after' => $after,
@@ -789,11 +779,14 @@ class OrdersSeeder extends Seeder
 
             $stockRows = [];
             foreach ($state as $ing => $st) {
+                $stock = $stockDefinitions[$ing];
+                $ingredient = $catalog[$stock['id']];
                 $stockRows[] = [
                     'ingredient_stock_id' => $rowId[$ing],
-                    'ingredient_id' => $ing,
-                    'ingredient_key' => $ingredientKeyById[$ing],
-                    'ingredient_name' => $ingredientNameById[$ing],
+                    'ingredient_id' => $stock['id'],
+                    'unit_code' => $stock['unit'],
+                    'ingredient_key' => $ingredient->ingredient_key,
+                    'ingredient_name' => $ingredient->ingredient_name ?? '',
                     'stock_date' => $date,
                     'quantity_start' => $st['start'],
                     'quantity_left' => $st['left'],

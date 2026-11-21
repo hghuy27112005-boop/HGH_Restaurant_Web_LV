@@ -154,6 +154,7 @@ class BilingualRecipeIngredientSeeder extends Seeder
                     ...($ingredient->aliases ?? []),
                     $nameVi,
                     $nameEn,
+                    ...($key === 'minced pork' ? ['thịt heo xay'] : []),
                 ]));
                 $ingredient->is_add_on = $ingredient->is_add_on || $role === 'optional';
                 $ingredient->save();

@@ -37,6 +37,7 @@ class OrderNotificationMail extends Mailable
                 'language' => $this->language,
             ]);
 
+        $this->bill->loadMissing('order.user');
         $pdf = Pdf::loadView('pdf.invoice', [
             'bill' => $this->bill,
             'language' => $this->language,

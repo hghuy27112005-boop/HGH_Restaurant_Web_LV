@@ -8,17 +8,6 @@ use Illuminate\Support\Str;
 
 class DeliveryDistanceService
 {
-    // Thay vì whitelist tỉnh/thành (dễ chặn nhầm do cấu trúc dữ liệu địa chỉ của
-    // Nominatim không nhất quán giữa các loại đơn vị hành chính), dùng blacklist các
-    // khu vực đảo/quần đảo phổ biến của Việt Nam. Địa chỉ đã được lọc theo
-    // countrycodes=vn nên mặc định coi là hợp lệ, trừ khi khớp 1 trong các từ khóa này.
-    private const ISLAND_KEYWORDS = [
-        'phu quoc', 'con dao', 'con son', 'ly son', 'cat ba', 'cat hai',
-        'truong sa', 'hoang sa', 'bach long vi', 'co to', 'con co',
-        'tho chu', 'nam du', 'hon khoai', 'hon son', 'phu quy',
-        'ly hoa', 'quan dao',
-    ];
-
     private const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
     private const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
 
@@ -39,7 +28,7 @@ class DeliveryDistanceService
             throw new \RuntimeException('Địa chỉ địa lý không hợp lệ. Vui lòng nhập lại địa chỉ cụ thể hơn');
         }
 
-        if ($this->isIslandAddress($geo['address_text'])) {
+        if (!$this->isOnMainland($geo['lat'], $geo['lng'])) {
             throw new \RuntimeException('Địa chỉ giao hàng phải nằm trong phạm vi đất liền Việt Nam, không giao tới các đảo/quần đảo.');
         }
 
@@ -77,11 +66,10 @@ class DeliveryDistanceService
      */
     public function calculateForCoordinates(float $lat, float $lng, string $language = 'vi'): array
     {
-        $reverse = $this->reverseGeocode($lat, $lng, $language);
-
-        if ($reverse && $this->isIslandAddress($reverse['address_text'])) {
+        if (!$this->isOnMainland($lat, $lng)) {
             throw new \RuntimeException('Vị trí hiện tại nằm ngoài phạm vi đất liền Việt Nam, không giao tới các đảo/quần đảo.');
         }
+        $reverse = $this->reverseGeocode($lat, $lng, $language);
 
         $route = $this->getRoute(
             (float) config('restaurant.latitude'),
@@ -138,12 +126,8 @@ class DeliveryDistanceService
                 return null;
             }
 
-            $addr = $data['address'] ?? [];
-            $addressText = implode(' ', array_filter($addr, fn ($v) => is_string($v)));
-
             return [
                 'display_name' => $data['display_name'] ?? null,
-                'address_text' => $addressText,
             ];
         } catch (\Throwable $e) {
             Log::error('Nominatim reverse geocode failed: ' . $e->getMessage());
@@ -212,16 +196,9 @@ class DeliveryDistanceService
             }
 
             $first = $results[0];
-            $addr = $first['address'] ?? [];
-
-            // Gộp toàn bộ giá trị của address lại thành 1 chuỗi để kiểm tra từ khóa đảo,
-            // vì tên đảo có thể xuất hiện ở nhiều field khác nhau (suburb, county, city...).
-            $addressText = implode(' ', array_filter($addr, fn ($v) => is_string($v)));
-
             return [
                 'lat' => (float) $first['lat'],
                 'lng' => (float) $first['lon'],
-                'address_text' => $addressText,
             ];
         } catch (\Throwable $e) {
             Log::error('Nominatim geocode failed: ' . $e->getMessage());
@@ -229,38 +206,25 @@ class DeliveryDistanceService
         }
     }
 
-    /**
-     * Kiểm tra địa chỉ có khớp từ khóa đảo/quần đảo nào không (tương đối, không phân
-     * biệt hoa thường, không dấu).
-     */
-    private function isIslandAddress(string $addressText): bool
+    private function isOnMainland(float $latitude, float $longitude): bool
     {
-        $normalized = $this->stripAccents(mb_strtolower($addressText));
+        static $ring;
+        $ring ??= json_decode(file_get_contents(resource_path('geography/vietnam-mainland.geojson')), true, flags: JSON_THROW_ON_ERROR)
+            ['geometry']['coordinates'][0];
 
-        foreach (self::ISLAND_KEYWORDS as $keyword) {
-            if (str_contains($normalized, $keyword)) {
-                return true;
+        $inside = false;
+        for ($i = 0, $j = count($ring) - 1; $i < count($ring); $j = $i++) {
+            [$x1, $y1] = $ring[$j];
+            [$x2, $y2] = $ring[$i];
+            if (($y1 > $latitude) === ($y2 > $latitude)) {
+                continue;
+            }
+            $crossingLongitude = $x1 + ($latitude - $y1) * ($x2 - $x1) / ($y2 - $y1);
+            if ($longitude < $crossingLongitude) {
+                $inside = !$inside;
             }
         }
-
-        return false;
-    }
-
-    /**
-     * Bỏ dấu tiếng Việt để so sánh chuỗi an toàn, tránh lỗi lệch kết quả do khác biệt
-     * giữa dạng Unicode tổ hợp (NFD) và dựng sẵn (NFC) giữa dữ liệu trả về từ Nominatim
-     * và chuỗi khai báo cứng trong code.
-     */
-    private function stripAccents(string $str): string
-    {
-        if (class_exists('Normalizer')) {
-            $str = \Normalizer::normalize($str, \Normalizer::FORM_D);
-            $str = preg_replace('/\p{Mn}/u', '', $str);
-        }
-
-        $str = str_replace(['đ', 'Đ'], ['d', 'D'], $str);
-
-        return $str;
+        return $inside;
     }
 
     /**

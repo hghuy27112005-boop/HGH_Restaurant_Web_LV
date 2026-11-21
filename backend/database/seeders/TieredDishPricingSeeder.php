@@ -69,6 +69,7 @@ class TieredDishPricingSeeder extends Seeder
             ['match' => ['thịt heo băm', 'minced pork'], 'price' => 'pork_mince', 'category' => 'protein', 'q' => [30, 50, 70]],
             ['match' => ['tôm băm', 'minced shrimp'], 'price' => 'shrimp_mince', 'category' => 'protein', 'q' => [20, 30, 40]],
             ['match' => ['nấm hương', 'shiitake mushroom'], 'price' => 'shiitake', 'category' => 'mushroom', 'q' => [5, 7, 10]],
+            ['match' => ['miến', 'glass noodles'], 'price' => 'glass_noodles', 'category' => 'starch', 'q' => [7, 7, 7]],
         ],
         2 => [['match' => ['thịt heo băm', 'minced pork'], 'price' => 'pork_mince', 'category' => 'protein', 'q' => [40, 60, 80]]],
         3 => [
@@ -146,6 +147,7 @@ class TieredDishPricingSeeder extends Seeder
             ['match' => ['gân bò', 'beef tendon'], 'price' => 'beef_tendon', 'category' => 'protein', 'q' => [10, 10, 20]],
             ['match' => ['huyết', 'tiết heo', 'pork blood curd'], 'price' => 'pork_blood', 'category' => 'protein', 'q' => [20, 20, 30]],
             ['match' => ['chả cua', 'crab paste'], 'price' => 'crab_paste', 'category' => 'protein', 'q' => [10, 15, 15]],
+            ['match' => ['rau muống', 'water spinach'], 'price' => 'water_spinach', 'category' => 'other', 'q' => [30, 30, 30]],
         ],
         29 => [
             ['match' => ['bánh phở', 'pho rice noodles'], 'price' => 'pho_noodles', 'category' => 'starch', 'q' => [100, 140, 180]],
@@ -173,7 +175,7 @@ class TieredDishPricingSeeder extends Seeder
     ];
 
     private const FIXED_COST_BY_DISH = [
-        1 => 2000, 2 => 2000, 3 => 1000, 4 => 4000, 5 => 4000, 6 => 5000, 7 => 6000, 8 => 3000,
+        1 => 1200, 2 => 2000, 3 => 1000, 4 => 4000, 5 => 4000, 6 => 5000, 7 => 6000, 8 => 3000,
         9 => 2500, 10 => 2000, 11 => 3000, 12 => 3000, 13 => 3000, 14 => 3000, 15 => 500,
         16 => 3000, 17 => 1000, 18 => 2000, 19 => 3000, 20 => 1000, 21 => 1000, 22 => 3000,
         23 => 3000, 24 => 3000, 25 => 1500, 26 => 3000, 27 => 1500, 28 => 4000, 29 => 5000, 30 => 1500,

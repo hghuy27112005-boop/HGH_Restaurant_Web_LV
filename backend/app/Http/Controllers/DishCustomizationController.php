@@ -53,6 +53,7 @@ class DishCustomizationController extends Controller
     public function preview(Request $request, $dishId, GeminiChatbotService $gemini)
     {
         $data = $request->validate([
+            'recipe_name' => 'sometimes|required|string|max:255',
             'selection' => 'required|array',
             'selection.template_key' => 'nullable|string|max:40',
             'selection.replacements' => 'sometimes|array',
@@ -67,6 +68,9 @@ class DishCustomizationController extends Controller
         ]);
 
         $dish = Dish::findOrFail($dishId);
+        if (isset($data['recipe_name'])) {
+            $this->reviewRecipeName($request, $dish, $data['recipe_name'], $data['language']);
+        }
         try {
             $service = app(DishCustomizationService::class);
             $resolved = $service->resolveSelection($dish, $data['selection']);
@@ -136,6 +140,7 @@ class DishCustomizationController extends Controller
             'user_id' => (int) Auth::id(),
             'dish_id' => (int) $dish->dish_id,
             'selection_hash' => $this->selectionHash($resolved),
+            'approved_recipe_name_v2' => $data['recipe_name'] ?? null,
             'instructions_vi' => $revised['vi'],
             'instructions_en' => $revised['en'],
         ], now()->addMinutes(20));
@@ -178,10 +183,27 @@ class DishCustomizationController extends Controller
         $dish = Dish::findOrFail($dishId);
         $resolved = $service->resolveSelection($dish, $data['selection']);
         $service->assertSelectionChanged($resolved);
-        $preview = Cache::pull('recipe-preview:' . $data['preview_token']);
+        $userId = (int) $request->user()->user_id;
+        $previewKey = 'recipe-preview:' . $data['preview_token'];
+        $candidate = Cache::get($previewKey);
+        if ($candidate && (int) $candidate['user_id'] === $userId
+            && (int) $candidate['dish_id'] === (int) $dish->dish_id
+            && (($candidate['approved_recipe_name_v2'] ?? null) !== $data['recipe_name']
+                || \App\Services\RestaurantContentPolicy::containsKnownAbuse($data['recipe_name']))) {
+            $this->reviewRecipeName(
+                $request, $dish, $data['recipe_name'],
+                \App\Support\PreferredLanguage::fromRequest($request), $data['customization_id'] ?? null
+            );
+        }
+        $preview = Cache::lock($previewKey . ':lock', 10)->get(function () use ($previewKey, $userId) {
+            $candidate = Cache::get($previewKey);
+            if (!$candidate || (int) $candidate['user_id'] !== $userId) {
+                return null;
+            }
+            return Cache::pull($previewKey);
+        });
         if (
             !$preview
-            || (int) $preview['user_id'] !== (int) Auth::id()
             || (int) $preview['dish_id'] !== (int) $dish->dish_id
             || !hash_equals($preview['selection_hash'], $this->selectionHash($resolved))
         ) {
@@ -203,6 +225,16 @@ class DishCustomizationController extends Controller
             'success' => true,
             'custom_recipe' => $service->presentCustomizations(collect([$customization]))->first(),
         ]);
+    }
+
+    private function reviewRecipeName(Request $request, Dish $dish, string $name, string $language, ?int $customizationId = null): void
+    {
+        if (!\App\Services\RestaurantContentPolicy::containsKnownAbuse($name) && $customizationId && $request->user()->dishCustomizations()
+            ->where('dish_id', $dish->dish_id)->whereKey($customizationId)->where('recipe_name', $name)->exists()) {
+            return;
+        }
+
+        app(\App\Services\ContentModerationService::class)->requireAppropriateName($name, 'recipe_name', $language);
     }
 
     public function destroy($dishId, $customizationId)

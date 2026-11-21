@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ChatSession;
 use App\Models\ChatMessage;
+use App\Models\User;
 use App\Services\GeminiChatbotService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -166,6 +167,7 @@ class ChatbotController extends Controller
             'theme' => $request->input('theme'),
             'images_attached_this_turn' => count($visualIds),
             'previous_visual_summary' => !$visualIds && $previousFresh && $visualPayloads ? ($previousVisual['summary'] ?? null) : null,
+            'guided_stage' => $activeNodeId ?? null,
         ];
 
         $approval = $previousContext['visual_approvals'] ?? [];
@@ -237,7 +239,7 @@ class ChatbotController extends Controller
 
         // === auto: bot tự nói tiếp, không có input thật từ người dùng ===
         if ($request->type === 'auto') {
-            $reply = $this->gemini->generateReply($request->target_intent, null, $request->input('lang'));
+            $reply = $this->gemini->generateReply($request->target_intent, null, $request->input('lang'), $this->chatCustomer($user));
 
             ChatMessage::create([
                 'session_id' => $session->session_id,
@@ -272,7 +274,7 @@ class ChatbotController extends Controller
         if ($request->type === 'button') {
             // Đã biết chính xác node đích, dùng thẳng intentSummary của node đó (gửi từ frontend)
             $matchedId = $request->selected_option_id;
-            $reply = $this->gemini->generateReply($request->target_intent, null, $request->input('lang'));
+            $reply = $this->gemini->generateReply($request->target_intent, null, $request->input('lang'), $this->chatCustomer($user));
         } else {
             // One grounded response for free text: retain clarification context instead
             // of forcing natural requests into a button action before answering them.
@@ -293,10 +295,14 @@ class ChatbotController extends Controller
                 $entry['attached_to_current_turn'] = in_array($entry['image_message_id'], $visualIds, true) || ($resuming && $entry['image_message_id'] > $currentUserMessageId);
             }
             unset($entry);
-            $freeform = $this->gemini->answerFreeform((string) $request->user_input, $request->input('lang'), $history, $catalog, $visualPayloads, $pageContext);
-            if ($visualIds) {
+            $freeform = $this->gemini->answerFreeform((string) $request->user_input, $request->input('lang'), $history, $catalog, $visualPayloads, $pageContext, $this->chatCustomer($user));
+            if ($visualIds && !empty($freeform['visual_context'])) {
                 $context = $session->context_data ?? [];
                 $context['visual'] = ['message_ids' => $visualIds, 'summary' => $freeform['visual_context'] ?? null, 'expires_at' => now()->addMinutes(30)->toIso8601String()];
+                $session->update(['context_data' => $context]);
+            } elseif ($visualIds && isset($session->context_data['visual'])) {
+                $context = $session->context_data;
+                unset($context['visual']);
                 $session->update(['context_data' => $context]);
             }
             if (!$imageOnly && !empty($freeform['ballot_cooldown_question'])) {
@@ -326,7 +332,7 @@ class ChatbotController extends Controller
                 } elseif (!$image) {
                     $reply = $request->lang === 'en'
                         ? 'I could not identify a matching saved invoice. Which date or dish was it for?'
-                        : 'Tôi chưa xác định được hóa đơn đã lưu phù hợp. Bạn nhớ ngày đặt hoặc tên món không?';
+                        : 'Tui chưa xác định được hóa đơn đã lưu phù hợp. Bạn nhớ ngày đặt hoặc tên món không?';
                     $suggestedRoute = null;
                     $suggestedLabel = null;
                 }
@@ -362,7 +368,12 @@ class ChatbotController extends Controller
         ]);
     }
 
-    private function dishVoteChatbotReply($user, ChatSession $session, string $question, string $period, string $language, array $history)
+    private function chatCustomer(User $user): array
+    {
+        return ['display_name' => $user->username, 'role' => $user->role, 'membership' => $user->membership];
+    }
+
+    private function dishVoteChatbotReply(User $user, ChatSession $session, string $question, string $period, string $language, array $history)
     {
         $warn = DB::transaction(function () use ($user): bool {
             $limits = DB::table('chatbot_dish_vote_limits');
@@ -380,11 +391,13 @@ class ChatbotController extends Controller
             return $this->sendDishVoteReply($session, $this->ballotWarning($language), true);
         }
 
-        $cycles = DB::table('dish_proposal_cycles')
-            ->when($period === 'latest_published', fn ($query) => $query->whereNotNull('announced_at')->whereNotNull('finalized_at'))
-            ->orderByDesc('cycle_key')->limit($period === 'latest_published' ? 1 : 36)->get([
-            'cycle_key', 'status', 'top_results', 'winner_dish_name', 'winner_username', 'announced_at', 'finalized_at',
-        ])->map(function ($cycle) {
+        $cycles = DB::table('dish_proposal_cycles as c')
+            ->leftJoin('admin_dish_suggestions as s', 's.cycle_key', '=', 'c.cycle_key')
+            ->when($period === 'latest_published', fn ($query) => $query->whereNotNull('c.announced_at')->whereNotNull('c.finalized_at'))
+            ->orderByDesc('c.cycle_key')->limit($period === 'latest_published' ? 1 : 36)->get([
+                'c.cycle_key', 'c.status', 'c.top_results', 'c.winner_dish_name', 'c.winner_username', 'c.announced_at',
+                'c.finalized_at', 's.proposer_user_id', 's.award_paid_at',
+            ])->map(function ($cycle) use ($user) {
             $isPublicResult = (bool) $cycle->announced_at && (bool) $cycle->finalized_at;
             $top = $isPublicResult ? (json_decode($cycle->top_results ?? '[]', true) ?: []) : [];
             $fact = [
@@ -400,6 +413,8 @@ class ChatbotController extends Controller
                 $fact['winner'] = [
                     'dish_name' => $cycle->winner_dish_name,
                     'proposer_name' => $cycle->winner_username,
+                    'is_current_customer' => (int) $cycle->proposer_user_id === (int) $user->user_id,
+                    'reward_paid' => $cycle->award_paid_at !== null,
                 ];
             }
             return $fact;
@@ -407,7 +422,7 @@ class ChatbotController extends Controller
 
         $facts = [
             'requested_period' => $period,
-            'customer_name_for_reward_check' => $user->username,
+            'authenticated_customer' => $this->chatCustomer($user),
         ];
         if ($period === 'latest_published') {
             // Only the latest public result belongs in this lookup. The current
@@ -722,10 +737,28 @@ class ChatbotController extends Controller
     private function rejectContent(string $decision, Request $request)
     {
         $en = $request->input('lang') === 'en';
+        if ($decision === 'off_topic') {
+            $reply = GeminiChatbotService::outOfScopeReply($request->input('lang'));
+            $session = ChatSession::firstOrCreate(
+                ['user_id' => $request->user()->user_id],
+                ['current_node_id' => 'root', 'context_data' => []]
+            );
+            if ($request->input('type') === 'text' && filled($request->input('user_input'))) {
+                ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'user', 'content' => $request->input('user_input')]);
+            }
+            ChatMessage::create(['session_id' => $session->session_id, 'sender' => 'bot', 'content' => $reply]);
+            if ($request->input('type') === 'text') {
+                return response()->json(['success' => true, 'matched_id' => 'unclear', 'reply' => $reply]);
+            }
+
+            return response()->json(['success' => false, 'code' => $decision, 'message' => $reply], 422);
+        }
+
         if ($decision === 'violation') {
-            $result = $this->moderation->recordViolation(Auth::id(), 'chatbot', '', $en ? 'en' : 'vi');
+            $userId = (int) $request->user()->user_id;
+            $result = $this->moderation->recordViolation($userId, 'chatbot', '', $en ? 'en' : 'vi');
             \Illuminate\Support\Facades\Log::notice('Chatbot policy warning recorded', [
-                'user_id' => Auth::id(), 'warning_id' => $result['warning_id'],
+                'user_id' => $userId, 'warning_id' => $result['warning_id'],
                 'client_request_id' => $request->input('client_request_id'),
                 'request_type' => $request->input('type'),
                 'input_length' => mb_strlen((string) $request->input('user_input')),
@@ -733,10 +766,10 @@ class ChatbotController extends Controller
             return response()->json(['success' => false, ...$result, 'moderation' => $result], $result['blocked'] ? 403 : 422);
         }
         $message = match ($decision) {
-            'off_topic' => $en ? 'I can only help with food, recipes, restaurant services, website policies and your own account.' : 'Mình chỉ hỗ trợ món ăn, công thức, dịch vụ nhà hàng, chính sách website và tài khoản của bạn.',
+            'unclear_image' => $en ? 'I can help if you show the heading and the buttons around the area you are using on the customer website.' : 'Bạn chụp thêm tiêu đề và các nút quanh phần đang dùng trên trang khách hàng để tui chỉ đúng chỗ nhé.',
             'image_rejected' => $en ? 'This image contains inappropriate or private content and cannot be sent. You can choose another image.' : 'Ảnh này chứa nội dung không phù hợp hoặc thông tin riêng tư nên không thể gửi. Bạn có thể chọn ảnh khác.',
             'blocked' => $en ? 'Chat is suspended until the end of today.' : 'Chatbot bị khóa đến hết hôm nay.',
-            default => $en ? 'I cannot review this right now. Please try sending it again shortly.' : 'Tôi chưa xem được nội dung này lúc này. Bạn thử gửi lại sau ít phút nhé.',
+            default => $en ? 'I cannot review this right now. Please try sending it again shortly.' : 'Tui chưa xem được nội dung này lúc này. Bạn thử gửi lại sau ít phút nhé.',
         };
         return response()->json(['success' => false, 'code' => $decision, 'message' => $message,
             'blocked' => $decision === 'blocked'],

@@ -8,9 +8,10 @@ import { useAuthContext } from '../../context/AuthContext';
 import IngredientLimitModal from '../../components/IngredientLimitModal';
 import { translateIngredients } from './DishDetailPage';
 import { getCartKey } from '../../utils/cartStorage';
-import { translateDishName, translateRecipeName } from '../../dishTranslations';
+import { translateDishName, translateRecipeName, matchesDishSearch } from '../../dishTranslations';
 import i18n from '../../i18n';
 import FavoriteRecommendations from './FavoriteRecommendations';
+import DishTypeFilter from '../../components/DishTypeFilter';
 
 // Số lượng tối đa mỗi lần đặt một món (khớp giới hạn 50 ở backend)
 const MAX_ORDER_QTY = 50;
@@ -38,10 +39,12 @@ const MenuPage = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [successMessage, setSuccessMessage] = useState('');
     const [errorMessage, setErrorMessage] = useState(null);
-    const [ingredientError, setIngredientError] = useState(null); // { message, overLimit } khi giỏ vượt 50 nguyên liệu
+    const [ingredientError, setIngredientError] = useState(null);
     const [selectedDish, setSelectedDish] = useState(null);
     const [selectedPriceTier, setSelectedPriceTier] = useState('standard');
     const [quantity, setQuantity] = useState(1);
+    const [quantityError, setQuantityError] = useState(false);
+
     const [orderType, setOrderType] = useState('mang-ve');
     const [selectedRecipeOptions, setSelectedRecipeOptions] = useState([]);
     const [selectedCustomization, setSelectedCustomization] = useState(null);
@@ -95,11 +98,7 @@ const MenuPage = () => {
         let filtered = dishes;
 
         if (submittedSearch) {
-            filtered = filtered.filter(dish =>
-                dish.dish_name
-                    .toLowerCase()
-                    .includes(submittedSearch.toLowerCase())
-            );
+            filtered = filtered.filter(dish => matchesDishSearch(dish, submittedSearch));
         }
 
         if (selectedType === 'bestseller') {
@@ -118,18 +117,14 @@ const MenuPage = () => {
 
         setSearch(value);
 
-        if (!value.includes(' ')) {
+        if (!value.trim()) {
             setSuggestions([]);
             setShowDropdown(false);
             return;
         }
 
         const matched = dishes
-            .filter(dish =>
-                dish.dish_name
-                    .toLowerCase()
-                    .includes(value.trim().toLowerCase())
-            )
+            .filter(dish => matchesDishSearch(dish, value))
             .slice(0, 5);
 
         setSuggestions(matched);
@@ -164,51 +159,28 @@ const MenuPage = () => {
         setIsModalOpen(true);
     };
 
-    const handleDecreaseQty = () => {
-        setQuantity(prev => {
-            const q = parseInt(prev) || 1;
-            return Math.max(1, q - 1);
-        });
-    };
-
-    const handleIncreaseQty = () => {
-        const max = MAX_ORDER_QTY;
-        setQuantity(prev => {
-            const q = parseInt(prev) || 1;
-            return Math.min(max, q + 1);
-        });
-    };
-
-    const handleSetMinQty = () => setQuantity(1);
-
-    const handleSetMaxQty = () => setQuantity(MAX_ORDER_QTY);
-    
-    const handleDecrease10Qty = () => {
-        setQuantity(prev => {
-            const q = parseInt(prev) || 1;
-            return Math.max(1, q - 10);
-        });
-    };
-
-    const handleIncrease10Qty = () => {
-        const max = MAX_ORDER_QTY;
-        setQuantity(prev => {
-            const q = parseInt(prev) || 1;
-            return Math.min(max, q + 10);
-        });
-    };
-
-    const confirmAddToCart = async () => {
-        let qty = parseInt(quantity);
-        const maxQty = MAX_ORDER_QTY;
-
-        if (isNaN(qty) || qty < 1) {
-            setErrorMessage(i18n.t("Vui lòng nhập số lượng hợp lệ!", { ns: 'legacy', keySeparator: false }));
+    const adjustQuantity = (amount) => {
+        const current = Number(quantity);
+        if (!/^\d+$/.test(String(quantity)) || current < 1 || current > MAX_ORDER_QTY) {
+            setQuantityError(true);
             return;
         }
+        setQuantity(Math.max(1, Math.min(MAX_ORDER_QTY, current + amount)));
+    };
 
-        if (qty > maxQty) {
-            setErrorMessage(i18n.t("Mỗi lần chỉ được đặt tối đa 50 phần cho một món.", { ns: 'legacy', keySeparator: false }));
+    const handleDecreaseQty = () => adjustQuantity(-1);
+    const handleDecrease10Qty = () => adjustQuantity(-10);
+    const handleIncreaseQty = () => adjustQuantity(1);
+    const handleIncrease10Qty = () => adjustQuantity(10);
+    const handleSetMinQty = () => { setQuantity(1); setQuantityError(false); };
+    const handleSetMaxQty = () => { setQuantity(MAX_ORDER_QTY); setQuantityError(false); };
+
+    useEffect(() => setQuantityError(false), [quantity, selectedDish]);
+
+    const confirmAddToCart = async () => {
+        const qty = Number(quantity);
+        if (!/^\d+$/.test(String(quantity)) || qty < 1 || qty > MAX_ORDER_QTY) {
+            setQuantityError(true);
             return;
         }
 
@@ -224,6 +196,10 @@ const MenuPage = () => {
         const unitPrice = baseUnitPrice + Number(selectedCustomization?.price_adjustment || 0);
         const existingItemIndex = currentCart.findIndex(item => item.dish_id === selectedDish.dish_id && (item.customization_id ?? null) === selectedRecipeId && (item.price_tier ?? 'standard') === selectedPriceTier);
 
+        if (Number(currentCart[existingItemIndex]?.quantity ?? 0) + qty > MAX_ORDER_QTY) {
+            setQuantityError('inputValidation.cartLineLimit');
+            return;
+        }
         if (existingItemIndex > -1) {
             currentCart[existingItemIndex].quantity += qty;
             currentCart[existingItemIndex].price = unitPrice;
@@ -258,7 +234,7 @@ const MenuPage = () => {
             const data = err.response?.data;
             if (err.response?.status === 422 && data?.over_limit) {
                 setIsModalOpen(false);
-                setIngredientError({ message: data.message, overLimit: data.over_limit });
+                setIngredientError({ overLimit: data.over_limit });
             } else {
                 setErrorMessage(data?.message || 'Không thể kiểm tra nguyên liệu lúc này. Vui lòng thử lại.');
             }
@@ -303,7 +279,7 @@ const MenuPage = () => {
                                     type="text"
                                     placeholder={i18n.t("Tìm kiếm món ăn...", { ns: 'legacy', keySeparator: false })}
                                     disabled={selectedType === 'recommended'}
-                                    value={search}
+                                    maxLength={50} value={search}
                                     onChange={handleSearchChange}
                                     onKeyDown={handleSearchSubmit}
                                     onBlur={() => {
@@ -348,20 +324,13 @@ const MenuPage = () => {
                         </div>
                         <div>
                             <label className="block text-sm font-semibold mb-2">{i18n.t("Bộ lọc", { ns: 'legacy', keySeparator: false })}</label>
-                            <select
+                            <DishTypeFilter
+                                types={types}
                                 value={selectedType}
-                                onChange={(e) => setSelectedType(e.target.value)}
+                                onChange={setSelectedType}
+                                showRecommended
                                 className="w-full border border-gray-300 rounded px-4 py-2 focus:outline-none focus:border-red-600"
-                            >
-                                <option value="">{i18n.t("Tất cả loại", { ns: 'legacy', keySeparator: false })}</option>
-                                <option value="bestseller">{i18n.t("⭐ Bestseller", { ns: 'legacy', keySeparator: false })}</option>
-                                <option value="recommended">{t('menuRecommend.optionLabel')}</option>
-                                {types.map(type => (
-                                    <option key={type.type_id} value={type.type_id}>
-                                        {i18n.t(type.type_name, { ns: 'legacy', keySeparator: false })}
-                                    </option>
-                                ))}
-                            </select>
+                            />
                         </div>
                     </div>
                 </div>
@@ -394,7 +363,6 @@ const MenuPage = () => {
                                             {dish.is_bestseller && (
                                                 <span className="inline-block bg-yellow-200 text-yellow-800 text-xs font-semibold px-3 py-1 rounded-full">{i18n.t("⭐ Bán chạy", { ns: 'legacy', keySeparator: false }) + " "}</span>
                                             )}
-                                            <span className="text-xs font-semibold text-green-700">{i18n.t("Tối đa 50 phần", { ns: 'legacy', keySeparator: false }) + " "}</span>
                                         </div>
                                         <button onClick={() => navigate(`/dish-details/${dish.dish_id}`)} className="shrink-0 whitespace-nowrap rounded-lg border border-amber-600 py-2 px-3 text-sm font-semibold text-amber-700 hover:bg-amber-50">{i18n.t("Xem chi tiết món", { ns: 'legacy', keySeparator: false }) + " "}</button>
                                     </div>
@@ -435,7 +403,6 @@ const MenuPage = () => {
                         {Number(selectedCustomization?.price_adjustment || 0) > 0 && <p className="text-sm text-gray-600 dark:text-gray-300">{t('pricing.surcharge', { amount: formatCurrency(Number(selectedCustomization.price_adjustment)) })}</p>}
                     </div>}
                     <div>
-                        <span className="text-sm font-semibold text-green-700 dark:text-green-300">{i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false })}</span>
                     </div>
 
                     {selectedDish?.allows_customer_recipe_customization !== false && <div>
@@ -488,9 +455,12 @@ const MenuPage = () => {
                                 Min
                             </button>
                             <input
-                                type="number"
+                                type="text"
+                                inputMode="decimal"
                                 value={quantity}
-                                onChange={(e) => setQuantity(e.target.value)}
+                                aria-invalid={quantityError}
+                                aria-describedby={quantityError ? 'dish-quantity-error' : undefined}
+                                onChange={(e) => { setQuantity(e.target.value); setQuantityError(false); }}
                                 className="no-spinner order-first w-full sm:order-none sm:w-auto sm:flex-1 min-w-0 border border-gray-300 rounded px-3 py-2 text-center focus:outline-none focus:border-red-600"
                             />
                             <button
@@ -515,6 +485,11 @@ const MenuPage = () => {
                                 +10
                             </button>
                         </div>
+                        {quantityError && (
+                            <p id="dish-quantity-error" role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">
+                                {t(typeof quantityError === 'string' ? quantityError : 'inputValidation.dishQuantity', { max: MAX_ORDER_QTY })}
+                            </p>
+                        )}
                     </div>
                 </div>
             </Modal>
@@ -533,7 +508,6 @@ const MenuPage = () => {
             <IngredientLimitModal
                 isOpen={ingredientError !== null}
                 onClose={() => setIngredientError(null)}
-                message={ingredientError?.message}
                 overLimit={ingredientError?.overLimit}
                 formatIngredient={translateIngredients}
             />

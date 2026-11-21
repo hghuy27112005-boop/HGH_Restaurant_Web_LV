@@ -31,11 +31,17 @@ const API_ERROR_KEYS = {
     admin_forbidden: 'apiErrors.serverError',
     recipe_preview_unavailable: 'adminDish.aiUnavailable',
     ingredient_options_unavailable: 'recipeEditing.optionsUnavailable',
+    avatar_invalid_image: 'avatarReview.invalidImage',
+    avatar_image_rejected: 'avatarReview.rejected',
+    avatar_review_unavailable: 'avatarReview.unavailable',
 };
 
 // Add token to request if exists
 axiosInstance.interceptors.request.use((config) => {
     const token = sessionStorage.getItem('auth_token');
+    if (config.expectedAuthToken !== undefined && config.expectedAuthToken !== token) {
+        throw new axios.CanceledError('The signed-in account changed.');
+    }
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
@@ -70,7 +76,9 @@ axiosInstance.interceptors.response.use(
                 }
             }
         }
-        if (error.response?.status === 401 && !isAuthForm && sessionStorage.getItem('auth_token')) {
+        const token = sessionStorage.getItem('auth_token');
+        if (error.response?.status === 401 && !isAuthForm && token
+            && error.config?.headers?.Authorization === `Bearer ${token}`) {
             // Token đã bị thu hồi (đăng nhập/đăng xuất ở nơi khác): báo cho useAuth hiện modal
             window.dispatchEvent(new Event('session-kicked'));
         }
@@ -95,6 +103,10 @@ export const userAPI = {
     checkAccountAlive: () => axiosInstance.get('/user'),
     updateProfile: (data) => axiosInstance.put('/user', data),
     changePassword: (data) => axiosInstance.post('/user/change-password', data),
+    reviewAvatar: (formData) =>
+        axiosInstance.post('/user/avatar/review', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        }),
     uploadAvatar: (formData) =>
         axiosInstance.post('/user/avatar', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
@@ -241,10 +253,11 @@ export const adminAPI = {
             axiosInstance.post('/admin/dishes/analyze-ingredients', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             }),
-        confirmIngredients: (ingredients, dishId = null, language = 'vi') =>
+        confirmIngredients: (ingredients, dishId = null, language = 'vi', fixedCostPerServing) =>
             axiosInstance.post('/admin/dishes/confirm-ingredients', {
                 ingredients,
                 language,
+                fixed_cost_per_serving: fixedCostPerServing,
                 ...(dishId ? { dish_id: dishId } : {}),
             }),
         discardConfirmedIngredients: (ingredientIds) =>
@@ -343,7 +356,7 @@ export const dishProposalAPI = {
     claim: () => axiosInstance.post('/dish-proposals/claim'),
     propose: data => axiosInstance.post('/dish-proposals', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
     analyze: data => axiosInstance.post('/dish-proposals/analyze', data, { headers: { 'Content-Type': 'multipart/form-data' } }),
-    confirmIngredients: (ingredients, language) => axiosInstance.post('/dish-proposals/confirm-ingredients', { ingredients, language }),
+    confirmIngredients: (ingredients, language, draftToken) => axiosInstance.post('/dish-proposals/confirm-ingredients', { ingredients, language, draft_token: draftToken }),
     discardIngredients: ids => axiosInstance.post('/dish-proposals/discard-ingredients', { ingredient_ids: ids }),
     previewRecipe: data => axiosInstance.post('/dish-proposals/preview-recipe', data),
     vote: (id, quantity = 1) => axiosInstance.post(`/dish-proposals/${id}/vote`, { quantity }),

@@ -12,12 +12,16 @@ use App\Models\IngredientReservation;
 use App\Models\IngredientStock;
 use App\Models\OrderItem;
 use App\Services\GeminiChatbotService;
+use App\Services\ContentModerationService;
+use App\Services\RestaurantContentPolicy;
 use App\Services\DishIngredientAvailabilityService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 class DishController extends Controller
 {
@@ -156,33 +160,28 @@ class DishController extends Controller
     private function validateFixedPricePayload(string $json, int|float $price, string $language = 'vi'): void
     {
         $payload = json_decode($json, true);
-        if (!is_array($payload) || ($payload['mode'] ?? null) !== 'fixed' || (float) ($payload['price'] ?? 0) !== (float) $price || !in_array((float) $price, [15000.0, 30000.0, 40000.0], true)) {
+        if (!is_array($payload) || !is_array($payload['stock_quantities'] ?? []) || ($payload['mode'] ?? null) !== 'fixed' || !is_numeric($payload['price'] ?? null)
+            || (float) $payload['price'] !== (float) $price || !in_array((float) $price, [15000.0, 30000.0, 40000.0], true)) {
             throw \Illuminate\Validation\ValidationException::withMessages(['tiered_recipe' => $language === 'en'
                 ? 'Drinks and desserts must use one fixed price: 15,000, 30,000, or 40,000 VND.'
                 : 'Món Nước & chè chỉ được chọn một giá cố định: 15.000đ, 30.000đ hoặc 40.000đ.']);
         }
     }
 
-    private function validateTieredRecipePayload(string $json, array $ingredientIds, \App\Services\TieredRecipeService $service, string $language = 'vi'): array
+    private function validateTieredRecipePayload(string $json, array $ingredientIds, \App\Services\TieredRecipeService $service, string $language = 'vi', bool $editing = false): array
     {
         $payload = json_decode($json, true);
         if (!is_array($payload) || !is_array($payload['prices'] ?? null) || !is_array($payload['quantities'] ?? null) || !is_array($payload['measurements'] ?? null)) {
             throw \Illuminate\Validation\ValidationException::withMessages(['tiered_recipe' => $language === 'en' ? 'The price and quantity data is invalid.' : 'Dữ liệu giá và định lượng không hợp lệ.']);
         }
-        $quantities = collect($payload['quantities'])->keyBy(fn ($row) => (int) ($row['ingredient_id'] ?? 0));
-        $submittedIds = $quantities->keys()->map(fn ($id) => (int) $id)->sort()->values()->all();
-        sort($ingredientIds);
-        if ($submittedIds !== $ingredientIds) {
-            throw \Illuminate\Validation\ValidationException::withMessages(['tiered_recipe' => $language === 'en' ? 'The quantity settings do not match the confirmed ingredients.' : 'Danh sách định lượng không khớp nguyên liệu đã duyệt.']);
-        }
         $input = ['pricing' => [
             'price_group' => $payload['price_group'] ?? '',
             'prices' => $payload['prices'],
-            'minimum_gross_margin_percent' => $payload['minimum_gross_margin_percent'] ?? 10,
-            'tax_percent_included' => $payload['tax_percent_included'] ?? 0,
-            'fixed_cost_per_serving' => $payload['fixed_cost_per_serving'] ?? 0,
+            'minimum_gross_margin_percent' => $payload['minimum_gross_margin_percent'] ?? null,
+            'tax_percent_included' => $payload['tax_percent_included'] ?? null,
+            'fixed_cost_per_serving' => $payload['fixed_cost_per_serving'] ?? null,
         ], 'quantities' => $payload['quantities']];
-        $normalized = $service->validateAndNormalize($input, $ingredientIds, $language);
+        $normalized = $service->validateAndNormalize($input, $ingredientIds, $language, $editing && !isset($payload['preview_token']));
         $generated = [];
         foreach ($normalized['quantities'] as $id => $settings) {
             $row = $payload['measurements'][$id] ?? $payload['measurements'][(string) $id] ?? null;
@@ -190,15 +189,80 @@ class DishController extends Controller
                 throw \Illuminate\Validation\ValidationException::withMessages(['tiered_recipe' => $language === 'en' ? 'An approved quantity is missing for an ingredient.' : 'Thiếu định lượng đã duyệt cho một nguyên liệu.']);
             }
             if (!$settings['is_variable']) continue;
-            $generated[] = ['ingredient_id' => (int) $id, ...$row];
+            $generated[] = [...$row, 'ingredient_id' => (int) $id];
         }
         $measured = $service->validateGeneratedQuantities($generated, $normalized['quantities'], $normalized['budgets'], $language);
         $profile = $input['pricing'];
         return [
             'input' => $input, 'ingredient_ids' => $ingredientIds, 'group' => $profile['price_group'], 'prices' => $profile['prices'],
             'normalized' => $normalized['quantities'], 'measurements' => $measured,
+            'preview_token' => $payload['preview_token'] ?? null,
             'margin' => (float) $profile['minimum_gross_margin_percent'], 'tax' => (float) $profile['tax_percent_included'], 'fixed_cost' => (float) $profile['fixed_cost_per_serving'],
         ];
+    }
+
+    private function tieredPreviewDigest(Request $request, array $pricing, array $settings, array $measurements, ?int $dishId): string
+    {
+        ksort($settings);
+        ksort($measurements);
+        return hash('sha256', json_encode([
+            $request->user()->getAuthIdentifier(),
+            $dishId,
+            trim($request->input('dish_name')),
+            $request->input('language'),
+            $pricing['price_group'],
+            (float) $pricing['minimum_gross_margin_percent'],
+            (float) $pricing['tax_percent_included'],
+            (float) $pricing['fixed_cost_per_serving'],
+            $settings,
+            $measurements,
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    private function assertTieredPreview(Request $request, array $config, ?Dish $dish = null): void
+    {
+        $token = $config['preview_token'];
+        if (is_string($token)) {
+            try {
+                $digest = $this->tieredPreviewDigest($request, $config['input']['pricing'], $config['normalized'], $config['measurements'], $dish?->dish_id);
+                if (hash_equals($digest, Crypt::decryptString($token))) {
+                    return;
+                }
+            } catch (\Illuminate\Contracts\Encryption\DecryptException) {
+                // An invalid token is treated as an unconfirmed preview.
+            }
+        } elseif ($token === null && $dish && (int) $request->input('type_id') === (int) $dish->type_id) {
+            $profile = $dish->priceProfile()->first();
+            $stored = $dish->recipeMeasurements()->get()->keyBy('ingredient_id');
+            if ($profile && $profile->price_group === $config['group']
+                && (float) $profile->minimum_gross_margin_percent === $config['margin']
+                && (float) $profile->tax_percent_included === $config['tax']
+                && (float) $profile->fixed_cost_per_serving === $config['fixed_cost']
+                && collect($config['prices'])->every(fn ($price, $tier) => (int) $profile->{"price_{$tier}"} === (int) $price)
+                && $stored->count() === count($config['measurements'])
+                && collect($config['measurements'])->every(function (array $tiers, int $id) use ($stored, $config): bool {
+                    $row = $stored->get($id);
+                    $setting = $config['normalized'][$id];
+                    return $row && $row->is_variable === $setting['is_variable']
+                        && (!$row->is_variable || $row->quantity_unit === $setting['quantity_unit'])
+                        && collect($tiers)->every(fn ($quantity, $tier) =>
+                            $quantity === ($row->{"quantity_{$tier}"} === null ? null : (float) $row->{"quantity_{$tier}"})
+                        );
+                })) {
+                return;
+            }
+        }
+
+        throw ValidationException::withMessages(['tiered_recipe' => $request->input('language') === 'en'
+            ? 'The portion quantities must match the generated preview. Confirm the ingredients again.'
+            : 'Định lượng phải khớp với kết quả đã sinh. Hãy xác nhận lại nguyên liệu.']);
+    }
+
+    private function dishAnalysisKey(string $name, string $language, \Illuminate\Http\UploadedFile $image): string
+    {
+        return 'dish-analysis:v2:' . auth()->id() . ':' . hash('sha256', json_encode([
+            trim($name), $language, hash_file('sha256', $image->getRealPath()),
+        ], JSON_THROW_ON_ERROR));
     }
 
     public function analyzeIngredients(Request $request, GeminiChatbotService $gemini)
@@ -214,6 +278,9 @@ class DishController extends Controller
         try {
             $dish = isset($data['dish_id']) ? Dish::findOrFail($data['dish_id']) : null;
             $analysisDishName = trim($data['dish_name']);
+            if (RestaurantContentPolicy::containsKnownAbuse($analysisDishName)) {
+                return $this->dishNameInvalidResponse();
+            }
             if ($dish) {
                 $storedName = trim((string) $dish->getRawOriginal($language === 'en' ? 'dish_name_en' : 'dish_name'));
                 if ($storedName === '' || $analysisDishName !== $storedName) {
@@ -225,15 +292,15 @@ class DishController extends Controller
                 $service->createRequiredRulesFromDishIngredients($dish);
                 $sourceNames = array_map('trim', explode(',', (string) ($language === 'en' ? $dish->ingredients_en : $dish->ingredients)));
                 $measurements = $dish->recipeMeasurements()->get()->keyBy('ingredient_id');
-                $ingredients = $dish->ingredientRules()->with('ingredient')->orderBy('sort_order')->get()->values()->map(function ($rule, $index) use ($language, $sourceNames, $measurements) {
+                $ingredients = $dish->ingredientRules()->with(['ingredient' => fn ($query) => $query->withExists('dishRules')])->orderBy('sort_order')->get()->values()->map(function ($rule, $index) use ($language, $sourceNames, $measurements) {
                     $name = $sourceNames[$index] ?? $this->canonicalIngredientName($rule->ingredient, $language);
                     $measurement = $measurements->get((int) $rule->ingredient_id);
                     return ['ingredient_id' => (int) $rule->ingredient_id, 'name' => $name,
                         'name_vi' => $rule->ingredient->ingredient_name_vi, 'name_en' => $rule->ingredient->ingredient_name,
                         $language === 'en' ? 'name_en' : 'name_vi' => $name, 'role' => $rule->role,
-                        'quantity_category' => $measurement ? ($measurement->is_variable ? $rule->ingredient->quantity_category : 'fixed') : (($rule->ingredient->quantity_unit || $rule->ingredient->cost_per_unit) ? $rule->ingredient->quantity_category : null),
-                        'quantity_unit' => $measurement?->quantity_unit ?: $rule->ingredient->quantity_unit, 'cost_per_unit' => $rule->ingredient->cost_per_unit,
-                        'minimum_quantity' => $measurement?->minimum_quantity, 'maximum_quantity' => $measurement?->maximum_quantity];
+                        ...$this->stockQuantityFields($rule->ingredient),
+                        'minimum_quantity' => $measurement?->minimum_quantity, 'maximum_quantity' => $measurement?->maximum_quantity,
+                        'fixed_stock_quantity' => $measurement?->quantity_unit === $rule->ingredient->quantity_unit ? $measurement?->quantity_standard : null];
                 });
                 return response()->json(['success' => true, 'language' => $language, 'ingredients' => $ingredients, 'source' => 'stored']);
             }
@@ -252,15 +319,15 @@ class DishController extends Controller
                 );
             }
 
-            $pantryIngredients = Ingredient::query()
+            $catalogIngredients = Ingredient::query()->withExists(['dishRules', 'stocks'])
                 ->where(function ($query): void {
                     $query->where('is_active', true)
                         ->orWhereHas('stocks')
                         ->orWhereHas('dishRules');
                 })
                 ->orderBy('ingredient_id')
-                ->get()
-                ->map(fn (Ingredient $ingredient): array => [
+                ->get();
+            $pantryIngredients = $catalogIngredients->map(fn (Ingredient $ingredient): array => [
                     'ingredient_id' => (int) $ingredient->ingredient_id,
                     'name_en' => $this->canonicalIngredientName($ingredient, 'en'),
                     'name_vi' => $this->canonicalIngredientName($ingredient, 'vi'),
@@ -287,17 +354,28 @@ class DishController extends Controller
                 ], 422);
             }
 
-            $catalogById = Ingredient::query()->whereIn('ingredient_id', collect($analysis['ingredients'])->pluck('ingredient_id')->filter()->all())->get()->keyBy('ingredient_id');
-            $ingredients = collect($analysis['ingredients'])->map(function (array $row) use ($catalogById): array {
-                $catalog = $catalogById->get((int) ($row['ingredient_id'] ?? 0));
-                if (!$catalog) return $row;
-                return [
-                    ...$row,
-                    'quantity_unit' => $catalog->quantity_unit,
-                    'cost_per_unit' => $catalog->cost_per_unit,
-                    'quantity_step' => $catalog->quantity_step,
-                ];
+            $catalogById = $catalogIngredients->keyBy('ingredient_id');
+            $nameField = $language === 'en' ? 'name_en' : 'name_vi';
+            $ingredients = collect($analysis['ingredients'])->map(function (array $row) use ($catalogIngredients, $catalogById, $nameField, $language): array {
+                $catalog = $catalogById->get((int) ($row['ingredient_id'] ?? 0))
+                    ?? $this->findIngredientByName($catalogIngredients, $row[$nameField]);
+                if ($catalog) {
+                    $row = [
+                        ...$row,
+                        'ingredient_id' => (int) $catalog->ingredient_id,
+                        'name_vi' => $catalog->ingredient_name_vi,
+                        'name_en' => $catalog->ingredient_name,
+                        $nameField => $this->canonicalIngredientName($catalog, $language) ?? $row[$nameField],
+                        ...$this->stockQuantityFields($catalog, $row['quantity_category'] ?? null),
+                    ];
+                }
+                cache()->put($this->ingredientReviewKey($row[$nameField], $language, $row['ingredient_id'] ?? null), true, now()->addMinutes(30));
+                return $row;
             })->all();
+
+            if (!$dish) {
+                cache()->put($this->dishAnalysisKey($analysisDishName, $language, $image), true, now()->addMinutes(30));
+            }
 
             return response()->json([
                 'success' => true,
@@ -317,6 +395,9 @@ class DishController extends Controller
     {
         $language = $request->input('language') === 'en' ? 'en' : 'vi';
         $nameField = $language === 'en' ? 'name_en' : 'name_vi';
+        $quantityRequired = $request->exists('fixed_cost_per_serving')
+            ? 'required_if:ingredients.*.quantity_category,starch,protein,mushroom,other|'
+            : '';
         try {
             $data = $request->validate([
                 'dish_id' => 'nullable|integer|exists:dishes,dish_id',
@@ -327,7 +408,39 @@ class DishController extends Controller
                 "ingredients.*.{$nameField}" => 'required|string|max:255',
                 'ingredients.*.role' => 'required|in:required_replaceable,required_fixed,optional',
                 'ingredients.*.quantity_category' => 'nullable|in:fixed,starch,protein,mushroom,other',
+                'ingredients.*.cost_per_unit' => $quantityRequired . 'nullable|numeric|between:0.0001,99999999.9999',
+                'ingredients.*.quantity_step' => $quantityRequired . 'nullable|numeric|between:0.01,99999999.99',
+                'ingredients.*.minimum_quantity' => $quantityRequired . 'nullable|numeric|between:0,99999999.99',
+                'ingredients.*.maximum_quantity' => $quantityRequired . 'nullable|numeric|min:1|max:99999999.99',
+                'fixed_cost_per_serving' => 'sometimes|required|numeric|min:0',
             ]);
+            if (isset($data['fixed_cost_per_serving'])) {
+                $cost = (float) $data['fixed_cost_per_serving'];
+                app(\App\Services\TieredRecipeService::class)->validateFixedIngredientCost(
+                    $cost, collect($data['ingredients'])->contains('quantity_category', 'fixed'), $language
+                );
+            }
+            if (isset($data['fixed_cost_per_serving'])) {
+                $ids = array_filter(array_column($data['ingredients'], 'ingredient_id'));
+                $catalog = Ingredient::query()->withExists(['stocks', 'dishRules'])
+                    ->whereIn('ingredient_id', $ids)->get()->keyBy('ingredient_id');
+                foreach ($data['ingredients'] as $index => $item) {
+                    $ingredient = $catalog->get($item['ingredient_id'] ?? null);
+                    $locked = $ingredient?->hasStockSettings();
+                    if (($locked ? $ingredient->quantity_category : ($item['quantity_category'] ?? 'fixed')) === 'fixed') continue;
+                    foreach ($locked ? ['maximum_quantity'] : ['cost_per_unit', 'quantity_step', 'maximum_quantity'] as $field) {
+                        $value = (float) ($item[$field] ?? 0);
+                        if (!is_finite($value) || $value < 1) {
+                            throw ValidationException::withMessages(["ingredients.{$index}.{$field}" => $language === 'en'
+                                ? 'Enter a value of at least 1.' : 'Nhập giá trị từ 1 trở lên.']);
+                        }
+                    }
+                }
+            }
+            $this->validateContentLanguage(
+                $data['ingredients'], $nameField, $language, null,
+                isset($data['dish_id']) ? Dish::find($data['dish_id']) : null
+            );
         } catch (\Illuminate\Validation\ValidationException $exception) {
             $errors = $exception->errors();
             if (!collect(array_keys($errors))->contains(
@@ -344,7 +457,7 @@ class DishController extends Controller
         }
 
         $confirmed = DB::transaction(function () use ($data, $language, $nameField): array {
-            $catalog = Ingredient::query()->get();
+            $catalog = Ingredient::query()->withExists(['dishRules', 'stocks'])->get();
             $resolved = [];
             foreach ($data['ingredients'] as $item) {
                 $sourceName = trim($item[$nameField]);
@@ -353,24 +466,10 @@ class DishController extends Controller
                     ? $catalog->first(fn (Ingredient $ingredient): bool =>
                         (int) $ingredient->ingredient_id === (int) $item['ingredient_id']
                     )
-                    : $catalog->first(function (Ingredient $ingredient) use ($sourceName): bool {
-                    $incoming = [$this->normalizeIngredientName($sourceName)];
-                    $stored = [
-                        $ingredient->ingredient_name_vi,
-                        $ingredient->ingredient_name,
-                        ...($ingredient->aliases ?? []),
-                    ];
-                    foreach ($stored as $candidate) {
-                        if ($candidate && in_array($this->normalizeIngredientName((string) $candidate), $incoming, true)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                });
+                    : $this->findIngredientByName($catalog, $sourceName);
 
                 if (!$match) {
-                    $match = Ingredient::create([
-                        'ingredient_key' => IngredientStock::keyFor($sourceName),
+                    $match = Ingredient::firstOrCreate(['ingredient_key' => IngredientStock::keyFor($sourceName)], [
                         'ingredient_name' => $language === 'en' ? $sourceName : null,
                         'ingredient_name_vi' => $language === 'vi' ? $sourceName : null,
                         'ingredient_group' => 'other',
@@ -381,7 +480,7 @@ class DishController extends Controller
                         'is_active' => false,
                     ]);
                     $catalog->push($match);
-                    $createdForConfirmation = true;
+                    $createdForConfirmation = $match->wasRecentlyCreated;
                 }
 
                 $id = (int) $match->ingredient_id;
@@ -393,14 +492,13 @@ class DishController extends Controller
                 }
                 $resolved[$id] = [
                     'ingredient_id' => $id,
+                    'name_vi' => $match->ingredient_name_vi,
+                    'name_en' => $match->ingredient_name,
                     $nameField => $this->canonicalIngredientName($match, $language) ?: $sourceName,
                     'name' => $sourceName,
                     'role' => $item['role'],
                     'created_in_confirmation' => $createdForConfirmation,
-                    'quantity_category' => ($match->quantity_unit || $match->cost_per_unit) ? $match->quantity_category : ($item['quantity_category'] ?? 'fixed'),
-                    'quantity_unit' => $match->quantity_unit,
-                    'cost_per_unit' => $match->cost_per_unit,
-                    'quantity_step' => $match->quantity_step,
+                    ...$this->stockQuantityFields($match, $item['quantity_category'] ?? 'fixed'),
                 ];
             }
 
@@ -408,6 +506,46 @@ class DishController extends Controller
         });
 
         return response()->json(['success' => true, 'ingredients' => $confirmed]);
+    }
+
+    public function proposalIngredientDrafts(string $names, string $language, Collection $catalog): array
+    {
+        $nameField = $language === 'en' ? 'name_en' : 'name_vi';
+        return collect(explode(',', $names))->map(fn (string $name) => trim($name))->filter(fn (string $name) => $name !== '')
+            ->map(function (string $name) use ($catalog, $nameField): array {
+                $draft = [$nameField => $name, 'role' => 'required_replaceable'];
+                $ingredient = $this->findIngredientByName($catalog, $name);
+                return $ingredient ? [
+                    ...$draft,
+                    'ingredient_id' => (int) $ingredient->ingredient_id,
+                    ...$this->stockQuantityFields($ingredient),
+                ] : $draft;
+            })->values()->all();
+    }
+
+    private function findIngredientByName(Collection $catalog, string $name): ?Ingredient
+    {
+        $normalized = $this->normalizeIngredientName($name);
+        return $catalog->first(function (Ingredient $ingredient) use ($normalized): bool {
+            foreach ([$ingredient->ingredient_name_vi, $ingredient->ingredient_name, ...($ingredient->aliases ?? [])] as $candidate) {
+                if ($candidate && $this->normalizeIngredientName((string) $candidate) === $normalized) {
+                    return true;
+                }
+            }
+            return false;
+        });
+    }
+
+    private function stockQuantityFields(Ingredient $ingredient, ?string $suggestedCategory = null): array
+    {
+        $locked = $ingredient->hasStockSettings();
+        return [
+            'stock_settings_locked' => $locked,
+            'quantity_category' => $locked ? $ingredient->quantity_category : $suggestedCategory,
+            'quantity_unit' => $ingredient->quantity_unit ?? ($locked ? 'portion' : null),
+            'cost_per_unit' => $ingredient->cost_per_unit,
+            'quantity_step' => $ingredient->quantity_step ?? ($locked ? 1 : null),
+        ];
     }
 
     public function discardConfirmedIngredients(Request $request)
@@ -524,10 +662,11 @@ class DishController extends Controller
     public function previewTieredDishRecipe(Request $request, GeminiChatbotService $gemini, \App\Services\TieredRecipeService $tiered)
     {
         $data = $request->validate([
+            'dish_id' => 'nullable|integer|exists:dishes,dish_id',
             'dish_name' => 'required|string|max:255', 'language' => 'required|in:vi,en',
             'price_group' => 'required|in:small,medium,large', 'prices.low' => 'required|integer|min:1',
             'prices.standard' => 'required|integer|min:1', 'prices.high' => 'required|integer|min:1',
-            'minimum_gross_margin_percent' => 'required|numeric|min:0|max:90', 'tax_percent_included' => 'required|numeric|min:0|max:100',
+            'minimum_gross_margin_percent' => 'required|numeric|between:5,20', 'tax_percent_included' => 'required|numeric|between:0,10',
             'fixed_cost_per_serving' => 'required|numeric|min:0',
             'ingredients' => 'required|array|min:1|max:40', 'ingredients.*.ingredient_id' => 'required|integer|distinct|exists:ingredients,ingredient_id',
             'ingredients.*.name' => 'required|string|max:255', 'quantities' => 'required|array|min:1|max:40',
@@ -569,7 +708,10 @@ class DishController extends Controller
             foreach ($validated['quantities'] as $id => $setting) if ($setting['is_variable']) $cost += $measurements[$id][$tier] * $setting['cost_per_unit'];
             $costs[$tier] = round($cost, 2);
         }
-        return response()->json(['success' => true, 'recipe_instructions' => $generated['recipe_instructions'], 'quantities' => $measurements, 'budgets' => $validated['budgets'], 'variable_costs' => $costs]);
+        $previewToken = Crypt::encryptString($this->tieredPreviewDigest(
+            $request, $input['pricing'], $validated['quantities'], $measurements, isset($data['dish_id']) ? (int) $data['dish_id'] : null
+        ));
+        return response()->json(['success' => true, 'recipe_instructions' => $generated['recipe_instructions'], 'quantities' => $measurements, 'budgets' => $validated['budgets'], 'variable_costs' => $costs, 'preview_token' => $previewToken]);
     }
 
     public function addDish(Request $request, GeminiChatbotService $gemini, \App\Services\TieredRecipeService $tieredService)
@@ -591,6 +733,9 @@ class DishController extends Controller
             'image' => 'required|image|mimes:jpeg,jpg|max:5120',
         ]);
 
+        if (RestaurantContentPolicy::containsKnownAbuse($validated['dish_name'])) {
+            return $this->dishNameInvalidResponse();
+        }
         $suggestionId = $validated['suggestion_id'] ?? null;
         $pendingSuggestion = DB::table('admin_dish_suggestions')->where('id', $suggestionId)
             ->where('status', 'pending')->whereNotNull('award_paid_at');
@@ -612,13 +757,25 @@ class DishController extends Controller
         $fixedPriceDish = !$this->dishTypeSupportsTieredPortions($validated['type_id']);
         if ($fixedPriceDish) {
             $this->validateFixedPricePayload($validated['tiered_recipe'], $validated['price'], $validated['language']);
+            $image = $request->file('image');
+            if (!cache()->has($this->dishAnalysisKey($validated['dish_name'], $validated['language'], $image))) {
+                $request->merge(['dish_id' => null]);
+                $analysis = $this->analyzeIngredients($request, $gemini);
+                if (!$analysis->isSuccessful()) {
+                    return $analysis;
+                }
+            }
             $tieredConfig = null;
         } else {
             $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $validated['language']);
-            if ($suggestionId && (float) $validated['price'] !== (float) $tieredConfig['prices']['standard']) {
+            if ((float) $validated['price'] !== (float) $tieredConfig['prices']['standard']) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'price' => 'Giá món phải khớp với giá khẩu phần vừa.',
                 ]);
+            }
+            $this->assertTieredPreview($request, $tieredConfig);
+            if (!cache()->has($this->dishAnalysisKey($validated['dish_name'], $validated['language'], $request->file('image')))) {
+                app(ContentModerationService::class)->requireAppropriateName($validated['dish_name'], 'dish_name', $validated['language']);
             }
         }
 
@@ -636,6 +793,7 @@ class DishController extends Controller
                 'recipe_instructions' => ['The recipe instructions field is required.'],
             ]);
         }
+        $this->validateContentLanguage($validated['ingredients'], 'name', $language, $sourceInstructions);
         try {
             $translated = $gemini->translateDishContent(
                 $sourceName,
@@ -755,7 +913,7 @@ class DishController extends Controller
                 $removedIngredientIds = array_diff($oldIngredientIds, $selected->keys()->all());
                 $dish->ingredientRules()->whereIn('ingredient_id', $removedIngredientIds)->delete();
                 if ($fixedPriceDish) {
-                    $tieredService->persistFixedPriceDish($dish, $selected->keys()->map(fn ($id) => (int) $id)->all(), (int) $validated['price']);
+                    $tieredService->persistFixedPriceDish($dish, $selected->keys()->map(fn ($id) => (int) $id)->all(), (int) $validated['price'], json_decode($validated['tiered_recipe'], true)['stock_quantities'] ?? [], $language);
                 } else {
                     $tieredService->persist($dish, $tieredConfig['input'], $tieredConfig['ingredient_ids'], $tieredConfig['group'], $tieredConfig['prices'], $tieredConfig['normalized'], $tieredConfig['measurements'], $tieredConfig['margin'], $tieredConfig['tax'], $tieredConfig['fixed_cost']);
                 }
@@ -871,6 +1029,109 @@ class DishController extends Controller
         return is_string($name) && trim($name) !== '' ? trim($name) : null;
     }
 
+    private function ingredientReviewKey(string $name, string $language, ?int $ingredientId): string
+    {
+        return 'ingredient-review:v2:' . auth()->id() . ':' . hash('sha256', json_encode([
+            $language, $ingredientId, trim($name),
+        ], JSON_THROW_ON_ERROR));
+    }
+
+    public function validateRecipeInstructions(string $recipe, string $language): void
+    {
+        $en = $language === 'en';
+        try {
+            $gemini = app(GeminiChatbotService::class);
+            $validLanguage = $gemini->validateDishContentLanguage([
+                'recipe_instructions' => ['kind' => 'recipe', 'text' => $recipe],
+            ], $language);
+            if ($validLanguage[0] !== true) {
+                throw ValidationException::withMessages(['recipe_instructions' => $en
+                    ? 'Write all recipe instructions in English.' : 'Hãy viết toàn bộ công thức bằng tiếng Việt.']);
+            }
+
+            $words = preg_match_all("/[\p{L}\p{N}][\p{L}\p{M}\p{N}]*(?:[-’'][\p{L}\p{N}][\p{L}\p{M}\p{N}]*)*/u", $recipe);
+            if ($words === false || $words > 1000 || strlen($recipe) > 60000) {
+                throw ValidationException::withMessages(['recipe_instructions' => $en
+                    ? 'Recipe instructions must be no longer than 1,000 words and fit in the recipe field.'
+                    : 'Hướng dẫn nấu tối đa 1.000 từ và phải vừa trong trường công thức.']);
+            }
+
+            $quality = RestaurantContentPolicy::containsKnownAbuse($recipe)
+                ? ['appropriate' => false]
+                : $gemini->validateRecipeQuality($recipe);
+            if (!$quality['appropriate']) {
+                throw ValidationException::withMessages(['recipe_instructions' => $en
+                    ? 'The recipe instructions are inappropriate or unsafe.' : 'Hướng dẫn nấu không phù hợp hoặc không an toàn.']);
+            }
+            if (!$quality['meaningful']) {
+                throw ValidationException::withMessages(['recipe_instructions' => $en
+                    ? 'Write coherent, actionable cooking instructions.' : 'Hãy viết các bước nấu có nghĩa và có thể thực hiện.']);
+            }
+        } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
+            report($exception);
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(response()->json([
+                'message' => $en ? 'Recipe verification is unavailable. Please try again.'
+                    : 'Chưa thể kiểm tra hướng dẫn nấu. Vui lòng thử lại.',
+            ], 503));
+        }
+    }
+
+    private function validateContentLanguage(array $ingredients, string $nameField, string $language, ?string $recipe, ?Dish $dish = null): void
+    {
+        $english = $language === 'en';
+        $catalog = Ingredient::query()->whereIn('ingredient_id', array_filter(array_column($ingredients, 'ingredient_id')))->get()->keyBy('ingredient_id');
+        $storedNames = $dish ? explode(',', (string) ($english ? $dish->ingredients_en : $dish->ingredients)) : [];
+        $storedIds = $dish?->ingredientRules()->orderBy('sort_order')->pluck('ingredient_id')->all() ?? [];
+        $fields = [];
+        foreach ($ingredients as $index => $item) {
+            $name = trim($item[$nameField]);
+            if (RestaurantContentPolicy::containsKnownAbuse($name)) {
+                throw ValidationException::withMessages(["ingredients.{$index}.{$nameField}" => $english
+                    ? 'This ingredient name is inappropriate. Please choose another name.'
+                    : 'Tên nguyên liệu không phù hợp. Vui lòng đặt lại.']);
+            }
+            $id = $item['ingredient_id'] ?? null;
+            $ingredient = $catalog->get($id);
+            $canonical = $ingredient ? $this->canonicalIngredientName($ingredient, $language) : null;
+            $storedIndex = $id === null ? false : array_search($id, $storedIds);
+            $storedName = $storedIndex === false ? null : trim($storedNames[$storedIndex] ?? '');
+            if ($name === $canonical || $name === $storedName
+                || cache()->has($this->ingredientReviewKey($name, $language, $id))) {
+                continue;
+            }
+            $fields["ingredients.{$index}.{$nameField}"] = ['kind' => 'ingredient', 'text' => $name];
+        }
+        $storedRecipe = $dish ? trim((string) ($english ? $dish->recipe_instructions_en : $dish->recipe_instructions)) : null;
+        if ($recipe !== null && $recipe !== $storedRecipe) {
+            $this->validateRecipeInstructions($recipe, $language);
+        }
+        if (!$fields) {
+            return;
+        }
+
+        try {
+            $valid = app(GeminiChatbotService::class)->validateDishContentLanguage($fields, $language);
+        } catch (\Illuminate\Http\Client\ConnectionException|\Illuminate\Http\Client\RequestException|\RuntimeException $exception) {
+            report($exception);
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(response()->json([
+                'message' => $english ? 'Language verification is temporarily unavailable. Please try again.'
+                    : 'Tạm thời chưa thể kiểm tra ngôn ngữ. Vui lòng thử lại.',
+            ], 503));
+        }
+
+        $errors = [];
+        foreach (array_keys($fields) as $index => $field) {
+            if ($valid[$index] !== true) {
+                $errors[$field] = $english
+                    ? 'Enter an appropriate, meaningful ingredient name in English.'
+                    : 'Hãy nhập tên nguyên liệu tiếng Việt phù hợp và có nghĩa.';
+            }
+        }
+        if ($errors) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
     private function translateMissingIngredientNames(
         \Illuminate\Database\Eloquent\Collection $ingredients,
         array $sourceNames,
@@ -980,8 +1241,15 @@ class DishController extends Controller
             'recipe_instructions' => 'required|string',
         ]);
 
-        if (!$this->dishTypeSupportsTieredPortions($validated['type_id'])) {
-            return response()->json(['code' => 'fixed_price_type_requires_confirmed_ingredients', 'message' => 'Hãy xác nhận lại nguyên liệu và công thức của món Nước & chè trước khi lưu.'], 422);
+        if (!$this->dishTypeSupportsTieredPortions($validated['type_id'])
+            || (int) $validated['type_id'] !== (int) $dish->type_id
+            || (float) $validated['price'] !== (float) $dish->price) {
+            return response()->json([
+                'code' => 'pricing_requires_confirmed_ingredients',
+                'message' => $validated['language'] === 'en'
+                    ? 'Confirm the ingredients and recipe before saving this dish type or price.'
+                    : 'Hãy xác nhận lại nguyên liệu và công thức trước khi lưu loại món hoặc mức giá này.',
+            ], 422);
         }
 
         $language = $validated['language'];
@@ -993,6 +1261,10 @@ class DishController extends Controller
 
         $ingredients = trim($validated['ingredients']);
         $instructions = trim($validated['recipe_instructions']);
+        $storedIngredients = trim((string) ($language === 'en' ? $dish->ingredients_en : $dish->ingredients));
+        $this->validateContentLanguage($ingredients === $storedIngredients ? [] : array_map(
+            fn (string $name) => ['name' => trim($name)], explode(',', $ingredients)
+        ), 'name', $language, $instructions, $dish);
         $sourceFields = $language === 'vi'
             ? ['dish_name', 'ingredients', 'recipe_instructions']
             : ['dish_name_en', 'ingredients_en', 'recipe_instructions_en'];
@@ -1153,7 +1425,13 @@ class DishController extends Controller
             $this->validateFixedPricePayload($validated['tiered_recipe'], $validated['price'], $validated['language']);
             $tieredConfig = null;
         } else {
-            $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $validated['language']);
+            $tieredConfig = $this->validateTieredRecipePayload($validated['tiered_recipe'], $selected->keys()->map(fn ($id) => (int) $id)->all(), $tieredService, $language, editing: true);
+            if ((float) $validated['price'] !== (float) $tieredConfig['prices']['standard']) {
+                throw ValidationException::withMessages(['price' => $language === 'en'
+                    ? 'The dish price must match the standard portion price.'
+                    : 'Giá món phải khớp với giá khẩu phần vừa.']);
+            }
+            $this->assertTieredPreview($request, $tieredConfig, $dish);
         }
 
         $sourceIngredientNames = $ingredients->map(fn (Ingredient $ingredient) => trim((string) (
@@ -1168,6 +1446,7 @@ class DishController extends Controller
                 'recipe_instructions' => ['The recipe instructions field is required.'],
             ]);
         }
+        $this->validateContentLanguage($validated['ingredients'], 'name', $language, $sourceRecipe, $dish);
 
         try {
             $sourceColumn = $language === 'en' ? 'ingredients_en' : 'ingredients';
@@ -1265,6 +1544,9 @@ class DishController extends Controller
                 $fixedPriceDish
             ): void {
                 $lockedDish = Dish::query()->lockForUpdate()->findOrFail($dish->dish_id);
+                if ($tieredConfig && $tieredConfig['preview_token'] === null) {
+                    $this->assertTieredPreview($request, $tieredConfig, $lockedDish);
+                }
                 $oldIngredientIds = $lockedDish->ingredientRules()
                     ->pluck('ingredient_id')
                     ->map(fn ($id) => (int) $id)
@@ -1318,8 +1600,8 @@ class DishController extends Controller
                 ]);
 
                 if ($fixedPriceDish) {
-                    $tieredService->persistFixedPriceDish($lockedDish, $newIngredientIds, (int) $validated['price']);
-                } else {
+                    $tieredService->persistFixedPriceDish($lockedDish, $newIngredientIds, (int) $validated['price'], json_decode($validated['tiered_recipe'], true)['stock_quantities'] ?? [], $language);
+                } elseif ($tieredConfig['preview_token'] !== null) {
                     $tieredService->persist($lockedDish, $tieredConfig['input'], $tieredConfig['ingredient_ids'], $tieredConfig['group'], $tieredConfig['prices'], $tieredConfig['normalized'], $tieredConfig['measurements'], $tieredConfig['margin'], $tieredConfig['tax'], $tieredConfig['fixed_cost']);
                 }
 
@@ -1365,6 +1647,9 @@ class DishController extends Controller
             }
             if ($imageBackup && is_file($imageBackup)) {
                 rename($imageBackup, $imagePath);
+            }
+            if ($exception instanceof ValidationException) {
+                throw $exception;
             }
             report($exception);
             return response()->json([

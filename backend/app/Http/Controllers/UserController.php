@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\GeminiChatbotService;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -74,22 +77,34 @@ class UserController extends Controller
     public function updateProfile(Request $request)
     {
         $user = $request->user();
+        $emailUnchangedFromProvider = in_array($user->provider, ['google', 'facebook'], true)
+            && $request->input('email') === $user->email;
 
         $validated = $request->validate([
-            'username'    => ['required', 'string', 'max:50', Rule::unique('users', 'username')->ignore($user->user_id, 'user_id')],
-            'email'       => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->user_id, 'user_id')],
-            'tele_number' => ['nullable', 'string', 'max:20', 'regex:/^[0-9]+$/', Rule::unique('users', 'tele_number')->ignore($user->user_id, 'user_id')],
+            'username'    => ['required', 'string', 'max:20', Rule::unique('users', 'username')->ignore($user->user_id, 'user_id')],
+            'email'       => [
+                'required', 'email', $emailUnchangedFromProvider ? 'max:255' : 'max:50',
+                ...($emailUnchangedFromProvider ? [] : ['regex:' . AuthController::EMAIL_REGEX]),
+                Rule::unique('users', 'email')->ignore($user->user_id, 'user_id'),
+            ],
+            'tele_number' => ['nullable', 'string', 'digits:10', Rule::unique('users', 'tele_number')->ignore($user->user_id, 'user_id')],
         ], [
             'username.required'    => 'Tên người dùng không được để trống.',
-            'username.max'         => 'Tên người dùng tối đa 50 ký tự.',
+            'username.max'         => 'Tên người dùng tối đa 20 ký tự.',
             'username.unique'      => 'Tên người dùng này đã được sử dụng.',
             'email.required'       => 'Email không được để trống.',
             'email.email'          => 'Email không hợp lệ.',
             'email.unique'         => 'Email này đã được sử dụng.',
-            'tele_number.max'      => 'Số điện thoại tối đa 20 ký tự.',
-            'tele_number.regex'    => 'Số điện thoại chỉ được chứa chữ số.',
+            'email.regex'          => AuthController::EMAIL_REGEX_MESSAGE,
+            'tele_number.digits'   => 'Số điện thoại phải gồm đúng 10 chữ số.',
             'tele_number.unique'   => 'Số điện thoại này đã được sử dụng.',
         ]);
+
+        if ($validated['username'] !== $user->username) {
+            app(\App\Services\ContentModerationService::class)->requireAppropriateName(
+                $validated['username'], 'username', \App\Support\PreferredLanguage::fromRequest($request)
+            );
+        }
 
         $user->update($validated);
 
@@ -105,19 +120,52 @@ class UserController extends Controller
         ]);
     }
 
-    public function uploadAvatar(Request $request)
+    public function reviewAvatar(Request $request, GeminiChatbotService $gemini)
+    {
+        $this->requireApprovedAvatar($request, $gemini);
+
+        return response()->json(['success' => true]);
+    }
+
+    private function requireApprovedAvatar(Request $request, GeminiChatbotService $gemini): UploadedFile
     {
         $request->validate([
-            'avatar' => 'required|image|mimes:jpeg,png,jpg,gif|max:4096',
+            'avatar' => 'required|image|mimetypes:image/jpeg,image/png,image/webp|max:4096',
         ], [
             'avatar.required' => 'Vui lòng chọn ảnh.',
-            'avatar.image'    => 'File phải là ảnh.',
-            'avatar.mimes'    => 'Ảnh phải có định dạng jpeg, png, jpg hoặc gif.',
-            'avatar.max'      => 'Ảnh không được vượt quá 4MB.',
+            'avatar.image' => 'File phải là ảnh.',
+            'avatar.mimetypes' => 'Ảnh phải có định dạng JPEG, PNG hoặc WebP.',
+            'avatar.max' => 'Ảnh không được vượt quá 4MB.',
         ]);
 
-        $user = $request->user();
         $file = $request->file('avatar');
+        $mime = $file->getMimeType();
+        $contents = file_get_contents($file->getRealPath());
+        // Only review still images, so a later animation frame cannot become the crop.
+        if ($contents !== false && (($mime === 'image/png' && str_contains($contents, "\x00\x00\x00\x08acTL"))
+            || ($mime === 'image/webp' && substr($contents, 12, 4) === 'VP8X' && (ord($contents[20] ?? "\0") & 2)))) {
+            throw new HttpResponseException(response()->json(['success' => false, 'code' => 'avatar_invalid_image'], 422));
+        }
+        $decision = $contents === false ? 'unavailable' : $gemini->moderateAvatar([
+            'mimeType' => $mime,
+            'data' => base64_encode($contents),
+        ]);
+        if ($decision !== 'allow') {
+            $rejected = $decision === 'violation';
+            throw new HttpResponseException(response()->json([
+                'success' => false,
+                'code' => $rejected ? 'avatar_image_rejected' : 'avatar_review_unavailable',
+                'message' => $rejected ? 'Ảnh có nội dung không phù hợp hoặc thông tin riêng tư.' : 'Chưa thể kiểm duyệt ảnh. Vui lòng thử lại.',
+            ], $rejected ? 422 : 503));
+        }
+
+        return $file;
+    }
+
+    public function uploadAvatar(Request $request, GeminiChatbotService $gemini)
+    {
+        $file = $this->requireApprovedAvatar($request, $gemini);
+        $user = $request->user();
 
         $dir = $this->avatarDir($user->user_id);
 
@@ -135,7 +183,7 @@ class UserController extends Controller
         }
         $nextSeq = $maxSeq + 1;
 
-        $extension = $file->getClientOriginalExtension() ?: 'jpg';
+        $extension = $file->extension();
         $filename = $nextSeq . '.' . $extension;
 
         $file->move($dir, $filename);
@@ -156,11 +204,12 @@ class UserController extends Controller
         try {
             $validated = $request->validate([
                 'current_password' => 'required|string',
-                'new_password'      => 'required|string|min:6|confirmed',
+                'new_password'      => 'required|string|min:6|max:20|confirmed',
             ], [
                 'current_password.required' => 'Vui lòng nhập mật khẩu hiện tại.',
                 'new_password.required'     => 'Vui lòng nhập mật khẩu mới.',
                 'new_password.min'          => 'Mật khẩu mới phải có ít nhất 6 ký tự.',
+                'new_password.max'          => 'Mật khẩu không được quá 20 ký tự.',
                 'new_password.confirmed'    => 'Xác nhận mật khẩu không khớp.',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {

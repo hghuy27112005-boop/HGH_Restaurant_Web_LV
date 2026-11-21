@@ -26,18 +26,26 @@ class BillController extends Controller
      */
     public function store(Request $request)
     {
+        if (!$request->user()->hasOrderPhone()) {
+            return response()->json([
+                'code' => 'order_phone_required',
+                'message' => PreferredLanguage::fromRequest($request) === 'en'
+                    ? 'Please add a phone number to place an order.'
+                    : 'Vui lòng nhập số điện thoại để thực hiện đơn hàng.',
+            ], 422);
+        }
+
         $validated = $request->validate([
             'order_type' => 'required|in:booking_table,delivery',
             'items' => 'required|array|min:1',
             'items.*.dish_id' => 'required|exists:dishes,dish_id',
-            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.quantity' => 'required|integer|min:1|max:' . \App\Models\Stock::ORDER_LIMIT,
             'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
             'items.*.price_tier' => 'nullable|in:low,standard,high',
             'items.*.customization_name' => 'nullable|string|max:255',
             'items.*.ingredients' => 'nullable|string',
             'items.*.removed_ingredients' => 'nullable|array',
-            'delivery.address' => 'required_if:order_type,delivery|string',
-            'delivery.phone' => 'required_if:order_type,delivery|string',
+            'delivery.address' => 'required_if:order_type,delivery|string|max:500',
             'booking_table' => 'required_if:order_type,booking_table|array',
             'booking_table.tables' => 'required_if:order_type,booking_table|array|min:1|max:3',
             'booking_table.tables.*' => 'integer|distinct|exists:restaurant_tables,table_number',
@@ -46,6 +54,7 @@ class BillController extends Controller
             'booking_table.end_time' => 'required_if:order_type,booking_table|date_format:H:i',
         ]);
 
+        \App\Models\Stock::assertCartLineLimits($validated['items']);
         app(\App\Services\DishCustomizationService::class)->assertOwnedVariants(
             $validated['items'],
             (int) $request->user()->user_id
@@ -76,12 +85,12 @@ class BillController extends Controller
             }
         }
 
-        $over50 = \App\Models\Stock::findIngredientDemandOver50($validated['items']);
-        if ($over50) {
-            return response()->json([
-                'message' => 'Một số nguyên liệu bị yêu cầu vượt quá định lượng tối đa (50). Vui lòng chọn món khác thay thế.',
-                'over_limit' => $over50,
-            ], 422);
+        if ($validated['order_type'] === 'delivery') {
+            try {
+                app(\App\Services\DeliveryDistanceService::class)->calculateForAddress($validated['delivery']['address']);
+            } catch (\RuntimeException $exception) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['delivery.address' => $exception->getMessage()]);
+            }
         }
 
         DB::beginTransaction();
@@ -158,6 +167,12 @@ class BillController extends Controller
             }
 
             $user = $request->user();
+
+            $overLimit = \App\Models\Stock::orderLimitIssues($itemsWithRealPrice);
+            if ($overLimit) {
+                DB::rollBack();
+                return response()->json(\App\Models\Stock::shortagePayload(['status' => 'over_limit', 'over_limit' => $overLimit]), 422);
+            }
 
             $totalAmount = round($subtotalBeforePoints, 2);
 
@@ -311,7 +326,7 @@ class BillController extends Controller
 
     public function exportPDF(Request $request, Bill $bill)
     {
-        $bill->load(['order.items.dish.priceProfile', 'order.bookings', 'order.delivery']);
+        $bill->load(['order.user', 'order.items.dish.priceProfile', 'order.bookings', 'order.delivery']);
 
         $user = auth()->user();
         if (!$bill->order || ($bill->order->user_id !== $user->user_id && $user->role !== 'admin' && $user->role !== 'staff')) {
@@ -330,7 +345,7 @@ class BillController extends Controller
      */
     public function exportPDFAdmin(Request $request, Bill $bill)
     {
-        $bill->load(['order.items.dish.priceProfile', 'order.bookings', 'order.delivery']);
+        $bill->load(['order.user', 'order.items.dish.priceProfile', 'order.bookings', 'order.delivery']);
 
         $language = PreferredLanguage::fromRequest($request);
         $pdf = Pdf::loadView('pdf.invoice', compact('bill', 'language'));
@@ -501,7 +516,7 @@ class BillController extends Controller
             } catch (\App\Exceptions\StockUnavailableException $e) {
                 DB::rollBack();
                 return response()->json(
-                    \App\Models\Stock::shortagePayload(['status' => 'insufficient', 'suggestions' => $e->suggestions]),
+                    \App\Models\Stock::shortagePayload(['status' => 'insufficient', 'out_of_stock' => $e->issues]),
                     422
                 );
             }

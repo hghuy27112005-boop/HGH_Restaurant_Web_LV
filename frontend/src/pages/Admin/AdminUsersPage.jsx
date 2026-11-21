@@ -4,7 +4,7 @@ import { adminAPI } from '../../services/api';
 import { TableLoading, Button, Modal } from '../../components/Shared';
 import { AdminPageShell, StatGrid, StatCard } from '../../components/AdminUI';
 // Các hàm xuất Excel dùng chung, import từ orderTools (nằm trong thư mục Orders)
-import { EXPORT_LIMIT, fetchAllRows, downloadXlsx } from './Orders/orderTools';
+import { EXPORT_LIMIT, fetchAllRows, downloadXlsx, Pagination } from './Orders/orderTools';
 
 const MEMBERSHIP_LABELS = {
     bronze: 'Bronze',
@@ -49,7 +49,6 @@ const AdminUsersPage = () => {
 
     const [currentPage, setCurrentPage] = useState(1);
     const [lastPage, setLastPage] = useState(1);
-    const [pageInput, setPageInput] = useState('1');
 
     const [searchInput, setSearchInput] = useState('');
     const [appliedSearch, setAppliedSearch] = useState('');
@@ -90,7 +89,6 @@ const AdminUsersPage = () => {
             setCurrentPage(payload.pagination.current_page);
             setLastPage(payload.pagination.last_page);
             setTotal(payload.pagination.total);
-            setPageInput(String(payload.pagination.current_page));
         } catch (err) {
             setErrorMessage(i18n.t("Lỗi tải danh sách người dùng", { ns: 'legacy', keySeparator: false }));
             console.error(err);
@@ -112,13 +110,6 @@ const AdminUsersPage = () => {
 
     const handleSearchKeyDown = (e) => {
         if (e.key === 'Enter') applySearch();
-    };
-
-    const handleGoToPage = () => {
-        let page = parseInt(pageInput, 10);
-        if (isNaN(page) || page < 1) page = 1;
-        if (page > lastPage) page = lastPage;
-        fetchUsers(page);
     };
 
     // Xuất Excel theo bộ lọc đang áp dụng (giống dữ liệu bảng đang hiển thị)
@@ -200,8 +191,8 @@ const AdminUsersPage = () => {
         if (!lockTarget || busy) return;
 
         const amount = Number(lockAmount);
-        if (!Number.isInteger(amount) || amount < 1) {
-            setErrorMessage(i18n.t("Vui lòng nhập thời hạn khóa là số nguyên lớn hơn 0.", { ns: 'legacy', keySeparator: false }));
+        if (!/^\d+$/.test(lockAmount) || amount < 1 || amount > 36500) {
+            setErrorMessage(i18n.t('inputValidation.lockDuration'));
             return;
         }
 
@@ -268,7 +259,7 @@ const AdminUsersPage = () => {
                         <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
                         <input
                             type="text"
-                            value={searchInput}
+                            maxLength={255} value={searchInput}
                             onChange={(e) => setSearchInput(e.target.value)}
                             onKeyDown={handleSearchKeyDown}
                             placeholder={i18n.t("Tìm theo tên, email hoặc SDT, nhấn Enter...", { ns: 'legacy', keySeparator: false })}
@@ -369,21 +360,7 @@ const AdminUsersPage = () => {
                     </table>
                 </div>
 
-                <div className="flex items-center justify-center gap-3 px-4 py-3 border-t text-sm">
-                    <span>
-                        Trang <strong>{currentPage}</strong> / <strong>{lastPage}</strong>
-                    </span>
-                    <input
-                        type="number"
-                        min={1}
-                        max={lastPage}
-                        value={pageInput}
-                        onChange={(e) => setPageInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleGoToPage(); }}
-                        className={`w-20 border rounded px-2 py-1 text-center ${NO_SPIN}`}
-                    />
-                    <Button variant="secondary" size="sm" onClick={handleGoToPage}>{i18n.t("Đi tới", { ns: 'legacy', keySeparator: false }) + " "}</Button>
-                </div>
+                <Pagination currentPage={currentPage} lastPage={lastPage} onChange={fetchUsers} showSinglePage />
             </div>
 
             {/* Modal khóa tài khoản */}
@@ -400,7 +377,7 @@ const AdminUsersPage = () => {
                     <input
                         type="number"
                         min={1}
-                        value={lockAmount}
+                        max={36500} step={1} value={lockAmount}
                         onChange={(e) => setLockAmount(e.target.value)}
                         placeholder={i18n.t("Nhập số", { ns: 'legacy', keySeparator: false })}
                         className={`w-28 border rounded px-3 py-2 focus:outline-none focus:border-red-600 ${NO_SPIN}`}

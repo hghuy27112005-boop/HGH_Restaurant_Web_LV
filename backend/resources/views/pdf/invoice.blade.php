@@ -42,6 +42,7 @@
             // không có relation user hoặc field tương ứng -> giữ giá trị mặc định
         }
 
+        $customerPhone = $order->user?->tele_number;
         $bookings = $order->bookings ?? collect();
         $firstBooking = $bookings->first();
     @endphp
@@ -57,6 +58,9 @@
             <tr>
                 <td style="width: 50%;">
                     <strong>{{ $isEnglish ? 'Customer:' : 'Khách hàng:' }}</strong> {{ $customerName }}<br>
+                    @if($customerPhone)
+                        <strong>{{ $isEnglish ? 'Customer phone:' : 'Số điện thoại khách:' }}</strong> {{ $customerPhone }}<br>
+                    @endif
                     <strong>{{ $isEnglish ? 'Order type:' : 'Loại đơn:' }}</strong> {{ $isBooking ? ($isEnglish ? 'Booking' : 'Đặt bàn') : ($isEnglish ? 'Delivery' : 'Giao hàng') }}<br>
                     @if(!$isBooking)
                         <strong>{{ $isEnglish ? 'Delivery address:' : 'Địa chỉ giao:' }}</strong> {{ $order->delivery->address ?? 'N/A' }}

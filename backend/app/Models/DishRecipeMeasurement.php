@@ -10,6 +10,12 @@ class DishRecipeMeasurement extends Model
     protected $casts = ['quantity_low' => 'float', 'quantity_standard' => 'float', 'quantity_high' => 'float', 'minimum_quantity' => 'float', 'maximum_quantity' => 'float', 'unit_cost_snapshot' => 'float', 'is_variable' => 'boolean'];
     protected $hidden = ['unit_cost_snapshot', 'unit_cost_unit'];
 
+    public function hasFixedMeasuredQuantity(): bool
+    {
+        return $this->is_variable && (float) $this->minimum_quantity > 0
+            && $this->minimum_quantity === $this->maximum_quantity;
+    }
+
     public function ingredient()
     {
         return $this->belongsTo(Ingredient::class, 'ingredient_id', 'ingredient_id');

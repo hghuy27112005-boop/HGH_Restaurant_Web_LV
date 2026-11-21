@@ -111,7 +111,10 @@ class DishCustomizationService
             'template_key' => $selection['template_key'] ?? null,
             'required' => $required,
             'optional' => $rules->where('role', 'optional')
-                ->reject(fn ($rule) => (bool) ($measurements->get((int) $rule->ingredient_id)?->is_variable))
+                ->reject(function ($rule) use ($measurements): bool {
+                    $measurement = $measurements->get((int) $rule->ingredient_id);
+                    return $measurement?->is_variable && !$measurement->hasFixedMeasuredQuantity();
+                })
                 ->map(fn ($rule) => $this->ingredientPayload($rule->ingredient))->values(),
             'add_ons' => $additions->reject(fn ($ingredient) => $rules->contains(fn ($rule) => $policy->sameIngredient($rule->ingredient, $ingredient)))
                 ->map(function ($ingredient) use ($dish) {

@@ -63,8 +63,8 @@ const BookingsPage = () => {
     const [pointsNeeded, setPointsNeeded] = useState(0);
     const [currentPoints, setCurrentPoints] = useState(0);
     const [pointsErrorMessage, setPointsErrorMessage] = useState(null); // lỗi thanh toán bằng điểm (hiện trong modal, không tự ẩn)
-    const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit } = hiện modal lỗi vượt 50 phần
-    const [stockError, setStockError] = useState(null); // null = ẩn, { message, status, suggestions } = lỗi kho lúc thanh toán
+    const [ingredientError, setIngredientError] = useState(null);
+    const [stockError, setStockError] = useState(null);
     const [searchBillId, setSearchBillId] = useState('');
     const [arrivalDateFilter, setArrivalDateFilter] = useState(getTodayDateKey);
     const [filter, setFilter] = useState('all');
@@ -483,7 +483,6 @@ const BookingsPage = () => {
                 // Đơn chưa được tạo (backend chặn trước khi tạo) nên không cần dọn gì.
                 handleCloseBookingConfirmModal();
                 setIngredientError({
-                    message: data.message,
                     overLimit: data.over_limit || [],
                 });
                 return;
@@ -570,7 +569,7 @@ const BookingsPage = () => {
         } catch (err) {
             const data = err.response?.data;
             if (err.response?.status === 422 && data?.stock_status) {
-                setStockError({ message: data.message, status: data.stock_status, suggestions: data.suggestions || [] });
+                setStockError(data);
             } else {
                 setBookingConfirmError(data?.message || 'Lỗi khởi tạo VNPay.');
             }
@@ -738,7 +737,7 @@ const BookingsPage = () => {
         } catch (err) {
             const data = err.response?.data;
             if (err.response?.status === 422 && data?.stock_status) {
-                setStockError({ message: data.message, status: data.stock_status, suggestions: data.suggestions || [] });
+                setStockError(data);
             } else {
                 setPointsErrorMessage(data?.message || err.message || 'Không thể thanh toán bằng điểm. Vui lòng thử lại.');
             }
@@ -926,7 +925,7 @@ const BookingsPage = () => {
     };
 
     const formatted = bookings.filter(bill =>
-        (!searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())) &&
+        (!searchBillId.trim() || [bill.bill_id, bill.order_id].some(code => String(code || '').includes(searchBillId.trim()))) &&
         (!arrivalDateFilter || getDateKey(bill.booking_table?.booking_date) === arrivalDateFilter) &&
         (filter === 'all' || bill.booking_table?.booking_status === filter)
     );
@@ -974,7 +973,6 @@ const BookingsPage = () => {
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, 1)}
                                                             disabled={item.quantity >= MAX_ITEM_QUANTITY}
-                                                            title={item.quantity >= MAX_ITEM_QUANTITY ? i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false }) : undefined}
                                                             style={item.quantity >= MAX_ITEM_QUANTITY ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
                                                             className="w-6 h-6 rounded-full border border-red-600 text-red-600 font-bold flex items-center justify-center hover:bg-red-600 hover:text-white transition"
                                                         >
@@ -1026,17 +1024,17 @@ const BookingsPage = () => {
                                                     <div>
                                                         <label className="block text-sm font-semibold mb-1">{i18n.t("Giờ đến", { ns: 'legacy', keySeparator: false })}</label>
                                                         <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
-                                                            <input type="text" maxLength="2" placeholder="07" value={startH} onChange={e => setStartH(e.target.value)} className="w-10 text-center outline-none bg-transparent" />
+                                                            <input type="text" maxLength="2" inputMode="numeric" placeholder="07" value={startH} onChange={e => setStartH(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                                             <span className="font-bold text-gray-500">:</span>
-                                                            <input type="text" maxLength="2" placeholder="00" value={startM} onChange={e => setStartM(e.target.value)} className="w-10 text-center outline-none bg-transparent" />
+                                                            <input type="text" maxLength="2" inputMode="numeric" placeholder="00" value={startM} onChange={e => setStartM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                                         </div>
                                                     </div>
                                                     <div>
                                                         <label className="block text-sm font-semibold mb-1">{i18n.t("Giờ về", { ns: 'legacy', keySeparator: false })}</label>
                                                         <div className="flex items-center gap-1 border p-2 rounded bg-white w-fit focus-within:ring-2 focus-within:ring-red-500">
-                                                            <input type="text" maxLength="2" placeholder="08" value={endH} onChange={e => setEndH(e.target.value)} className="w-10 text-center outline-none bg-transparent" />
+                                                            <input type="text" maxLength="2" inputMode="numeric" placeholder="08" value={endH} onChange={e => setEndH(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                                             <span className="font-bold text-gray-500">:</span>
-                                                            <input type="text" maxLength="2" placeholder="30" value={endM} onChange={e => setEndM(e.target.value)} className="w-10 text-center outline-none bg-transparent" />
+                                                            <input type="text" maxLength="2" inputMode="numeric" placeholder="30" value={endM} onChange={e => setEndM(e.target.value.replace(/\D/g, ''))} className="w-10 text-center outline-none bg-transparent" />
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1429,9 +1427,9 @@ const BookingsPage = () => {
                     <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                         <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{i18n.t("Tìm theo mã hóa đơn", { ns: 'legacy', keySeparator: false })}</span>
                         <input
-                            type="text"
+                            type="text" inputMode="numeric" maxLength={10}
                             value={searchBillId}
-                            onChange={e => setSearchBillId(e.target.value)}
+                            onChange={e => setSearchBillId(e.target.value.replace(/\D/g, '').slice(0, 10))}
                             placeholder={i18n.t("Nhập mã hóa đơn...", { ns: 'legacy', keySeparator: false })}
                             className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                         />
@@ -1629,41 +1627,19 @@ const BookingsPage = () => {
                 <p className="text-gray-700">{pointsErrorMessage}</p>
             </Modal>
 
-            {/* Lỗi kho lúc thanh toán: chờ refill hoặc cần giảm số lượng */}
-            <Modal
+            <IngredientLimitModal
                 isOpen={!!stockError}
-                title={i18n.t("Không đủ nguyên liệu", { ns: 'legacy', keySeparator: false })}
                 onClose={() => {
-                    const wasInsufficient = stockError?.status === 'insufficient';
                     setStockError(null);
-                    // Hết hàng: đơn đã tạo mang số lượng cũ nên hủy đơn, quay về bước 1 (giỏ hàng vẫn giữ).
-                    if (wasInsufficient) handleClosePaymentModal();
+                    if (stockError?.stock_status !== 'refilled') handleClosePaymentModal();
                 }}
-                cancelText="Đóng"
-            >
-                <p className="text-gray-700">{stockError?.message}</p>
-                {stockError?.status === 'insufficient' && (
-                    <>
-                        {stockError.suggestions.length > 0 && (
-                            <ul className="mt-3 list-disc pl-5 text-sm text-gray-700 space-y-1">
-                                {stockError.suggestions.map((s, i) => (
-                                    <li key={i}>
-                                        <span className="font-semibold">{translateDishName(s.dish || s)}</span>:{' '}
-                                        {s.max_quantity > 0 ? `tối đa ${s.max_quantity} phần` : i18n.t("hiện đã hết", { ns: 'legacy', keySeparator: false })}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                        <p className="mt-3 text-sm text-gray-500">{i18n.t("Đơn đặt bàn này sẽ được hủy khi bạn đóng thông báo. Vui lòng giảm số lượng món trong giỏ rồi đặt lại.", { ns: 'legacy', keySeparator: false }) + " "}</p>
-                    </>
-                )}
-            </Modal>
+                stock={stockError}
+                formatIngredient={translateIngredients}
+            />
 
-            {/* Lỗi vượt 50 phần mỗi nguyên liệu */}
             <IngredientLimitModal
                 isOpen={ingredientError !== null}
                 onClose={() => setIngredientError(null)}
-                message={ingredientError?.message}
                 overLimit={ingredientError?.overLimit}
                 formatIngredient={translateIngredients}
             />

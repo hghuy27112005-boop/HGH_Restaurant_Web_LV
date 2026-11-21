@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use App\Models\Dish;
 use App\Models\Rating;
 use App\Models\RecommendationExclusion;
+use App\Services\DishRankingService;
 use App\Services\GeminiChatbotService;
 use App\Services\ContentModerationService;
 use App\Support\PreferredLanguage;
@@ -34,14 +37,16 @@ class RatingController extends Controller
             'comment' => 'nullable|string|max:2000',
         ]);
 
-        $dish = \App\Models\Dish::where('is_active', true)->findOrFail($request->dish_id);
-        $status = $this->moderation->status(Auth::id());
+        $dish = Dish::where('is_active', true)->findOrFail($request->dish_id);
+        $userId = (int) $request->user()->user_id;
+        $language = PreferredLanguage::fromRequest($request);
+        $status = $this->moderation->status($userId);
         if ($status['blocked'] ?? false) {
-            return response()->json(['blocked' => true, 'message' => PreferredLanguage::fromRequest($request) === 'en' ? 'Reviews are suspended until the end of today.' : 'Bạn đã bị tạm khóa đánh giá trong hôm nay.'], 403);
+            return response()->json(['blocked' => true, 'message' => $language === 'en' ? 'Reviews are suspended until the end of today.' : 'Bạn đã bị tạm khóa đánh giá trong hôm nay.'], 403);
         }
 
         if ($request->filled('comment')) {
-            $moderationResult = $this->moderation->check($request->comment, Auth::id(), 'rating');
+            $moderationResult = $this->moderation->check($request->comment, $userId, 'rating', $language);
             if ($moderationResult) {
                 return response()->json([
                     'success' => false,
@@ -54,60 +59,42 @@ class RatingController extends Controller
         }
 
         $rating = (int) $request->rating;
-        $language = PreferredLanguage::fromRequest($request);
         $aiResponse = $this->gemini->generateRatingResponse(
             $rating,
             $request->input('comment'),
             $language
         );
 
-        $storedResponse = $language === 'en'
-            ? $this->vietnameseRatingResponse($rating)
-            : $aiResponse;
-        $review = Rating::updateOrCreate(
-            ['dish_id' => $dish->dish_id, 'user_id' => Auth::id(), 'direct_review' => 1], [
-            'dish_id' => $dish->dish_id,
-            'user_id' => Auth::id(),
-            'rating' => $rating,
-            'comment' => $request->comment,
-            'ai_response' => $storedResponse,
-        ]);
-        $review->setAttribute('ai_response', $aiResponse);
+        $review = DB::transaction(function () use ($dish, $userId, $rating, $request, $aiResponse) {
+            $review = Rating::updateOrCreate(
+                ['dish_id' => $dish->dish_id, 'user_id' => $userId, 'direct_review' => 1],
+                ['rating' => $rating, 'comment' => $request->input('comment'), 'ai_response' => $aiResponse]
+            );
 
-        if ($rating <= 3) {
-            RecommendationExclusion::firstOrCreate([
-                'user_id' => Auth::id(),
-                'dish_id' => $dish->dish_id,
-            ]);
-        } else {
-            RecommendationExclusion::where('user_id', Auth::id())
-                ->where('dish_id', $dish->dish_id)
-                ->delete();
-        }
-
-        // Recompute the bestseller ranking after the rating response is sent.
-        dispatch(function () {
-            try {
-                app(\App\Services\DishRankingService::class)->recompute();
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('Could not recompute dish bestseller ranking.', [
-                    'exception' => $e,
-                ]);
+            $exclusion = ['user_id' => $userId, 'dish_id' => $dish->dish_id];
+            if ($rating <= 3) {
+                RecommendationExclusion::firstOrCreate($exclusion);
+            } else {
+                RecommendationExclusion::where($exclusion)->delete();
             }
-        })->afterResponse();
+
+            return $review;
+        });
+
+        // The existing queue worker recomputes the ranking after the review commits.
+        try {
+            dispatch(static function () {
+                app(DishRankingService::class)->recompute();
+            });
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Đã lưu đánh giá của bạn!',
+            'message' => $language === 'en' ? 'Your review has been saved.' : 'Đã lưu đánh giá của bạn!',
             'data' => $review,
         ]);
-    }
-
-    private function vietnameseRatingResponse(int $rating): string
-    {
-        return $rating >= 4
-            ? 'Cảm ơn quý khách đã ủng hộ nhà hàng chúng tôi. Chúng tôi rất vui khi món ăn đã làm quý khách hài lòng.'
-            : 'Cảm ơn quý khách đã góp ý. Nhà hàng sẽ tiếp thu để cải thiện món ăn tốt hơn.';
     }
 
 }

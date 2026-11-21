@@ -1,16 +1,13 @@
 @echo off
-set ROOT=%~dp0
+setlocal
 
 echo Dang khoi chay Cloudflare Tunnel...
-start "Tunnel" cmd /k "cd /d %ROOT%frontend && npm run tunnel"
-
-echo Doi 8 giay de tunnel cap nhat file .env...
-timeout /t 8 /nobreak > nul
+start "Tunnel" /d "%~dp0frontend" cmd /d /k "node start-tunnel.js"
 
 echo Dang khoi chay Frontend (Vite dev)...
-start "Frontend Dev" cmd /k "cd /d %ROOT%frontend && npm run dev"
+start "Frontend Dev" /d "%~dp0frontend" cmd /d /k "npm run dev"
 
-echo Dang khoi chay Backend (Laravel serve + scheduler tu dong giao hang)...
-start "Backend Serve" cmd /k "cd /d %ROOT%backend && php artisan serve"
+echo Dang khoi chay Backend (Laravel)...
+start "Backend Serve" /d "%~dp0backend" cmd /d /k "php artisan serve --host=127.0.0.1 --port=8000 --tries=1"
 
-echo Da khoi chay xong 3 cua so. Kiem tra tung cua so de xac nhan.
+echo Da mo 3 cua so. Xem cua so Tunnel de lay link khi hien Tunnel ready.

@@ -8,6 +8,7 @@ use App\Models\DishRecipeMeasurement;
 use App\Models\Ingredient;
 use App\Models\DishCustomization;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class TieredRecipeService
@@ -18,12 +19,36 @@ class TieredRecipeService
         'large' => ['low' => 35000, 'standard' => 40000, 'high' => 50000],
     ];
 
-    public function validateAndNormalize(array $input, array $ingredientIds, string $language = 'vi'): array
+    public function validateAndNormalize(array $input, array $ingredientIds, string $language = 'vi', bool $preserveStoredPricing = false): array
     {
+        $finiteNumber = static function ($attribute, $value, $fail): void {
+            if (!is_numeric($value) || !is_finite((float) $value)) {
+                $fail('validation.numeric')->translate();
+            }
+        };
+        Validator::make($input, [
+            'pricing.price_group' => 'required|in:small,medium,large',
+            'pricing.prices' => 'required|array:low,standard,high|required_array_keys:low,standard,high',
+            'pricing.prices.*' => ['required', 'integer', 'min:1'],
+            'pricing.minimum_gross_margin_percent' => ['required', 'numeric', $finiteNumber, $preserveStoredPricing ? 'between:0,90' : 'between:5,20'],
+            'pricing.tax_percent_included' => ['required', 'numeric', $finiteNumber, $preserveStoredPricing ? 'between:0,100' : 'between:0,10'],
+            'pricing.fixed_cost_per_serving' => ['required', 'numeric', $finiteNumber, 'min:0'],
+            'quantities' => 'required|array|min:1|max:40',
+            'quantities.*' => 'required|array',
+            'quantities.*.ingredient_id' => 'required|integer|distinct',
+            'quantities.*.category' => 'required|in:fixed,starch,protein,mushroom,other',
+            'quantities.*.unit' => 'nullable|string|max:12',
+            'quantities.*.cost_per_unit' => ['nullable', 'numeric', $finiteNumber, 'between:0,99999999.9999'],
+            'quantities.*.step' => ['nullable', 'numeric', $finiteNumber, 'between:0.01,99999999.99'],
+            'quantities.*.minimum_quantity' => ['nullable', 'numeric', $finiteNumber, 'between:0,99999999.99'],
+            'quantities.*.maximum_quantity' => ['nullable', 'numeric', $finiteNumber, 'between:0,99999999.99'],
+        ])->validate();
         $quantities = collect($input['quantities'] ?? [])->keyBy(fn ($row) => (int) ($row['ingredient_id'] ?? 0));
-        $ingredients = Ingredient::whereIn('ingredient_id', $ingredientIds)->get()->keyBy('ingredient_id');
+        if ($quantities->count() !== count($ingredientIds)) {
+            throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Định lượng phải khớp danh sách nguyên liệu đã chọn.', 'The quantity settings must match the selected ingredients.')]);
+        }
+        $ingredients = Ingredient::whereIn('ingredient_id', $ingredientIds)->withExists(['dishRules', 'stocks'])->get()->keyBy('ingredient_id');
         $normalized = [];
-        $fixedCost = 0.0;
         $variableInputs = [];
 
         foreach ($ingredientIds as $id) {
@@ -38,12 +63,26 @@ class TieredRecipeService
             }
             $unit = trim((string) ($row['unit'] ?? ''));
             $cost = (float) ($row['cost_per_unit'] ?? 0);
-            $step = (float) ($row['step'] ?? 1);
+            $step = (float) ($row['step'] ?? ($category === 'fixed' ? 1 : 0));
             $minimum = isset($row['minimum_quantity']) ? (float) $row['minimum_quantity'] : null;
             $maximum = isset($row['maximum_quantity']) ? (float) $row['maximum_quantity'] : null;
+            if (!$preserveStoredPricing && $ingredient->hasStockSettings()) {
+                $category = $ingredient->quantity_category;
+                $unit = $ingredient->quantity_unit ?: 'portion';
+                $cost = (float) $ingredient->cost_per_unit;
+                $step = (float) ($ingredient->quantity_step ?? 1);
+            }
             $isVariable = $category !== 'fixed';
+            if ($isVariable && !$preserveStoredPricing && (
+                $maximum < 1 || (!$ingredient->hasStockSettings() && ($cost < 1 || $step < 1))
+            )) {
+                throw ValidationException::withMessages(['quantities' => $this->localized(
+                    $language, 'Đơn giá, bước tăng và định lượng tối đa mới phải từ 1 trở lên.',
+                    'New unit costs, quantity steps, and maximum quantities must be at least 1.'
+                )]);
+            }
 
-            if ($isVariable && (!in_array($unit, ['g', 'kg', 'small_loaf', 'large_loaf', 'unit'], true) || $cost <= 0 || $step <= 0)) {
+            if ($isVariable && (!in_array($unit, ['g', 'kg', 'small_loaf', 'large_loaf', 'unit'], true) || $cost < 0.0001 || $step <= 0)) {
                 throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Nguyên liệu có định lượng cần đơn vị, đơn giá và bước tăng hợp lệ.', 'Variable ingredients need a valid unit, unit cost, and quantity step.')]);
             }
             if ($isVariable && in_array($unit, ['small_loaf', 'large_loaf', 'unit'], true) && (floor($step) !== $step || $step < 1)) {
@@ -53,15 +92,15 @@ class TieredRecipeService
                 throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Bánh mì và nguyên liệu tính theo cái phải có định lượng tối thiểu/tối đa là số nguyên.', 'Loaves and count-based ingredients must use whole-number minimum and maximum quantities.')]);
             }
             if ($isVariable && (
-                $minimum === null || $maximum === null || $minimum <= 0 || $maximum <= $minimum
-                || ($maximum - $minimum) < ($step - 0.0001)
+                $minimum === null || $maximum === null || $minimum < 0 || $maximum < $minimum
+                || ($maximum === $minimum ? $minimum <= 0 : ($maximum - $minimum) < ($step - 0.0001))
             )) {
-                throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Khoảng định lượng biến đổi phải hợp lệ và đủ ít nhất một bước tăng.', 'Each variable ingredient needs a valid quantity range spanning at least one configured step.')]);
+                throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Nhập định lượng cố định dương hoặc khoảng định lượng đủ ít nhất một bước tăng.', 'Enter a positive fixed amount or a quantity range spanning at least one step.')]);
             }
             if ($isVariable) {
                 $variableInputs[] = ['ingredient_id' => (int) $id, 'name' => $ingredient->ingredient_name_vi ?: $ingredient->ingredient_name ?: $ingredient->ingredient_key, 'category' => $category, 'unit' => $unit, 'cost_per_unit' => $cost, 'step' => $step, 'minimum_quantity' => $minimum, 'maximum_quantity' => $maximum];
             }
-            $normalized[(int) $id] = ['ingredient_id' => (int) $id, 'is_variable' => $isVariable, 'category' => $category, 'quantity_unit' => $unit ?: 'unit', 'cost_per_unit' => $cost, 'step' => $step, 'minimum_quantity' => $minimum, 'maximum_quantity' => $maximum];
+            $normalized[(int) $id] = ['ingredient_id' => (int) $id, 'is_variable' => $isVariable, 'category' => $category, 'quantity_unit' => $isVariable ? $unit : 'portion', 'cost_per_unit' => $cost, 'step' => $step, 'minimum_quantity' => $minimum, 'maximum_quantity' => $maximum];
         }
 
         $profile = $input['pricing'];
@@ -75,12 +114,10 @@ class TieredRecipeService
         }
         $margin = (float) ($profile['minimum_gross_margin_percent'] ?? 10);
         $tax = (float) ($profile['tax_percent_included'] ?? 0);
-        $fixedCost = (float) ($profile['fixed_cost_per_serving'] ?? 0);
-        if (collect($normalized)->contains(fn ($setting) => !$setting['is_variable']) && $fixedCost <= 0) {
-            throw ValidationException::withMessages(['pricing.fixed_cost_per_serving' => $this->localized($language, 'Hãy nhập tổng chi phí gia vị và nguyên liệu cố định cho một phần.', 'Enter the combined seasoning and fixed-ingredient cost per serving.')]);
-        }
-        if ($margin < 0 || $margin > 90 || $tax < 0 || $tax > 100) {
-            throw ValidationException::withMessages(['pricing' => $this->localized($language, 'Tỷ lệ lợi nhuận hoặc thuế không hợp lệ.', 'The margin or tax percentage is invalid.')]);
+        $fixedCost = (float) $profile['fixed_cost_per_serving'];
+        if (!$preserveStoredPricing) {
+            $hasFixedIngredients = collect($normalized)->contains(fn ($setting) => !$setting['is_variable']);
+            $this->validateFixedIngredientCost($fixedCost, $hasFixedIngredients, $language);
         }
         $budgets = [];
         foreach (['low', 'standard', 'high'] as $tier) {
@@ -96,6 +133,21 @@ class TieredRecipeService
         }
 
         return ['quantities' => $normalized, 'variable_ingredients' => $variableInputs, 'fixed_cost' => round($fixedCost, 2), 'budgets' => $budgets, 'pricing' => $profile];
+    }
+
+    public function validateFixedIngredientCost(float $cost, bool $hasFixedIngredients, string $language): void
+    {
+        if ($cost === 0.0 && !$hasFixedIngredients) {
+            return;
+        }
+
+        if (!is_finite($cost) || $cost < 1000 || $cost > 10000) {
+            throw ValidationException::withMessages(['fixed_cost_per_serving' => $this->localized(
+                $language,
+                'Chi phí nguyên liệu cố định mỗi phần phải từ 1.000đ đến 10.000đ.',
+                'The fixed ingredient cost per serving must be between 1,000 and 10,000 VND.'
+            )]);
+        }
     }
 
     public function validateGeneratedQuantities(array $generated, array $normalized, array $budgets, string $language = 'vi'): array
@@ -119,9 +171,10 @@ class TieredRecipeService
             if (!$row) throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Gemini không trả định lượng cho đủ nguyên liệu biến đổi.', 'Gemini did not return quantities for every variable ingredient.')]);
             $values = [];
             foreach (['low', 'standard', 'high'] as $tier) {
-                $quantity = (float) ($row[$tier] ?? 0);
+                $value = $row[$tier] ?? null;
+                $quantity = is_numeric($value) ? (float) $value : NAN;
                 $stepOffset = ($quantity - (float) $settings['minimum_quantity']) / (float) $settings['step'];
-                if ($quantity <= 0 || abs($stepOffset - round($stepOffset)) > 0.0001) {
+                if (!is_finite($quantity) || $quantity < 0 || abs($stepOffset - round($stepOffset)) > 0.0001) {
                     throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Gemini trả định lượng không hợp lệ hoặc sai bước tăng.', 'Gemini returned an invalid quantity or one that does not match the configured step.')]);
                 }
                 $values[$tier] = round($quantity, 2);
@@ -182,8 +235,8 @@ class TieredRecipeService
             $countBounds[$id] = ['minimum' => $minCount, 'maximum' => $maxCount];
             foreach (['low', 'standard', 'high'] as $tier) {
                 $quantity = (float) ($row[$tier] ?? 0);
-                if (!is_finite($quantity) || $quantity <= 0) {
-                    throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Gemini không trả định lượng dương hợp lệ.', 'Gemini did not return a valid positive quantity.')]);
+                if (!is_finite($quantity) || $quantity < 0) {
+                    throw ValidationException::withMessages(['quantities' => $this->localized($language, 'Gemini không trả định lượng không âm hợp lệ.', 'Gemini did not return a valid non-negative quantity.')]);
                 }
                 // Snap to the configured step. A bounded count also prevents a malformed AI
                 // response from causing an unbounded adjustment loop.
@@ -282,20 +335,28 @@ class TieredRecipeService
     public function persist(Dish $dish, array $input, array $ingredientIds, string $group, array $prices, array $normalized, array $measured, float $margin, float $tax, float $fixedCost): void
     {
         DB::transaction(function () use ($dish, $ingredientIds, $group, $prices, $normalized, $measured, $margin, $tax, $fixedCost): void {
+            $catalog = Ingredient::whereIn('ingredient_id', $ingredientIds)->orderBy('ingredient_id')->lockForUpdate()->get()->keyBy('ingredient_id');
             DishPriceProfile::updateOrCreate(['dish_id' => $dish->dish_id], [
                 'price_group' => $group, 'price_low' => $prices['low'], 'price_standard' => $prices['standard'], 'price_high' => $prices['high'],
                 'minimum_gross_margin_percent' => $margin, 'tax_percent_included' => $tax, 'fixed_cost_per_serving' => $fixedCost,
             ]);
             foreach ($ingredientIds as $id) {
                 $settings = $normalized[$id];
-                $ingredient = Ingredient::find($id);
-                if ($ingredient && $settings['is_variable']) {
+                $ingredient = $catalog->get($id);
+                if ($ingredient && $ingredient->quantity_unit === null && $ingredient->cost_per_unit === null) {
                     $ingredient->update([
-                        'quantity_category' => $settings['category'] ?? 'fixed',
-                        'quantity_unit' => $settings['quantity_unit'],
-                        'cost_per_unit' => $settings['cost_per_unit'],
-                        'quantity_step' => $settings['step'],
+                        'quantity_category' => $settings['category'],
+                        'quantity_unit' => $settings['is_variable'] ? $settings['quantity_unit'] : 'portion',
+                        'cost_per_unit' => $settings['is_variable'] ? $settings['cost_per_unit'] : null,
+                        'quantity_step' => $settings['is_variable'] ? $settings['step'] : null,
                     ]);
+                } elseif ($ingredient && (
+                    $ingredient->quantity_category !== $settings['category']
+                    || ($settings['is_variable'] && ($ingredient->quantity_unit !== $settings['quantity_unit']
+                        || (float) $ingredient->cost_per_unit !== $settings['cost_per_unit']
+                        || (float) ($ingredient->quantity_step ?? 1) !== $settings['step']))
+                )) {
+                    throw ValidationException::withMessages(['quantities' => $this->localized(request()->input('language', 'vi'), 'Thông tin kho đã thay đổi. Hãy xác nhận lại nguyên liệu.', 'The stock settings changed. Confirm the ingredients again.')]);
                 }
                 DishRecipeMeasurement::updateOrCreate(
                     ['dish_id' => $dish->dish_id, 'ingredient_id' => $id],
@@ -305,13 +366,14 @@ class TieredRecipeService
         });
     }
 
-    public function persistFixedPriceDish(Dish $dish, array $ingredientIds, int $price): void
+    public function persistFixedPriceDish(Dish $dish, array $ingredientIds, int $price, array $stockQuantities = [], string $language = 'vi'): void
     {
         if (!in_array($price, [15000, 30000, 40000], true)) {
             throw ValidationException::withMessages(['price' => 'Món Nước & chè phải dùng một trong các giá 15.000đ, 30.000đ hoặc 40.000đ.']);
         }
 
-        DB::transaction(function () use ($dish, $ingredientIds, $price): void {
+        DB::transaction(function () use ($dish, $ingredientIds, $price, $stockQuantities, $language): void {
+            $catalog = Ingredient::whereIn('ingredient_id', $ingredientIds)->orderBy('ingredient_id')->lockForUpdate()->get()->keyBy('ingredient_id');
             DishPriceProfile::updateOrCreate(['dish_id' => $dish->dish_id], [
                 'price_group' => 'fixed',
                 'price_low' => $price,
@@ -326,17 +388,31 @@ class TieredRecipeService
                 ->whereNotIn('ingredient_id', $ingredientIds)
                 ->delete();
             foreach ($ingredientIds as $id) {
+                $ingredient = $catalog->get($id);
+                $unit = $ingredient->quantity_unit ?: 'portion';
+                $amount = $unit === 'portion' ? null : ($stockQuantities[$id] ?? null);
+                if ($unit !== 'portion' && (!is_numeric($amount) || !is_finite((float) $amount)
+                    || (float) $amount < 1 || (float) $amount > 99999999.99
+                    || abs(round((float) $amount, 2) - (float) $amount) > 0.000001
+                    || ($unit !== 'kg' && floor((float) $amount) !== (float) $amount))) {
+                    throw ValidationException::withMessages(['quantities' => $this->localized($language,
+                        'Nhập lượng dùng mỗi suất theo đơn vị kho cho ' . ($ingredient->ingredient_name_vi ?: $ingredient->ingredient_key) . '.',
+                        'Enter the amount per serving in the stock unit for ' . ($ingredient->ingredient_name ?: $ingredient->ingredient_key) . '.')]);
+                }
+                if ($ingredient->quantity_unit === null && $ingredient->cost_per_unit === null) {
+                    $ingredient->update(['quantity_unit' => 'portion']);
+                }
                 DishRecipeMeasurement::updateOrCreate(
                     ['dish_id' => $dish->dish_id, 'ingredient_id' => $id],
                     [
-                        'quantity_unit' => 'portion',
-                        'quantity_low' => null,
-                        'quantity_standard' => null,
-                        'quantity_high' => null,
+                        'quantity_unit' => $unit,
+                        'quantity_low' => $amount,
+                        'quantity_standard' => $amount,
+                        'quantity_high' => $amount,
                         'minimum_quantity' => null,
                         'maximum_quantity' => null,
                         'unit_cost_snapshot' => null,
-                        'unit_cost_unit' => 'portion',
+                        'unit_cost_unit' => $unit,
                         'is_variable' => false,
                     ]
                 );
@@ -358,11 +434,14 @@ class TieredRecipeService
             $rows = $measurements->map(function ($measurement): ?array {
                 $ingredient = $measurement->ingredient;
                 if (!$ingredient) return null;
+                $unit = $measurement->quantity_standard === null ? 'portion' : $measurement->quantity_unit;
+                $quantity = $measurement->quantity_standard ?? 1;
+                if ($unit === 'kg') { $quantity *= 1000; $unit = 'g'; }
                 return [
                     'ingredient_id' => (int) $measurement->ingredient_id,
                     'name' => $ingredient->ingredient_name_vi ?: $ingredient->ingredient_name ?: $ingredient->ingredient_key,
-                    'quantity' => 1,
-                    'unit' => 'portion',
+                    'quantity' => (int) round($quantity),
+                    'unit' => $unit,
                     'unit_cost_snapshot' => null,
                 ];
             })->filter()->values()->all();
@@ -395,7 +474,8 @@ class TieredRecipeService
         foreach ($measurements as $measurement) {
             $sourceId = (int) $measurement->ingredient_id;
             if (in_array($sourceId, $removedIds, true)) {
-                if ($measurement->is_variable) {
+                if ($measurement->is_variable && (!$measurement->hasFixedMeasuredQuantity()
+                    || !$dish->ingredientRules()->where('ingredient_id', $sourceId)->where('role', 'optional')->exists())) {
                     throw ValidationException::withMessages(['customization_id' => $this->localized($language, 'Không thể bỏ nguyên liệu có chi phí riêng.', 'An ingredient with its own cost cannot be removed.')]);
                 }
                 continue;
@@ -409,6 +489,7 @@ class TieredRecipeService
             }
             $isVariable = (bool) $measurement->is_variable;
             $quantity = $isVariable ? (float) $measurement->{'quantity_' . $tier} : 1.0;
+            if ($quantity === 0.0) continue;
             $unit = $isVariable ? $measurement->quantity_unit : 'portion';
             if ($isVariable) {
                 $sourceUnitCost = (float) ($measurement->unit_cost_snapshot ?? 0);

@@ -104,6 +104,11 @@ class User extends Authenticatable
     /**
      * Tài khoản đang bị khóa khi locked_until còn ở tương lai
      */
+    public function hasOrderPhone(): bool
+    {
+        return preg_match('/\A[0-9]{10}\z/', $this->tele_number ?? '') === 1;
+    }
+
     public function isLocked(): bool
     {
         return $this->locked_until !== null && $this->locked_until->isFuture();

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\SaleOffEvent;
+use App\Services\ContentModerationService;
+use App\Support\PreferredLanguage;
 use Illuminate\Http\Request;
 
 class Admin_SaleOffEventController extends Controller
@@ -40,6 +42,7 @@ class Admin_SaleOffEventController extends Controller
             ], 422);
         }
 
+        app(ContentModerationService::class)->requireAppropriateName($validated['name'], 'name', PreferredLanguage::fromRequest($request));
         $event = SaleOffEvent::create($validated);
 
         return response()->json([
@@ -72,6 +75,9 @@ class Admin_SaleOffEventController extends Controller
             ], 422);
         }
 
+        if (isset($validated['name']) && $validated['name'] !== $saleOffEvent->name) {
+            app(ContentModerationService::class)->requireAppropriateName($validated['name'], 'name', PreferredLanguage::fromRequest($request));
+        }
         $saleOffEvent->update($validated);
 
         return response()->json([

@@ -18,22 +18,29 @@ use App\Support\PreferredLanguage;
 class AuthController extends Controller
 {
     // Chỉ chấp nhận 2 domain: @gmail.com và @student.ctu.edu.vn
-    private const EMAIL_REGEX = '/^[a-zA-Z0-9._%+-]+@(student\.ctu\.edu\.vn|gmail\.com)$/';
-    private const EMAIL_REGEX_MESSAGE = 'Email phải có dạng @gmail.com hoặc @student.ctu.edu.vn.';
+    public const EMAIL_REGEX = '/\A[a-zA-Z0-9._%+-]+@(student\.ctu\.edu\.vn|gmail\.com)\z/i';
+    public const EMAIL_REGEX_MESSAGE = 'Email phải có dạng @gmail.com hoặc @student.ctu.edu.vn.';
 
     public function login(Request $request)
     {
         $request->validate([
-            'username' => 'required',
-            'password' => 'required',
+            'username' => 'required|string',
+            'password' => 'required|string|min:6',
         ], [
             'username.required' => 'Vui lòng nhập Tên người dùng hoặc Email.',
-            'password.required' => 'Vui lòng nhập mật khẩu.'
+            'password.required' => 'Vui lòng nhập mật khẩu.',
+            'password.min' => 'Mật khẩu phải có ít nhất 6 ký tự.'
         ]);
 
         // Tự động nhận diện Email hay Username
         $login = $request->input('username');
-        $loginType = filter_var($login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        $loginType = str_contains($login, '@') ? 'email' : 'username';
+        if ($loginType === 'email') {
+            $request->validate(['username' => ['email', 'regex:' . self::EMAIL_REGEX]], [
+                'username.email' => 'Định dạng Email không hợp lệ.',
+                'username.regex' => self::EMAIL_REGEX_MESSAGE,
+            ]);
+        }
 
         // Bước 1: kiểm tra tài khoản (username/email) có tồn tại trong DB không
         $account = User::where($loginType, $login)->first();
@@ -85,24 +92,8 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        if ($request->filled('email') && User::where('email', $request->email)->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Đã có tài khoản dùng email này'
-            ], 422);
-        }
-
-        $phone = $request->filled('phone') ? trim($request->phone) : null;
-
-        if ($phone && User::where('tele_number', $phone)->exists()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Đã có tài khoản dùng SDT này'
-            ], 422);
-        }
-
-        $validator = Validator::make(array_merge($request->all(), ['phone' => $phone]), [
-            'username' => 'required|max:20|unique:users,username',
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string|max:20|unique:users,username',
             'email' => [
                 'required',
                 'email',
@@ -110,21 +101,21 @@ class AuthController extends Controller
                 'unique:users,email',
                 'regex:' . self::EMAIL_REGEX,
             ],
-            'phone' => 'required|regex:/^[0-9]{10}$/|unique:users,tele_number',
-            'password' => 'required|min:6|confirmed', // 'confirmed' kiểm tra password_confirmation
+            'phone' => 'nullable|string|digits:10|unique:users,tele_number',
+            'password' => 'required|string|min:6|max:20|confirmed', // 'confirmed' kiểm tra password_confirmation
         ], [
             'username.required' => 'Vui lòng nhập tên đăng nhập.',
             'username.unique' => 'Tên đăng nhập này đã tồn tại.',
             'username.max' => 'Tên đăng nhập không được quá 20 ký tự.',
             'email.required' => 'Vui lòng nhập địa chỉ Email.',
             'email.email' => 'Định dạng Email không hợp lệ.',
-            'email.unique' => 'Đã có tài khoản dùng email này',
             'email.regex' => self::EMAIL_REGEX_MESSAGE,
-            'phone.required' => 'Vui lòng nhập số điện thoại.',
-            'phone.regex' => 'Số điện thoại phải gồm đúng 10 chữ số.',
+            'email.unique' => 'Đã có tài khoản dùng email này',
+            'phone.digits' => 'Số điện thoại phải gồm đúng 10 chữ số.',
             'phone.unique' => 'Đã có tài khoản dùng SDT này',
             'password.required' => 'Vui lòng nhập mật khẩu.',
             'password.min' => 'Mật khẩu phải có ít nhất 6 ký tự.',
+            'password.max' => 'Mật khẩu không được quá 20 ký tự.',
             'password.confirmed' => 'Mật khẩu nhập lại không khớp.'
         ]);
 
@@ -135,11 +126,16 @@ class AuthController extends Controller
             ], 422);
         }
 
+        $data = $validator->validated();
+        app(\App\Services\ContentModerationService::class)->requireAppropriateName(
+            $data['username'], 'username', PreferredLanguage::fromRequest($request)
+        );
+
         try {
             $user = User::create([
                 'username' => $request->username,
                 'email' => $request->email,
-                'tele_number' => $phone,
+                'tele_number' => $data['phone'] ?? null,
                 'password_hash' => Hash::make($request->password),
                 'role' => 'user',
                 'preferred_language' => PreferredLanguage::fromRequest($request),
@@ -212,10 +208,11 @@ class AuthController extends Controller
     public function sendResetOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email|max:50',
+            'email' => ['required', 'email', 'max:50', 'regex:' . self::EMAIL_REGEX],
         ], [
             'email.required' => 'Vui lòng nhập địa chỉ Email.',
             'email.email' => 'Định dạng Email không hợp lệ.',
+            'email.regex' => self::EMAIL_REGEX_MESSAGE,
         ]);
 
         if ($validator->fails()) {
@@ -279,11 +276,12 @@ class AuthController extends Controller
     public function verifyResetOtp(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email|max:50',
+            'email' => ['required', 'email', 'max:50', 'regex:' . self::EMAIL_REGEX],
             'otp' => ['required', 'regex:/^[0-9]{6}$/'],
         ], [
             'email.required' => 'Vui lòng nhập địa chỉ Email.',
             'email.email' => 'Định dạng Email không hợp lệ.',
+            'email.regex' => self::EMAIL_REGEX_MESSAGE,
             'otp.required' => 'Vui lòng nhập mã OTP.',
             'otp.regex' => 'Mã OTP gồm đúng 6 chữ số.',
         ]);
@@ -356,15 +354,17 @@ class AuthController extends Controller
     public function resetPassword(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'email' => 'required|email|max:50',
+            'email' => ['required', 'email', 'max:50', 'regex:' . self::EMAIL_REGEX],
             'reset_token' => 'required|string',
-            'password' => 'required|min:6|confirmed',
+            'password' => 'required|string|min:6|max:20|confirmed',
         ], [
             'email.required' => 'Vui lòng nhập địa chỉ Email.',
             'email.email' => 'Định dạng Email không hợp lệ.',
+            'email.regex' => self::EMAIL_REGEX_MESSAGE,
             'reset_token.required' => 'Phiên đặt lại mật khẩu không hợp lệ.',
             'password.required' => 'Vui lòng nhập mật khẩu.',
             'password.min' => 'Mật khẩu phải có ít nhất 6 ký tự.',
+            'password.max' => 'Mật khẩu không được quá 20 ký tự.',
             'password.confirmed' => 'Mật khẩu nhập lại không khớp.',
         ]);
 

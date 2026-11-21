@@ -37,6 +37,44 @@ class DynamicRecipeWorkflowTest extends TestCase
             'ingredients' => 'Nạm bò', 'ingredients_en' => 'Beef brisket', 'recipe_instructions' => 'Hầm bò.', 'recipe_instructions_en' => 'Simmer beef.', 'is_active' => true]);
     }
 
+    public function test_fixed_price_creation_checks_the_actual_name_and_photo_at_save(): void
+    {
+        $existing = $this->dish();
+        $type = \App\Models\DishType::create(['type_name' => 'Fixed', 'supports_tiered_portions' => false]);
+        $ingredient = $this->ingredient('Đường', 'Sugar');
+        $this->mock(GeminiChatbotService::class)
+            ->shouldReceive('analyzeDishIngredients')
+            ->once()->with('Sai tên món', \Mockery::type(UploadedFile::class), 'vi', \Mockery::type('array'))
+            ->andReturn(['valid' => false, 'reason' => 'dish_name_invalid']);
+
+        $this->postJson('/api/admin/dishes', [
+            'dish_id' => $existing->dish_id,
+            'dish_name' => 'Sai tên món', 'type_id' => $type->type_id, 'price' => 15000, 'language' => 'vi',
+            'ingredients' => [['ingredient_id' => $ingredient->ingredient_id, 'name' => 'Đường', 'role' => 'optional']],
+            'tiered_recipe' => json_encode(['mode' => 'fixed', 'price' => 15000, 'stock_quantities' => []]),
+            'image' => UploadedFile::fake()->createWithContent('dish.jpg', file_get_contents(public_path('dishes/00.jpg'))),
+        ])->assertUnprocessable()->assertJsonPath('code', 'dish_name_invalid');
+        $this->assertDatabaseCount('dishes', 1);
+    }
+
+    public function test_known_disguised_abuse_is_blocked_in_forms_even_without_gemini(): void
+    {
+        $dish = $this->dish();
+        Http::fake();
+        foreach (['Má m', "CỐN\u{200B} LÀI"] as $name) {
+            $this->postJson('/api/dish-customizations/' . $dish->dish_id . '/preview', [
+                'recipe_name' => $name, 'selection' => ['removed_ingredient_ids' => [1]], 'language' => 'vi',
+            ])->assertUnprocessable()->assertJsonValidationErrors('recipe_name');
+            $this->postJson('/api/admin/dishes/confirm-ingredients', [
+                'language' => 'vi',
+                'ingredients' => [['name_vi' => $name, 'role' => 'optional']],
+            ])->assertUnprocessable()->assertJsonValidationErrors('ingredients.0.name_vi');
+            $this->assertSame('violation', app(GeminiChatbotService::class)->moderateChat($name)['decision']);
+        }
+        $this->assertFalse(\App\Services\RestaurantContentPolicy::containsKnownAbuse('Bày cơm và broccoli ra đĩa, thêm má heo.'));
+        Http::assertNothingSent();
+    }
+
     public function test_recipe_options_use_active_compatible_inventory_without_gemini(): void
     {
         $dish = $this->dish();
@@ -67,7 +105,14 @@ class DynamicRecipeWorkflowTest extends TestCase
     {
         $this->dish();
         $beef = $this->ingredient('Nạm bò', 'Beef brisket');
-        $this->mock(GeminiChatbotService::class);
+        $this->mock(GeminiChatbotService::class, function ($mock): void {
+            $mock->shouldReceive('validateDishContentLanguage')->once()->andReturn([false]);
+            $mock->shouldReceive('validateDishContentLanguage')->once()->andReturn([true, true]);
+        });
+        $this->postJson('/api/admin/dishes/confirm-ingredients', ['language' => 'vi', 'ingredients' => [
+            ['name_vi' => 'Beef brisket', 'role' => 'optional'],
+        ]])->assertUnprocessable()->assertJsonValidationErrors('ingredients.0.name_vi');
+        $this->assertDatabaseCount('ingredients', 1);
         $rows = [['name_vi' => 'Thịt nạm bò', 'role' => 'required_replaceable'], ['name_vi' => 'Hủ tiếu thủ công', 'role' => 'optional']];
         $response = $this->postJson('/api/admin/dishes/confirm-ingredients', ['language' => 'vi', 'ingredients' => $rows])->assertOk();
         $this->assertSame($beef->ingredient_id, $response->json('ingredients.0.ingredient_id'));

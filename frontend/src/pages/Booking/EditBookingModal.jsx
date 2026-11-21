@@ -1,3 +1,5 @@
+import IngredientLimitModal from '../../components/IngredientLimitModal';
+import { translateIngredients } from '../Menu/DishDetailPage';
 import i18n from '../../i18n.js';
 import React, { useState, useEffect, useMemo } from 'react';
 import { bookingService } from '../../services/api';
@@ -117,6 +119,7 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(null);
+    const [stockError, setStockError] = useState(null);
 
     // Mỗi lần mở modal: điền sẵn thông tin hiện tại của đơn
     useEffect(() => {
@@ -295,8 +298,8 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
         } catch (err) {
             const data = err.response?.data;
             setConfirmOpen(false);
-            if (data?.stock_status === 'insufficient') {
-                setSaveError(i18n.t("Không đủ nguyên liệu cho đơn này vào ngày giờ mới. Vui lòng chọn ngày hoặc giờ khác, hoặc giữ nguyên lịch cũ.", { ns: 'legacy', keySeparator: false }));
+            if (data?.stock_status) {
+                setStockError(data);
             } else {
                 setSaveError(data?.message || err.message || 'Không thể chỉnh sửa đơn. Vui lòng thử lại.');
             }
@@ -485,6 +488,13 @@ export default function EditBookingModal({ isOpen, bill, attemptsLeft, getServer
             >
                 <p className="text-gray-700">{hint}</p>
             </Modal>
+            <IngredientLimitModal
+                isOpen={!!stockError}
+                onClose={() => setStockError(null)}
+                stock={stockError}
+                formatIngredient={translateIngredients}
+                footer={i18n.t("Không đủ nguyên liệu cho đơn này theo lịch mới. Vui lòng chọn thời điểm khác hoặc giữ nguyên lịch cũ.", { ns: 'legacy', keySeparator: false })}
+            />
         </>
     );
 }

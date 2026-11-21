@@ -1,3 +1,5 @@
+import IngredientLimitModal from '../../components/IngredientLimitModal';
+import { translateIngredients } from '../Menu/DishDetailPage';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import i18n from '../../i18n.js';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -68,6 +70,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(null);
+    const [stockError, setStockError] = useState(null);
 
     // Mỗi lần mở modal: điền sẵn thông tin hiện tại của đơn
     useEffect(() => {
@@ -253,8 +256,8 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
         } catch (err) {
             const data = err.response?.data;
             setConfirmOpen(false);
-            if (data?.stock_status === 'insufficient') {
-                setSaveError(i18n.t("Không đủ nguyên liệu cho đơn này theo lịch mới. Vui lòng chọn thời điểm khác hoặc giữ nguyên lịch cũ.", { ns: 'legacy', keySeparator: false }));
+            if (data?.stock_status) {
+                setStockError(data);
             } else {
                 setSaveError(data?.message || err.message || 'Không thể chỉnh sửa đơn. Vui lòng thử lại.');
             }
@@ -298,7 +301,7 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                         <h3 className="font-bold text-base text-red-600 mb-2">{i18n.t("1. Địa chỉ giao hàng", { ns: 'legacy', keySeparator: false })}</h3>
                         <input
                             type="text"
-                            value={address}
+                            maxLength={500} value={address}
                             onChange={(e) => handleAddressChange(e.target.value)}
                             className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
                             placeholder={i18n.t("Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)...", { ns: 'legacy', keySeparator: false })}
@@ -426,6 +429,13 @@ export default function EditDeliveryModal({ isOpen, bill, attemptsLeft, onClose,
                 <p className="text-gray-700 mb-3">{i18n.t("Bạn có chắc muốn lưu các thay đổi cho đơn hàng", { ns: 'legacy', keySeparator: false }) + " "}{bill?.order_stt || bill?.order_id}{" " + i18n.t("không?", { ns: 'legacy', keySeparator: false }) + " "}</p>
                 <p className="text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded p-3">{i18n.t("Việc chỉnh sửa sẽ tiêu hao", { ns: 'legacy', keySeparator: false }) + " "}<strong>{i18n.t("1 lượt chỉnh sửa đơn", { ns: 'legacy', keySeparator: false })}</strong>{" " + i18n.t("trong tuần (hiện còn", { ns: 'legacy', keySeparator: false }) + " "}<strong>{attemptsLeft}</strong>{" " + i18n.t("lượt). Đơn không cần thanh toán lại, phí ship vẫn thu riêng khi nhận hàng.", { ns: 'legacy', keySeparator: false }) + " "}</p>
             </Modal>
+            <IngredientLimitModal
+                isOpen={!!stockError}
+                onClose={() => setStockError(null)}
+                stock={stockError}
+                formatIngredient={translateIngredients}
+                footer={i18n.t("Không đủ nguyên liệu cho đơn này theo lịch mới. Vui lòng chọn thời điểm khác hoặc giữ nguyên lịch cũ.", { ns: 'legacy', keySeparator: false })}
+            />
         </>
     );
 }

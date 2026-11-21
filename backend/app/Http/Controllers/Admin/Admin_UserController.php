@@ -18,14 +18,18 @@ class Admin_UserController extends Controller
      */
     public function index(Request $request)
     {
+        $request->validate([
+            'page' => 'sometimes|integer|min:1',
+            'search' => 'nullable|string|max:255',
+        ]);
         $query = User::where('role', '!=', 'admin');
 
         if ($request->filled('search')) {
-            $search = $request->search;
+            $search = '%' . strtr($request->search, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
             $query->where(function ($q) use ($search) {
-                $q->where('username', 'like', '%' . $search . '%')
-                    ->orWhere('email', 'like', '%' . $search . '%')
-                    ->orWhere('tele_number', 'like', '%' . $search . '%');
+                $q->whereRaw("username LIKE ? ESCAPE '!'", [$search])
+                    ->orWhereRaw("email LIKE ? ESCAPE '!'", [$search])
+                    ->orWhereRaw("tele_number LIKE ? ESCAPE '!'", [$search]);
             });
         }
 

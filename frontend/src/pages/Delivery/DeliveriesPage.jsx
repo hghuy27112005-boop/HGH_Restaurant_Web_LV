@@ -109,8 +109,8 @@ const DeliveriesPage = () => {
     const [paymentModalError, setPaymentModalError] = useState(null); // lỗi hiện trong modal thanh toán
     const [closingPayment, setClosingPayment] = useState(false); // đang xóa đơn khi đóng modal thanh toán
     const [pointsErrorMessage, setPointsErrorMessage] = useState(null); // lỗi thanh toán bằng điểm (hiện trong modal, không tự ẩn)
-    const [ingredientError, setIngredientError] = useState(null); // null = ẩn, { message, overLimit } = hiện modal lỗi vượt 50 phần
-    const [stockError, setStockError] = useState(null); // null = ẩn, { message, status, suggestions } = lỗi kho lúc thanh toán
+    const [ingredientError, setIngredientError] = useState(null);
+    const [stockError, setStockError] = useState(null);
     const [searchBillId, setSearchBillId] = useState('');
     const [createdDateFilter, setCreatedDateFilter] = useState(getTodayDateKey);
 
@@ -456,7 +456,6 @@ const DeliveriesPage = () => {
                 order_type: 'delivery',
                 delivery: {
                     address: address,
-                    phone: 'N/A',
                     preferred_delivery_time: getPreferredDeliveryTime(),
                     ...(gpsCoords ? { lat: gpsCoords.lat, lng: gpsCoords.lng } : {}),
                 },
@@ -501,7 +500,6 @@ const DeliveriesPage = () => {
             const data = err.response?.data;
             if (err.response?.status === 422 && data?.over_limit) {
                 setIngredientError({
-                    message: data.message,
                     overLimit: data.over_limit || [],
                 });
             } else {
@@ -593,7 +591,7 @@ const DeliveriesPage = () => {
         } catch (err) {
             const data = err.response?.data;
             if (err.response?.status === 422 && data?.stock_status) {
-                setStockError({ message: data.message, status: data.stock_status, suggestions: data.suggestions || [] });
+                setStockError(data);
             } else {
                 setPaymentModalError(data?.message || 'Lỗi đặt hàng');
             }
@@ -643,7 +641,7 @@ const DeliveriesPage = () => {
         } catch (err) {
             const data = err.response?.data;
             if (err.response?.status === 422 && data?.stock_status) {
-                setStockError({ message: data.message, status: data.stock_status, suggestions: data.suggestions || [] });
+                setStockError(data);
             } else {
                 setPointsErrorMessage(data?.message || err.message || 'Không thể thanh toán bằng điểm. Vui lòng thử lại.');
             }
@@ -885,7 +883,7 @@ const DeliveriesPage = () => {
     if (loading) return <Loading />;
 
     const filtered = getFilteredDeliveries().filter(bill =>
-    (!searchBillId.trim() || String(bill.bill_id || '').toLowerCase().includes(searchBillId.trim().toLowerCase())) &&
+    (!searchBillId.trim() || [bill.bill_id, bill.order_id].some(code => String(code || '').includes(searchBillId.trim()))) &&
     (!createdDateFilter || getLocalDate(bill.created_at) === createdDateFilter)
 );
 
@@ -934,7 +932,6 @@ const DeliveriesPage = () => {
                                                         <button
                                                             onClick={() => handleCartQuantityChange(idx, 1)}
                                                             disabled={item.quantity >= MAX_ITEM_QUANTITY}
-                                                            title={item.quantity >= MAX_ITEM_QUANTITY ? i18n.t("Tối đa 50 phần mỗi món", { ns: 'legacy', keySeparator: false }) : undefined}
                                                             style={checkoutStage !== 'info' ? { display: 'none' } : (item.quantity >= MAX_ITEM_QUANTITY ? { opacity: 0.4, cursor: 'not-allowed' } : undefined)}
                                                             className="w-6 h-6 rounded-full border border-red-600 text-red-600 font-bold flex items-center justify-center hover:bg-red-600 hover:text-white transition"
                                                         >
@@ -973,7 +970,7 @@ const DeliveriesPage = () => {
                                             <input
                                                 type="text"
                                                 required
-                                                value={address}
+                                                maxLength={500} value={address}
                                                 onChange={e => setAddress(e.target.value)}
                                                 className="w-full border p-2 rounded focus:border-red-600 focus:outline-none"
                                                 placeholder={i18n.t("Nhập địa chỉ cụ thể (số nhà, đường, phường/xã, tỉnh/thành)...", { ns: 'legacy', keySeparator: false })}
@@ -1159,9 +1156,9 @@ const DeliveriesPage = () => {
                     <div className="grid w-full grid-cols-1 gap-2 min-[375px]:grid-cols-[auto_1fr] min-[375px]:items-center sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                         <span className="text-sm font-medium text-gray-600 whitespace-nowrap">{i18n.t("Tìm theo mã hóa đơn", { ns: 'legacy', keySeparator: false })}</span>
                         <input
-                            type="text"
+                            type="text" inputMode="numeric" maxLength={10}
                             value={searchBillId}
-                            onChange={e => setSearchBillId(e.target.value)}
+                            onChange={e => setSearchBillId(e.target.value.replace(/\D/g, '').slice(0, 10))}
                             placeholder={i18n.t("Nhập mã hóa đơn...", { ns: 'legacy', keySeparator: false })}
                             className="border rounded px-3 py-2 text-sm w-full min-w-0 sm:w-48 focus:outline-none focus:border-red-600"
                         />
@@ -1557,36 +1554,16 @@ const DeliveriesPage = () => {
                 )}
             </div>
 
-            {/* Lỗi kho lúc thanh toán: chờ refill hoặc cần giảm số lượng */}
-            <Modal
+            <IngredientLimitModal
                 isOpen={!!stockError}
-                title={i18n.t("Không đủ nguyên liệu", { ns: 'legacy', keySeparator: false })}
                 onClose={() => setStockError(null)}
-                cancelText="Đóng"
-            >
-                <p className="text-gray-700">{stockError?.message}</p>
-                {stockError?.status === 'insufficient' && (
-                    <>
-                        {stockError.suggestions.length > 0 && (
-                            <ul className="mt-3 list-disc pl-5 text-sm text-gray-700 space-y-1">
-                                {stockError.suggestions.map((s, i) => (
-                                    <li key={i}>
-                                        <span className="font-semibold">{translateDishName(s.dish || s)}</span>:{' '}
-                                        {s.max_quantity > 0 ? `tối đa ${s.max_quantity} phần` : i18n.t("hiện đã hết", { ns: 'legacy', keySeparator: false })}
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                        <p className="mt-3 text-sm text-gray-500">{i18n.t("Hãy bấm \"Quay lại sửa thông tin\" để giảm số lượng món rồi đặt lại.", { ns: 'legacy', keySeparator: false }) + " "}</p>
-                    </>
-                )}
-            </Modal>
+                stock={stockError}
+                formatIngredient={translateIngredients}
+            />
 
-            {/* Ingredient Error Modal */}
             <IngredientLimitModal
                 isOpen={ingredientError !== null}
                 onClose={() => setIngredientError(null)}
-                message={ingredientError?.message}
                 overLimit={ingredientError?.overLimit}
                 formatIngredient={translateIngredients}
             />

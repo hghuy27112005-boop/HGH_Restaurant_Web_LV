@@ -185,39 +185,60 @@ export const DateFilter = ({ label, value, onChange }) => {
     );
 };
 
-// Phân trang: ô nhập số trang + nút "Đi tới"
-export const Pagination = ({ currentPage, lastPage, onChange }) => {
+export const Pagination = ({ currentPage, lastPage, onChange, showSinglePage = false }) => {
     const [input, setInput] = useState(String(currentPage));
+    const [invalid, setInvalid] = useState(false);
 
     useEffect(() => {
         setInput(String(currentPage));
-    }, [currentPage]);
+        setInvalid(false);
+    }, [currentPage, lastPage]);
 
-    if (lastPage <= 1) return null;
+    if (lastPage <= 1 && !showSinglePage) return null;
 
-    const go = () => {
-        let page = parseInt(input, 10);
-        if (isNaN(page) || page < 1) page = 1;
-        if (page > lastPage) page = lastPage;
+    const goTo = (page) => {
         setInput(String(page));
+        setInvalid(false);
         onChange(page);
     };
 
+    const go = (event) => {
+        event.preventDefault();
+        const page = Number(input);
+        if (!/^\d+$/.test(input) || page < 1 || page > lastPage) {
+            setInvalid(true);
+            return;
+        }
+        goTo(page);
+    };
+
     return (
-        <div className="flex justify-center items-center gap-2 mt-4 pt-4 border-t text-sm">
-            <span>Trang</span>
-            <input
-                type="number"
-                min={1}
-                max={lastPage}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') go(); }}
-                className="w-16 px-2 py-1 border border-gray-300 rounded text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
-            <span>/ {lastPage}</span>
-            <button onClick={go} className="px-3 py-1 rounded bg-red-600 text-white hover:bg-red-700">{i18n.t("Đi tới", { ns: 'legacy', keySeparator: false }) + " "}</button>
-        </div>
+        <form onSubmit={go} className="mt-4 border-t px-2 py-4 text-center text-sm">
+            <div className="flex flex-wrap items-center justify-center gap-2">
+                <label htmlFor="admin-page-number">{i18n.t('inputValidation.page')}</label>
+                <div className="flex items-center rounded border border-gray-400 bg-white focus-within:ring-1 focus-within:ring-red-600 dark:border-gray-500 dark:bg-gray-800">
+                    <button type="button" aria-label={i18n.t('inputValidation.previousPage')}
+                        disabled={currentPage <= 1} onClick={() => goTo(currentPage - 1)}
+                        className="flex h-8 w-7 items-center justify-center disabled:opacity-35">
+                        <span aria-hidden="true" className="h-3 w-2 bg-red-600 [clip-path:polygon(100%_0,0_50%,100%_100%)] dark:bg-red-400" />
+                    </button>
+                    <input id="admin-page-number" type="text" inputMode="decimal" value={input}
+                        aria-invalid={invalid} aria-describedby={invalid ? 'admin-page-error' : undefined}
+                        onChange={(event) => { setInput(event.target.value); setInvalid(false); }}
+                        className="h-8 w-12 bg-transparent text-center outline-none" />
+                    <button type="button" aria-label={i18n.t('inputValidation.nextPage')}
+                        disabled={currentPage >= lastPage} onClick={() => goTo(currentPage + 1)}
+                        className="flex h-8 w-7 items-center justify-center disabled:opacity-35">
+                        <span aria-hidden="true" className="h-3 w-2 bg-red-600 [clip-path:polygon(0_0,100%_50%,0_100%)] dark:bg-red-400" />
+                    </button>
+                </div>
+                <span>/ {lastPage}</span>
+                <button type="submit" className="rounded bg-red-600 px-3 py-1.5 text-white hover:bg-red-700">{i18n.t('inputValidation.go')}</button>
+            </div>
+            {invalid && <p id="admin-page-error" role="alert" className="mt-2 text-red-700 dark:text-red-400">
+                {i18n.t('inputValidation.invalidPage', { max: lastPage })}
+            </p>}
+        </form>
     );
 };
 

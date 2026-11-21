@@ -3,9 +3,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
+        "build": "vite build --configLoader runner",
         "check:i18n": "node scripts/check-i18n.mjs",
-        "dev": "vite",
+        "dev": "vite --configLoader runner",
         "tunnel": "node start-tunnel.js"
     },
     "devDependencies": {

@@ -3,12 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\Dish;
+use App\Models\Ingredient;
 use App\Models\User;
 use App\Models\UserNotification;
 use App\Services\GeminiChatbotService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\ValidationException;
 
 class DishProposalController extends Controller
 {
@@ -40,7 +44,7 @@ class DishProposalController extends Controller
         $claimed = min(now()->daysInMonth, DB::table('dish_proposal_daily_claims')->where('user_id', $user->user_id)->where('cycle_key', $key)->count());
         $used = DB::table('dish_proposal_votes as v')->join('dish_proposals as p','p.id','=','v.proposal_id')->where('v.user_id',$user->user_id)->where('p.cycle_key',$key)->sum('v.quantity');
         $closed=now()->greaterThanOrEqualTo($this->closesAt());
-        return response()->json(['cycle_key'=>$key, 'proposals'=>$closed?[]:$rows, 'types'=>DB::table('dish_types')->select('type_id','type_name')->orderBy('type_id')->get(), 'tickets'=>$closed?0:max(0,$claimed-$used), 'claimed_today'=>DB::table('dish_proposal_daily_claims')->where('user_id',$user->user_id)->where('claim_date',now()->toDateString())->exists(), 'phone_required'=>empty($user->tele_number), 'can_claim'=>!$closed&&!DB::table('dish_proposal_daily_claims')->where('user_id',$user->user_id)->where('claim_date',now()->toDateString())->exists(), 'can_propose'=>!DB::table('dish_proposals')->where('cycle_key',$key)->where('user_id',$user->user_id)->exists() && !$closed, 'closes_at'=>$this->closesAt()->toIso8601String()]);
+        return response()->json(['cycle_key'=>$key, 'server_time'=>now()->toIso8601String(), 'proposals'=>$closed?[]:$rows, 'types'=>DB::table('dish_types')->select('type_id','type_name')->orderBy('type_id')->get(), 'tickets'=>$closed?0:max(0,$claimed-$used), 'claimed_today'=>DB::table('dish_proposal_daily_claims')->where('user_id',$user->user_id)->where('claim_date',now()->toDateString())->exists(), 'phone_required'=>empty($user->tele_number), 'can_claim'=>!$closed&&!DB::table('dish_proposal_daily_claims')->where('user_id',$user->user_id)->where('claim_date',now()->toDateString())->exists(), 'can_propose'=>!DB::table('dish_proposals')->where('cycle_key',$key)->where('user_id',$user->user_id)->exists() && !$closed, 'closes_at'=>$this->closesAt()->toIso8601String()]);
     }
 
     public function claim(Request $request)
@@ -59,11 +63,17 @@ class DishProposalController extends Controller
         if(now()->greaterThanOrEqualTo($this->closesAt()))return response()->json(['message'=>'Đợt bầu chọn tháng này đã kết thúc.'],409);
         $user=$request->user();
         if ($user->role==='admin') return response()->json(['message'=>'Customers only.'],403);
-        $data=$request->validate(['dish_name'=>'required|string|max:255','type_id'=>'required|exists:dish_types,type_id','language'=>'required|in:vi,en','image'=>'required|image|mimes:jpeg,jpg,png,webp|max:5120','ingredients'=>'required|string|max:5000','recipe_instructions'=>'required|string|max:10000']);
+        $data=$request->validate(['dish_name'=>'required|string|max:255','type_id'=>'required|exists:dish_types,type_id','language'=>'required|in:vi,en','image'=>'required|image|mimes:jpeg,jpg,png,webp|max:5120','draft_token'=>'required|uuid','confirmation_token'=>'required|uuid','recipe_instructions'=>'required|string']);
         if ($mismatch = $this->proposalLanguageMismatch($request)) return $mismatch;
         if(DB::table('dish_proposals')->where('cycle_key',$this->cycle())->where('user_id',$user->user_id)->exists())return response()->json(['code'=>'proposal_limit','message'=>'Mỗi người chỉ được đề xuất một món mỗi tháng.'],409);
         $sets=app(\App\Services\RecipeIngredientSet::class); $name=mb_strtolower(trim(preg_replace('/\s+/u',' ',$data['dish_name'])));
         $file=$request->file('image'); $imageHash=hash_file('sha256',$file->getRealPath());
+        $draft = $this->confirmedProposalDraft($request, $data);
+        if ($draft['dish_name'] !== $data['dish_name'] || $draft['language'] !== $data['language']
+            || !hash_equals($draft['image_hash'], $imageHash)) {
+            $this->invalidProposalDraft($request);
+        }
+        $data['ingredients'] = implode(', ', array_column($draft['ingredients'], 'name'));
         $candidateSet=$sets->normalizedSet(['ingredients'=>$data['ingredients']]);
         $active=Dish::where('is_active',true)->get(['dish_name','dish_name_en','ingredients','ingredients_en','image_url']);
         foreach($active as $dish){
@@ -84,19 +94,34 @@ class DishProposalController extends Controller
             $sameImage=($existing->image_hash??null)===$imageHash || (is_file($oldPath)&&hash_file('sha256',$oldPath)===$imageHash);
             if(mb_strtolower(trim(preg_replace('/\s+/u',' ',$existing->dish_name)))===$name||$sameImage||$sameIngredients)return response()->json(['code'=>'proposal_duplicate_proposed','message'=>'Không thể đề xuất trùng với món đã được đề xuất.'],409);
         }
-        if (!Cache::has($this->proposalAnalysisKey($request, $imageHash))) {
-            $analysis = $this->analyzeProposalInput($request, app(GeminiChatbotService::class), $imageHash);
-            if (!$analysis->isSuccessful()) return $analysis;
-        }
-        $directory=public_path('dish-proposals'); if(!is_dir($directory))mkdir($directory,0755,true);
-        $file=$request->file('image'); $extension=strtolower($file->getClientOriginalExtension() ?: 'jpg'); $filename=bin2hex(random_bytes(16)).'.'.$extension;
-        $file->move($directory,$filename);
-        unset($data['image']);
-        if(now()->greaterThanOrEqualTo($this->closesAt())){@unlink($directory.DIRECTORY_SEPARATOR.$filename);return response()->json(['message'=>'Đợt bầu chọn tháng này đã kết thúc.'],409);}
-        $data['cycle_key']=$this->cycle(); $data['user_id']=$user->user_id; $data['image_url']='dish-proposals/'.$filename; $data['image_hash']=$imageHash; $data['created_at']=now();
-        try { DB::table('dish_proposals')->insert($data); }
-        catch (\Illuminate\Database\QueryException $e) { @unlink($directory.DIRECTORY_SEPARATOR.$filename); return response()->json(['code'=>'proposal_limit','message'=>'Mỗi người chỉ được đề xuất một món mỗi tháng.'],409); }
-        return response()->json(['success'=>true],201);
+        app(DishController::class)->validateRecipeInstructions($data['recipe_instructions'], $data['language']);
+        $key = $this->proposalDraftKey($request, $data['draft_token']);
+        return Cache::lock($key . ':lock', 15)->block(5, function () use ($key, $request, $data, $user, $imageHash, $file) {
+            $this->confirmedProposalDraft($request, $data);
+            if (now()->greaterThanOrEqualTo($this->closesAt())) {
+                return response()->json(['message' => 'Đợt bầu chọn tháng này đã kết thúc.'], 409);
+            }
+            $directory = public_path('dish-proposals');
+            if (!is_dir($directory) && !mkdir($directory, 0755, true) && !is_dir($directory)) {
+                throw new \RuntimeException('Could not create the proposal image directory.');
+            }
+            $filename = bin2hex(random_bytes(16)) . '.' . $file->extension();
+            $file->move($directory, $filename);
+            unset($data['image'], $data['draft_token'], $data['confirmation_token']);
+            $data['cycle_key'] = $this->cycle();
+            $data['user_id'] = $user->user_id;
+            $data['image_url'] = 'dish-proposals/' . $filename;
+            $data['image_hash'] = $imageHash;
+            $data['created_at'] = now();
+            try {
+                DB::table('dish_proposals')->insert($data);
+            } catch (\Illuminate\Database\QueryException $exception) {
+                @unlink($directory . DIRECTORY_SEPARATOR . $filename);
+                return response()->json(['code' => 'proposal_limit', 'message' => 'Mỗi người chỉ được đề xuất một món mỗi tháng.'], 409);
+            }
+            Cache::forget($key);
+            return response()->json(['success' => true], 201);
+        });
     }
 
     public function analyze(Request $request, GeminiChatbotService $gemini)
@@ -108,7 +133,19 @@ class DishProposalController extends Controller
             'image' => 'required|image|mimes:jpeg,jpg,png,webp|max:5120',
         ]);
         if ($mismatch = $this->proposalLanguageMismatch($request)) return $mismatch;
-        return $this->analyzeProposalInput($request, $gemini, hash_file('sha256', $request->file('image')->getRealPath()));
+        $request->merge(['dish_id' => null]);
+        $response = app(DishController::class)->analyzeIngredients($request, $gemini);
+        if (!$response->isSuccessful()) return $response;
+
+        $token = (string) Str::uuid();
+        Cache::put($this->proposalDraftKey($request, $token), [
+            'cycle' => $this->cycle(),
+            'dish_name' => $request->input('dish_name'),
+            'language' => $request->input('language'),
+            'image_hash' => hash_file('sha256', $request->file('image')->getRealPath()),
+        ], now()->addMinutes(30));
+
+        return response()->json([...$response->getData(true), 'draft_token' => $token]);
     }
 
     private function proposalLanguageMismatch(Request $request): ?\Illuminate\Http\JsonResponse
@@ -123,33 +160,84 @@ class DishProposalController extends Controller
         return null;
     }
 
-    private function proposalAnalysisKey(Request $request, string $imageHash): string
+    private function proposalDraftKey(Request $request, string $token): string
     {
-        $identity = json_encode([$request->input('language'), trim($request->input('dish_name')), $imageHash]);
-        return 'dish-proposal-analysis:'.$request->user()->user_id.':'.hash('sha256', $identity);
+        return 'dish-proposal-draft:' . $request->user()->user_id . ':' . $token;
     }
 
-    private function analyzeProposalInput(Request $request, GeminiChatbotService $gemini, string $imageHash)
+    private function getProposalDraft(Request $request, string $token): array
     {
-        // Customer proposals must always use the uploaded photo, never an existing dish.
-        $request->merge(['dish_id' => null]);
-        $response = app(DishController::class)->analyzeIngredients($request, $gemini);
-        if ($response->isSuccessful()) {
-            Cache::put($this->proposalAnalysisKey($request, $imageHash), true, now()->addMinutes(30));
+        $draft = Cache::get($this->proposalDraftKey($request, $token));
+        if (!$draft || $draft['cycle'] !== $this->cycle()) {
+            $this->invalidProposalDraft($request);
         }
-        return $response;
+        return $draft;
+    }
+
+    private function confirmedProposalDraft(Request $request, array $data): array
+    {
+        $draft = $this->getProposalDraft($request, $data['draft_token']);
+        if (!isset($draft['confirmation_token']) || !hash_equals($draft['confirmation_token'], $data['confirmation_token'])) {
+            $this->invalidProposalDraft($request);
+        }
+        return $draft;
+    }
+
+    private function invalidProposalDraft(Request $request): never
+    {
+        throw new HttpResponseException(response()->json([
+            'code' => 'proposal_draft_invalid',
+            'message' => $request->getPreferredLanguage(['vi', 'en']) === 'en'
+                ? 'The proposal draft is expired or has changed. Analyze the dish and confirm its ingredients again.'
+                : 'Bản nháp đã hết hạn hoặc thay đổi. Vui lòng nhận diện món và xác nhận lại nguyên liệu.',
+        ], 422));
     }
 
     public function confirmIngredients(Request $request)
     {
-        if($request->user()->role==='admin')return response()->json(['message'=>'Customers only.'],403);
-        $request->request->remove('dish_id');
-        $response=app(\App\Http\Controllers\DishController::class)->confirmIngredients($request);
-        if($response->getStatusCode()<300){
-            $created=collect($response->getData(true)['ingredients']??[])->filter(fn($row)=>!empty($row['created_in_confirmation']))->pluck('ingredient_id')->map(fn($id)=>(int)$id)->all();
-            if($created){$key='dish-proposal-confirmed-ingredients:'.$request->user()->user_id;$current=Cache::get($key,[]);Cache::put($key,array_values(array_unique([...$current,...$created])),now()->addDay());}
+        if ($request->user()->role === 'admin') return response()->json(['message' => 'Customers only.'], 403);
+        $data = $request->validate(['draft_token' => 'required|uuid', 'language' => 'required|in:vi,en']);
+        $key = $this->proposalDraftKey($request, $data['draft_token']);
+        $draft = $this->getProposalDraft($request, $data['draft_token']);
+        if ($draft['language'] !== $data['language']) $this->invalidProposalDraft($request);
+
+        $request->merge(['dish_id' => null]);
+        $request->offsetUnset('fixed_cost_per_serving');
+        $nameField = $draft['language'] === 'en' ? 'name_en' : 'name_vi';
+        $request->validate(["ingredients.*.{$nameField}" => ['required', 'string', 'max:255', 'not_regex:/[,\\r\\n]/']]);
+
+        $response = app(DishController::class)->confirmIngredients($request);
+        if (!$response->isSuccessful()) return $response;
+
+        $payload = $response->getData(true);
+        $ingredients = collect($payload['ingredients']);
+        $created = $ingredients->where('created_in_confirmation', true)->pluck('ingredient_id')->all();
+        if ($created) {
+            $ownedKey = 'dish-proposal-confirmed-ingredients:' . $request->user()->user_id;
+            Cache::lock($ownedKey . ':lock', 10)->block(5, function () use ($ownedKey, $created) {
+                $current = Cache::get($ownedKey, []);
+                Cache::put($ownedKey, array_values(array_unique([...$current, ...$created])), now()->addDay());
+            });
         }
-        return $response;
+
+        $approved = $ingredients->map(fn (array $row) => [
+            'ingredient_id' => (int) $row['ingredient_id'],
+            'name' => $row[$nameField],
+        ])->all();
+        $names = array_column($approved, 'name');
+        if (!$names || mb_strlen(implode(', ', $names)) > 5000
+            || collect($names)->contains(fn (string $name) => preg_match('/[,\\r\\n]/', $name))) {
+            throw ValidationException::withMessages(['ingredients' => $draft['language'] === 'en'
+                ? 'Use ingredient names without commas or line breaks and keep the full list within 5,000 characters.'
+                : 'Tên nguyên liệu không được có dấu phẩy hoặc xuống dòng. Danh sách tối đa 5.000 ký tự.']);
+        }
+
+        $confirmation = (string) Str::uuid();
+        Cache::lock($key . ':lock', 15)->block(5, function () use ($key, $request, $data, $approved, $confirmation) {
+            $draft = $this->getProposalDraft($request, $data['draft_token']);
+            Cache::put($key, [...$draft, 'ingredients' => $approved, 'confirmation_token' => $confirmation], now()->addMinutes(30));
+        });
+        return response()->json([...$payload, 'confirmation_token' => $confirmation]);
     }
 
     public function discardIngredients(Request $request)
@@ -157,19 +245,30 @@ class DishProposalController extends Controller
         if($request->user()->role==='admin')return response()->json(['message'=>'Customers only.'],403);
         $data=$request->validate(['ingredient_ids'=>'required|array|max:40','ingredient_ids.*'=>'integer|distinct']);
         $key='dish-proposal-confirmed-ingredients:'.$request->user()->user_id;
-        $owned=Cache::get($key,[]);$allowed=array_values(array_intersect(array_map('intval',$data['ingredient_ids']),array_map('intval',$owned)));
-        if(!$allowed)return response()->json(['success'=>true,'deleted_count'=>0]);
-        $request->merge(['ingredient_ids'=>$allowed]);
-        $response=app(\App\Http\Controllers\DishController::class)->discardConfirmedIngredients($request);
-        Cache::put($key,array_values(array_diff(array_map('intval',$owned),$allowed)),now()->addDay());
-        return $response;
+        return Cache::lock($key . ':lock', 15)->block(5, function () use ($key, $data, $request) {
+            $owned = Cache::get($key, []);
+            $allowed = array_values(array_intersect(array_map('intval', $data['ingredient_ids']), array_map('intval', $owned)));
+            if (!$allowed) return response()->json(['success' => true, 'deleted_count' => 0]);
+            $request->merge(['ingredient_ids' => $allowed]);
+            $response = app(DishController::class)->discardConfirmedIngredients($request);
+            Cache::put($key, array_values(array_diff(array_map('intval', $owned), $allowed)), now()->addDay());
+            return $response;
+        });
     }
 
     public function previewRecipe(Request $request, GeminiChatbotService $gemini)
     {
-        if($request->user()->role==='admin')return response()->json(['message'=>'Customers only.'],403);
-        $request->request->remove('dish_id');
-        return app(\App\Http\Controllers\DishController::class)->previewDishRecipe($request,$gemini);
+        if ($request->user()->role === 'admin') return response()->json(['message' => 'Customers only.'], 403);
+        $data = $request->validate(['draft_token' => 'required|uuid', 'confirmation_token' => 'required|uuid']);
+        $draft = $this->confirmedProposalDraft($request, $data);
+        $request->merge([
+            'dish_id' => null,
+            'dish_name' => $draft['dish_name'],
+            'language' => $draft['language'],
+            'ingredient_ids' => array_column($draft['ingredients'], 'ingredient_id'),
+            'ingredient_names' => $draft['ingredients'],
+        ]);
+        return app(DishController::class)->previewDishRecipe($request, $gemini);
     }
 
     public function vote(Request $request, int $proposalId)
@@ -340,7 +439,17 @@ class DishProposalController extends Controller
 
     public function adminIndex(){
         $rows=DB::table('admin_dish_suggestions as s')->leftJoin('users as u','u.user_id','=','s.proposer_user_id')->leftJoin('dish_types as t','t.type_id','=','s.type_id')->where('s.status','pending')->whereNotNull('s.award_paid_at')->select('s.*','u.username','t.type_name')->orderByDesc('s.vote_count')->get();
-        foreach($rows as $row)$row->image_url=request()->getSchemeAndHttpHost().'/'.ltrim($row->image_url,'/');
+        if ($rows->isNotEmpty()) {
+            $catalog = Ingredient::query()->withExists(['dishRules', 'stocks'])->get();
+            $dishes = app(DishController::class);
+            foreach ($rows as $row) {
+                $row->image_url = request()->getSchemeAndHttpHost().'/'.ltrim($row->image_url, '/');
+                $row->ingredient_drafts = $dishes->proposalIngredientDrafts((string) $row->ingredients, $row->language ?? 'vi', $catalog);
+                if ($row->ingredients_en) {
+                    $row->ingredient_drafts_en = $dishes->proposalIngredientDrafts($row->ingredients_en, 'en', $catalog);
+                }
+            }
+        }
         return response()->json(['data'=>$rows]);
     }
     public function adminImage(int $id)

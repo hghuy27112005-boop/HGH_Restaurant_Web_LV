@@ -18,6 +18,15 @@ class OrderController extends Controller
     
     public function store(Request $request, \App\Services\DeliveryDistanceService $distanceService)
     {
+        if (!$request->user()->hasOrderPhone()) {
+            return response()->json([
+                'code' => 'order_phone_required',
+                'message' => PreferredLanguage::fromRequest($request) === 'en'
+                    ? 'Please add a phone number to place an order.'
+                    : 'Vui lòng nhập số điện thoại để thực hiện đơn hàng.',
+            ], 422);
+        }
+
         $validated = $request->validate([
             'order_type' => 'required|in:delivery', // đơn đặt bàn chỉ tạo qua BillController::store (nơi áp luật đặt bàn)
             'items' => 'required|array|min:1',
@@ -27,9 +36,8 @@ class OrderController extends Controller
             'items.*.customization_name' => 'nullable|string|max:255',
             'items.*.ingredients' => 'nullable|string',
             'items.*.removed_ingredients' => 'nullable|array',
-            'items.*.quantity' => 'required|integer|min:1',
-            'delivery.address' => 'required_if:order_type,delivery|string',
-            'delivery.phone' => 'required_if:order_type,delivery|string',
+            'items.*.quantity' => 'required|integer|min:1|max:' . Stock::ORDER_LIMIT,
+            'delivery.address' => 'required_if:order_type,delivery|string|max:500',
             'delivery.lat' => 'nullable|numeric|between:-90,90',
             'delivery.lng' => 'nullable|numeric|between:-180,180',
             'delivery.preferred_delivery_time' => ['nullable', 'date_format:H:i'],
@@ -40,18 +48,11 @@ class OrderController extends Controller
             'booking_table.end_time' => 'required_if:order_type,booking_table|string',
         ]);
 
+        Stock::assertCartLineLimits($validated['items']);
         app(\App\Services\DishCustomizationService::class)->assertOwnedVariants(
             $validated['items'],
             (int) $request->user()->user_id
         );
-
-        $over50 = \App\Models\Stock::findIngredientDemandOver50($validated['items']);
-        if ($over50) {
-            return response()->json([
-                'message' => 'Một số nguyên liệu bị yêu cầu vượt quá định lượng tối đa (50). Vui lòng chọn món khác thay thế.',
-                'over_limit' => $over50,
-            ], 422);
-        }
 
         DB::beginTransaction();
         try {
@@ -125,6 +126,12 @@ class OrderController extends Controller
                 ];
             }
             
+            $overLimit = \App\Models\Stock::orderLimitIssues($itemsWithRealPrice);
+            if ($overLimit) {
+                DB::rollBack();
+                return response()->json(\App\Models\Stock::shortagePayload(['status' => 'over_limit', 'over_limit' => $overLimit]), 422);
+            }
+
             $totalAmount = round($subtotalBeforePoints, 2);
 
             $generator = new OrderCodeGenerator();
@@ -270,7 +277,7 @@ class OrderController extends Controller
     }
 
     /**
-     * Kiểm tra giỏ (các món đang có + món sắp thêm): có nguyên liệu nào cộng dồn vượt 50 hay không.
+     * Kiểm tra giới hạn mỗi đơn với các món đang có và món sắp thêm vào giỏ.
      * Dùng khi thêm món vào giỏ (MenuPage, DishDetailPage). Giỏ chỉ có 1 món thì cũng kiểm tra bình thường.
      */
     public function checkCartIngredients(Request $request)
@@ -281,20 +288,31 @@ class OrderController extends Controller
             'items.*.customization_id' => 'nullable|integer|exists:dish_customizations,dish_customization_id',
             'items.*.price_tier' => 'nullable|in:low,standard,high',
             'items.*.ingredients' => 'nullable|string',
-            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.quantity' => 'required|integer|min:1|max:' . Stock::ORDER_LIMIT,
         ]);
 
+        Stock::assertCartLineLimits($validated['items']);
         app(\App\Services\DishCustomizationService::class)->assertOwnedVariants(
             $validated['items'],
             (int) $request->user()->user_id
         );
 
-        $over50 = Stock::findIngredientDemandOver50($validated['items']);
-        if ($over50) {
-            return response()->json([
-                'message' => 'Một số nguyên liệu bị yêu cầu vượt quá định lượng tối đa (50). Vui lòng chọn món khác thay thế.',
-                'over_limit' => $over50,
-            ], 422);
+        $dishes = Dish::whereIn('dish_id', array_column($validated['items'], 'dish_id'))->get()->keyBy('dish_id');
+        foreach ($validated['items'] as &$item) {
+            $pricing = app(\App\Services\TieredRecipeService::class)->orderPricingSnapshot(
+                $dishes[$item['dish_id']],
+                $item['price_tier'] ?? 'standard',
+                isset($item['customization_id']) ? (int) $item['customization_id'] : null,
+                (int) $request->user()->user_id,
+                PreferredLanguage::fromRequest($request)
+            );
+            $item['ingredient_quantities_snapshot'] = $pricing['ingredient_quantities'];
+        }
+        unset($item);
+
+        $overLimit = Stock::orderLimitIssues($validated['items']);
+        if ($overLimit) {
+            return response()->json(Stock::shortagePayload(['status' => 'over_limit', 'over_limit' => $overLimit]), 422);
         }
 
         return response()->json(['ok' => true]);
@@ -326,6 +344,10 @@ class OrderController extends Controller
 
     public function myBillsJson(Request $request)
     {
+        $request->validate([
+            'invoice_search' => ['nullable', 'string', 'regex:/\A[0-9]{1,10}\z/'],
+        ]);
+
         \App\Models\Delivery::autoCompleteExpired();
         \App\Models\Delivery::autoStartReady();
 
@@ -343,6 +365,12 @@ class OrderController extends Controller
 
         if ($request->filled('invoice')) {
             $query->whereHas('bill', fn ($q) => $q->where('bill_id', (string) $request->input('invoice')));
+        } elseif ($request->filled('invoice_search')) {
+            $pattern = '%' . $request->input('invoice_search') . '%';
+            $query->where(function ($q) use ($pattern) {
+                $q->where('order_id', 'like', $pattern)
+                    ->orWhereHas('bill', fn ($bill) => $bill->where('bill_id', 'like', $pattern));
+            });
         }
 
         $orders = $query->with(['bill', 'items.dish.priceProfile', 'bookings', 'delivery'])

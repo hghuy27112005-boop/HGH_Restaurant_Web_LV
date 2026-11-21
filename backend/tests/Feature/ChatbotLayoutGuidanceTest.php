@@ -8,6 +8,28 @@ use Tests\TestCase;
 
 class ChatbotLayoutGuidanceTest extends TestCase
 {
+    public function test_unclear_crops_get_a_clarification_instead_of_an_out_of_scope_rejection(): void
+    {
+        Http::preventStrayRequests();
+        $image = ['mimeType' => 'image/png', 'data' => base64_encode('cropped screenshot transport')];
+        Http::fakeSequence()
+            ->push(['candidates' => [['content' => ['parts' => [['text' => '{"decision":"off_topic","audience":"uncertain"}']]]]]])
+            ->push(['candidates' => [['content' => ['parts' => [['text' => '{"decision":"allow","audience":"staff"}']]]]]])
+            ->push(['candidates' => [['content' => ['parts' => [['text' => '{"reply":"Read the invoice","visual_audience":"uncertain","invoice_action":"open"}']]]]]]);
+
+        $adviser = app(GeminiChatbotService::class);
+        $this->assertSame('unclear_image', $adviser->moderateChat('', $image)['decision']);
+        $this->assertSame('off_topic', $adviser->moderateChat('', $image)['decision']);
+
+        $result = $adviser->answerFreeform('Open invoice HD-123 in this image', 'en', [], [[
+            'invoice_code' => 'HD-123', 'image_message_id' => 1,
+        ]], [$image], ['images_attached_this_turn' => 1]);
+        $this->assertStringContainsString('heading and the buttons', $result['reply']);
+        $this->assertSame('none', $result['invoice_action']);
+        $this->assertNull($result['suggested_route']);
+        Http::assertSentCount(3);
+    }
+
     public function test_ballot_screenshot_gets_customer_layout_and_rules_in_both_languages(): void
     {
         Http::preventStrayRequests();

@@ -103,7 +103,7 @@ const AdminBookingsTab = () => {
         ...dateFilterToParams(filters.created, 'created_'),
         ...dateFilterToParams(filters.arrival, 'arrival_'),
         ...(billId ? { bill_id: billId } : {}),
-        ...(filters.userId ? { user_id: filters.userId } : {}),
+        ...(filters.userId ? { user_id: Number(filters.userId) } : {}),
         ...(filters.method ? { payment_method: filters.method } : {}),
     });
 
@@ -147,6 +147,10 @@ const AdminBookingsTab = () => {
     }, [filters.created, filters.arrival, filters.userId, filters.method, billId]);
 
     const applyFilters = () => {
+        if (draft.userId && Number(draft.userId) < 1) {
+            setErrorMessage(i18n.t('inputValidation.customerId'));
+            return;
+        }
         setFilters(draft);
         setPage(1);
         setIsFilterOpen(false);
@@ -236,9 +240,9 @@ const AdminBookingsTab = () => {
             <div className="mb-4 flex flex-wrap items-center gap-3 bg-white rounded-xl border border-gray-100 shadow-sm p-3">
                 <div className="flex flex-1 min-w-[260px] gap-2">
                     <input
-                        type="text"
+                        type="text" inputMode="numeric" maxLength={10}
                         value={billIdInput}
-                        onChange={(e) => setBillIdInput(e.target.value)}
+                        onChange={(e) => setBillIdInput(e.target.value.replace(/\D/g, '').slice(0, 10))}
                         onKeyDown={(e) => { if (e.key === 'Enter') applyBillId(); }}
                         placeholder={i18n.t("Nhập mã hóa đơn, nhấn Enter để tìm...", { ns: 'legacy', keySeparator: false })}
                         className="flex-1 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:border-red-600"
@@ -267,10 +271,10 @@ const AdminBookingsTab = () => {
                             <div className="mb-4">
                                 <label className="block text-sm font-semibold text-gray-700 mb-1">{i18n.t("ID người dùng", { ns: 'legacy', keySeparator: false })}</label>
                                 <input
-                                    type="number"
+                                    type="text" inputMode="numeric" maxLength={4} pattern="[0-9]{1,4}"
                                     placeholder={i18n.t("Tất cả", { ns: 'legacy', keySeparator: false })}
                                     value={draft.userId}
-                                    onChange={(e) => setDraft({ ...draft, userId: e.target.value })}
+                                    onChange={(e) => setDraft({ ...draft, userId: e.target.value.replace(/\D/g, '').slice(0, 4) })}
                                     className={`${inputClass} [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none`}
                                 />
                             </div>

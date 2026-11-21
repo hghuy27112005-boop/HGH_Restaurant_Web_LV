@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { chatbotAPI } from '../../services/chatbotApi';
 import './ImageLibrary.css';
 
 const Trash = () => <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></svg>;
 
-export default function ImageLibrary({ groups, onPreview, onDeleted, styles }) {
+export default function ImageLibrary({ groups, onPreview, deleteImages, onDeleted, styles }) {
     const { t } = useTranslation();
     const [selectDate, setSelectDate] = useState(null);
     const [selected, setSelected] = useState([]);
@@ -22,7 +21,7 @@ export default function ImageLibrary({ groups, onPreview, onDeleted, styles }) {
         if (!confirm || busy) return;
         setBusy(true); setError('');
         try {
-            const response = await chatbotAPI.deleteImages(confirm.date, confirm.ids);
+            const response = await deleteImages(confirm.date, confirm.ids);
             await onDeleted(response.data);
             setConfirm(null); setSelectDate(null); setSelected([]);
         } catch {

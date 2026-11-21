@@ -14,3 +14,12 @@ export const translateRecipeName = (recipe) => (
         ? recipe?.recipe_name_en || recipe?.recipe_name || ''
         : recipe?.recipe_name || ''
 );
+
+const normalizeDishSearch = (text) => text.trim().toLowerCase().normalize('NFD')
+    .replace(/\p{M}/gu, '').replace(/đ/g, 'd');
+
+export function matchesDishSearch(dish, query) {
+    const keyword = normalizeDishSearch(query);
+    return !keyword || [dish.dish_name, dish.dish_name_en, dish.name_vi, dish.name_en]
+        .some((name) => name && normalizeDishSearch(name).includes(keyword));
+}
